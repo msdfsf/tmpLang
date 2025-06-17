@@ -1,0 +1,53 @@
+
+def Point {
+    int x;
+    int y;
+}
+
+def PointEx {
+    int x = 8;
+    int y = 9;
+    int z = 6;
+}
+
+
+Point ptA;
+ptA.x = 4;
+ptA.y = 7;
+printPoint(ptA);
+
+Point ptB;
+Point^ pptB = &ptB;
+pptB.x = 3;
+pptB.y = 6;
+printPoint(ptB);
+
+Point ptC = { 1, 2 };
+printPoint(ptC);
+
+Point ptD = { x: 1, y: 2 };
+printPoint(ptD);
+
+ptD = { x: 4, y: 2 };
+printPoint(ptD);
+
+// use ..: to set remaining args to the same value
+PointEx ptE = { x: 4, ..: 1 };
+printPoint(ptE);
+
+ptE = { ..: 0 };
+printPoint(ptE);
+
+// default args
+PointEx ptF;
+printPoint(ptF);
+
+
+
+fcn printPoint(Point p) {
+    "[%i, %i]\n" p.x, p.y;
+}
+
+fcn printPoint(PointEx p) {
+    "[%i, %i, %i]\n" p.x, p.y, p.z;
+}

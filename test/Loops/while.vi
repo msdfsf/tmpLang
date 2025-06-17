@@ -1,0 +1,15 @@
+
+int i = 0;
+while (true) {
+    if (i == 10) : break;
+    " %i" i;
+    i = i + 1;
+}
+
+"\n";
+
+i = 0;
+while (i < 10) {
+    " %i" i;
+    i = i + 1;
+}

@@ -1,0 +1,59 @@
+
+namespace Foo {
+  
+  int x = 3;
+
+  fcn foo() -> int {
+    return x;
+  }
+
+  namespace Boo {
+    int x = 4;
+  }
+
+  {
+    namespace Foo2 {
+
+      namespace Boo2 {
+        int x = 5;
+      }
+
+      "Boo2::x: %i\n" Boo2::x;
+    
+    }
+  }
+
+  def Point {
+    int x;
+    int y;
+  }
+}
+
+namespace Boo {
+  
+  def Point {
+    int z;
+    int u;
+  }
+
+  namespace Foo {
+    def Point {
+      int h;
+      int j;
+    }
+  }
+
+}
+
+"Foo::x: %i\n"      Foo::x;
+"Foo::Boo::x: %i\n" Foo::Boo::x;
+"Foo::foo(): %i\n"  Foo::foo();
+
+Foo::Point pointA = { 1, 2 };
+"Foo::Point pointA: [%i, %i]\n" pointA.x, pointA.y;
+
+Boo::Point pointB = { 7, 2 };
+"Boo::Point pointB: [%i, %i]\n" pointB.z, pointB.u;
+
+Boo::Foo::Point pointC = { 6, 7 };
+"Boo::Foo::Point pointC: [%i, %i]\n" pointC.h, pointC.j;

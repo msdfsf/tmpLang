@@ -1,0 +1,10 @@
+
+
+
+int[auton] arrList = alloc [2];
+arrList[0] = 1;
+arrList[1] = 2;
+
+int^ ptr = arrList;
+
+"array list: [%i, %i]\n" ^ptr, ^(ptr + 1);

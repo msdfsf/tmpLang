@@ -1,0 +1,49 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+        "label": "Vi Translate and build",
+        "type": "vi",
+        "group": {
+            "kind": "build",
+            "isDefault": true
+        },
+        "dependsOrder": "sequence",
+        "dependsOn": [
+            "vi-translate",
+            "vi-build"
+        ]
+        },
+        {
+        "label": "vi-translate",
+        "type": "vi",
+        "command": "${config:viDebugger.compilerPath}/build/compiler.exe translate ${file} -gd",
+        "group": {
+            "kind": "build",
+            "isDefault": false
+        },
+        "problemMatcher": []
+        },
+        {
+        "label": "vi-build",
+        "type": "vi",
+        "command": "gcc",
+        "args": [
+            "-g",
+            "-O0",
+            "-o",
+            "./out/to_debug",
+            "-I",
+            "./out",
+            "-I",
+            "${config:viDebugger.compilerPath}/resources",
+            "./out/main.c"
+        ],
+        "group": {
+            "kind": "build",
+            "isDefault": false
+        },
+        "problemMatcher": []
+        }
+    ]
+}

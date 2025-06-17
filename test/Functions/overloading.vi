@@ -1,0 +1,30 @@
+
+// note: type of int literal is i64
+
+"foo(2): ";
+foo(2);
+
+"foo(2f): ";
+foo(2f);
+
+"foo(2f, 2f): ";
+foo(2f, 2f);
+
+"foo(2, 2): ";
+foo(2, 2);
+
+fcn foo(i64 x, f32 y) {
+    "i64, f32\n";
+}
+
+fcn foo(f32 x, f32 y) {
+    "f32, f32\n";
+}
+
+fcn foo(i64 x) {
+    "i64\n";
+}
+
+fcn foo(f32 x) {
+    "f32\n";    
+}

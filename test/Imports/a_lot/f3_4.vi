@@ -1,0 +1,2 @@
+import f3_4_1.vi as namespace F1;
+import f3_4_2.vi as namespace F2;

@@ -1,0 +1,63 @@
+
+error BooErrorSet {
+    FooErrorSet;
+    ErrBoo1;
+    ErrBoo2;
+}
+
+error FooErrorSet {
+    BooErrorSet;
+    ErrFoo1;
+    ErrFoo2;
+}
+
+int ans;
+
+ans = foo(1) catch err {
+    if err == FooErrorSet::BooErrorSet::ErrBoo1 {
+        "ErrBoo1\n";
+    } else if err == FooErrorSet::ErrFoo1 {
+        "ErrFoo1\n";
+    } else {
+        "No Error\n";
+    }
+}
+
+ans = foo(2) catch err {
+    if err == FooErrorSet::BooErrorSet::ErrBoo1 {
+        "ErrBoo1\n";
+    } else if err == FooErrorSet::ErrFoo1 {
+        "ErrFoo1\n";
+    } else {
+        "No Error\n";
+    }
+}
+
+ans = foo(3) catch err {
+    if err == FooErrorSet::BooErrorSet::ErrBoo1 {
+        "ErrBoo1\n";
+    } else if err == FooErrorSet::ErrFoo1 {
+        "ErrFoo1\n";
+    } else {
+        "No Error\n";
+    }
+}
+
+ans = foo(4) catch err {
+    if err != null : "Error\n";
+    else : "No Error\n";
+}
+
+fcn foo(int x) using FooErrorSet -> int {
+
+    if x == 3 : return _, ErrFoo1;
+    int y = boo(x) catch return;
+    
+    return 1;
+
+}
+
+fcn boo(int x) using BooErrorSet -> int {
+    if x == 2 : return _, ErrBoo1;
+    return 1;
+}

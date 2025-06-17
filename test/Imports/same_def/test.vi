@@ -1,0 +1,5 @@
+import utils.vi as namespace Utils;
+import foo.vi as namespace Foo;
+
+"test\n";
+Utils::print();

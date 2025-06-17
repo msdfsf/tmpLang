@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+
+    <meta charset="UTF-8">
+    <title>Keyword Table Generator</title>
+    
+    <style>
+
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #2d2d2d;
+            --bg-header: #3a3a3a;
+            --text-primary: #d4d4d4;
+            --text-secondary: #ffffff;
+            --accent-green: #4CAF50;
+            --accent-green-hover: #45a049;
+            --border-color: #444444;
+            --max-width: 1200px;
+        }
+        
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            margin: 0 auto;
+            max-width: var(--max-width);
+        }
+        
+        textarea, pre {
+            width: 100%;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+        
+        textarea {
+            height: 150px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+            padding: 8px;
+        }
+        
+        pre {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            padding: 12px;
+            white-space: pre-wrap;
+            margin: 0;
+            border-bottom-left-radius: 4px;
+            border-bottom-right-radius: 4px;
+            width: 100%;
+        }
+        
+        button {
+            margin: 10px 0;
+            padding: 8px 12px;
+            font-weight: bold;
+            background: var(--accent-green);
+            color: var(--text-secondary);
+            border: none;
+            cursor: pointer;
+            border-radius: 3px;
+        }
+        
+        button:hover {
+            background: var(--accent-green-hover);
+        }
+        
+        .code-container {
+            width: 100%;
+            margin: 0 auto;
+        }
+        
+        .code-header {
+            background: var(--bg-header);
+            color: var(--text-secondary);
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+        
+        .code-language {
+            font-size: 14px;
+            font-weight: bold;
+        }
+        
+        input, select {
+            font-family: monospace;
+            padding: 4px;
+            margin: 5px 0;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        h2, h3, p, label {
+            font-family: monospace;
+            color: var(--text-primary);
+            text-align: left;
+        }
+
+    </style>
+
+</head>
+<body>
+
+    <h2>Keyword Table Generator</h2>
+    <p>Enter one keyword per line:</p>
+
+    <textarea id="keywordsInput">
+    void
+    int
+    i8
+    i16
+    i32
+    i64
+    u8
+    u16
+    u32
+    u64
+    f32
+    f64
+    const
+    embed
+    muton
+    auton
+    fcn
+    def
+    struct
+    union
+    if
+    else
+    for
+    while
+    loop
+    when
+    case
+    goto
+    enum
+    return
+    continue
+    break
+    using
+    scope
+    namespace
+    alloc
+    free
+    error
+    catch
+    import
+    from
+    true
+    false
+    null
+    </textarea>
+
+    <p>
+        Max Table Size:
+        <input type = 'number' id = 'maxSizeInput' value = '256' min = '1' step = '32' style = 'width: 80px;'>
+    </p>
+
+    <p>
+        Keyword Enum Name:
+        <input type = 'text' id = 'enumNameInput' value = 'Keyword' style = 'width: 150px;'>
+    </p>
+
+    <p>
+        Keyword Enum Variables Prefix:
+        <input type = 'text' id = 'enumPrefixInput' value = 'KW' style = 'width: 80px;'>
+    </p>
+
+    <p>
+        <label for="hashInput">Hash Function:</label>
+        <select id="hashInput" style="width: 150px;">
+            <option value="fnv1">FNV-1</option>
+            <option value="fnv1a" selected>FNV-1a</option>
+            <option value="djb2">DJB2</option>
+            <option value="djb2a">DJB2a (XOR)</option>
+            <option value="sdbm">SDBM</option>
+        </select>
+    </p>
+
+    <button onclick = 'generate()'>Generate Table</button>
+
+    <h3>Generated C++ C-like Code:</h3>
+
+    <div class="code-container">
+        <div class="code-header">
+            <span class="code-language">c</span>
+            <button class="copy-button" onclick="copyCode()">Copy</button>
+        </div>
+        <pre id = 'output'></pre>
+    </div>
+
+    <script>
+
+        function copyCode() {
+            const code = document.querySelector('pre').textContent;
+            navigator.clipboard.writeText(code);
+        }
+
+        function fnv1(str, seed) {
+            let hash = 0x811c9dc5 ^ seed;
+            for (let i = 0; i < str.length; i++) {
+                hash = Math.imul(hash, 0x01000193);
+                hash ^= str.charCodeAt(i);
+            }
+            return hash >>> 0;
+        }
+
+        function fnv1a(str, seed) {
+            let hash = 0x811c9dc5 ^ seed;
+            for (let i = 0; i < str.length; i++) {
+                hash ^= str.charCodeAt(i);
+                hash = Math.imul(hash, 0x01000193) >>> 0;
+            }
+            return hash >>> 0;
+        }
+
+        function djb2(str, seed) {
+            let hash = 5381 ^ seed;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) + hash) + str.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return hash >>> 0;
+        }
+
+        function djb2a(str, seed) {
+            let hash = 5381 ^ seed;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return hash >>> 0;
+        }
+
+        function sdbm(str, seed) {
+            let hash = 0 ^ seed;
+            for (let i = 0; i < str.length; i++) {
+                hash = str.charCodeAt(i) + (hash << 6) + (hash << 16) - hash;
+                hash = hash & hash;       
+            }
+            return hash >>> 0;
+        }
+
+        function getHashFunction(fcnName) {
+            
+            switch (fcnName) {
+                case 'djb2':    return djb2;
+                case 'djb2a':   return djb2a;
+                case 'sdbm':    return sdbm;
+                case 'fnv1':    return fnv1;
+                case 'fnv1a':
+                default:        return fnv1a;
+            }
+
+        }
+
+        function getFunctionString(fcnName, seed) {
+            switch (fcnName) {
+                case 'fnv1': return `unsigned int hash(const char* str) {
+    unsigned int hash = 0x811c9dc5 ^ 0x${seed.toString(16).padStart(8, '0')};
+    while (*str) {
+        hash = hash * 0x01000193;
+        hash ^= (unsigned char)*str++;
+    }
+    return hash;
+}`;
+                case 'fnv1a': return `unsigned int hash(const char* str) {
+    unsigned int hash = 0x811c9dc5 ^ 0x${seed.toString(16).padStart(8, '0')};
+    while (*str) {
+        hash ^= (unsigned char)*str++;
+        hash = hash * 0x01000193;
+    }
+    return hash;
+}`;
+                case 'djb2': return `unsigned int hash(const char* str) {
+    unsigned int hash = 5381 ^ 0x${seed.toString(16).padStart(8, '0')};
+    while (*str) {
+        hash = ((hash << 5) + hash) + (unsigned char)*str++;
+    }
+    return hash;
+}`;
+                case 'djb2a': return `unsigned int hash(const char* str) {
+    unsigned int hash = 5381 ^ 0x${seed.toString(16).padStart(8, '0')};
+    while (*str) {
+        hash = ((hash << 5) + hash) ^ (unsigned char)*str++;
+    }
+    return hash;
+}`;
+                case 'sdbm': return `unsigned int hash(const char* str) {
+    unsigned int hash = 0x${seed.toString(16).padStart(8, '0')};
+    while (*str) {
+        hash = (unsigned char)*str++ + (hash << 6) + (hash << 16) - hash;
+    }
+    return hash;
+}`;
+                default: return '';
+            }
+        }
+
+        function makeEnumName(str) {
+            return str.toUpperCase().replace(/[^A-Z0-9]/g, '_');
+        }
+
+        function generate() {
+
+            const seedCandidates = [
+                0x12345678, 0x87654321, 0xabcdef12, 0x7890abcd, 0x11223344,
+                0x55667788, 0x99aabbcc, 0x22334455, 0x66778899, 0xaabbccdd,
+                0xdeadbeef, 0xfeedface, 0x1a2b3c4d, 0x5e6f7a8b, 0x9c8d7e6f,
+                0x3b4c5d6e, 0x7a8b9c0d, 0xe1f2a3b4, 0xc5d6e7f8, 0x0f1e2d3c,
+                0x4a5b6c7d, 0x8e9f0a1b, 0xcafef00d, 0xbadf00d, 0x2c3d4e5f,
+                0x6a7b8c9d, 0xa1b2c3d4, 0xe5f6a7b8, 0x192a3b4c, 0x5d6e7f80,
+                0x9a0b1c2d, 0xd4e5f6a7, 0x0c1d2e3f, 0x40516273, 0x8798a9ba,
+                0xc0d1e2f3, 0xf4a5b6c7, 0x2e3f5061, 0x6879a0b1, 0xa2b3c4d5
+            ];
+
+            const raw = document.getElementById('keywordsInput').value.trim();
+            const keywords = raw
+                .split('\n')
+                .filter(line => line.trim() !== '')
+                .map(s => s.trim())
+                .filter((e, i, self) => i === self.indexOf(e));
+
+            const maxSize = document.getElementById('maxSizeInput').value;
+            const enumName = document.getElementById('enumNameInput').value;
+            const enumPrefix = document.getElementById('enumPrefixInput').value;
+            const hashFcnName = document.getElementById('hashInput').value;
+
+            const hashFcn = getHashFunction(hashFcnName);
+            let size = keywords.length > 1 ? keywords.length * 2 : 2;
+            let bestSeed = seedCandidates[0];
+            const output = [];
+            let table = null;
+            let foundTable = false;
+            
+
+
+            // generate map itself
+            for (; size < maxSize; size++) {
+
+                for (const seed of seedCandidates) {
+                    
+                    table = Array(size).fill(null);
+                    let collision = false;
+
+                    for (let i = 0; i < keywords.length; i++) {
+                        
+                        const keyword = keywords[i];
+                        const hash = hashFcn(keyword) % size;
+                        
+                        if (table[hash] !== null) {
+                            collision = true;
+                            break;
+                        }
+                        
+                        table[hash] = i;
+                
+                    }
+
+                    if (!collision) {
+                        foundTable = true;
+                        bestSeed = seed;
+                        break;
+                    }
+
+                }
+
+                if (foundTable) {
+                    break;
+                }
+
+            }
+
+            if (!foundTable) {
+                output.push('ERROR: Failed to find a collision-free hash table within the specified max size.\n');
+                output.push('Consider increasing Max Table Size or using a different hashing strategy / tool (e.g., gperf).\n');
+                document.getElementById('output').textContent = output.join('\n');
+                return;
+            }
+
+
+
+            // keywords as constants
+            keywords.forEach((kw, i) => {
+                output.push(`const char* ${enumPrefix}S_${makeEnumName(kw)} = "${kw}";`);
+            });
+            output.push('\n');
+            
+            // keyword enum
+            output.push('enum ' + enumName + ' {');
+            keywords.forEach((kw, i) => {
+                output.push(`    ${enumPrefix}_${makeEnumName(kw)},`);
+            });
+            output.push('    KW_COUNT\n} ' + enumName + ';\n');
+
+            // keyword enum -> keyword string map
+            output.push('static const const char* keywordStringTable[KW_COUNT] = {');
+            keywords.forEach((kw, i) => {
+                output.push(`    ${enumPrefix}S_${makeEnumName(kw)},`);
+            });
+            output.push('};\n');
+
+            // keyword hash -> keyword enum map
+            output.push(`constexpr int KW_TABLE_SIZE = ${size};`);
+            output.push(`constexpr std::array<int, KW_TABLE_SIZE> makeKeywordTable() {\n`);
+            output.push(`    std::array<int, KW_TABLE_SIZE> table = {};\n`);
+            table.forEach((id, i) => {
+                if (id !== null) {
+                    output.push(`    table[${i}] = ${enumPrefix}_${makeEnumName(keywords[id])};`);
+                }
+            });
+            output.push('    return table;\n};\n');
+            output.push('constexpr auto keywordTable = makeKeywordTable();');
+
+            output.push(getFunctionString(hashFcnName, bestSeed));
+
+            document.getElementById('output').textContent = output.join('\n');
+            return;
+        
+            document.getElementById('output').textContent = '// Failed to generate perfect hash table.';
+        }
+
+    </script>
+
+</body>
+</html>
+

@@ -1,0 +1,20 @@
+int^ ptrA = alloc int;
+^ptrA = 1;
+"^ptrA = %i\n" ^ptrA;
+
+int^ ptrB = alloc int[2]; // size of 2 * int is allocated.
+ptrB[0] = 1;
+ptrB[1] = 2;
+"ptrB[0] = %i\n" ptrB[0];
+"ptrB[1] = %i\n" ptrB[1];
+
+int^ ptrC = alloc int : 1;
+"ptrC[0] = %i\n" ptrC[0];
+
+int^ ptrD = alloc : 1;
+"ptrD[0] = %i\n" ptrD[0];
+
+free ptrA;
+free ptrB;
+free ptrC;
+free ptrD;

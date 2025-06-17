@@ -1,0 +1,9 @@
+import function.vi as fcn foo;
+import function.vi as fcn boo;
+
+foo();
+"boo\n";
+foo();
+"goo\n";
+foo();
+boo();

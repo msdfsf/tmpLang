@@ -1,0 +1,5 @@
+fcn doStuff0(int x, int y, int z) -> int {}
+fcn doStuff1(int x, int y, int z) {}
+fcn doStuff2(int x, int y) {}
+fcn doStuff3(int x) {}
+fcn doStuff4() {}

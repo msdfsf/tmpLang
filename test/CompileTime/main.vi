@@ -1,0 +1,21 @@
+// For now only as proof of concept as its
+// just a waste of time to implement it and 
+// keep up to date.
+// First the design itself have to stale
+
+embed int x1 = multiply(4, 3);
+embed int x2 = multiply(14, 23);
+embed int x3 = fact(10);
+
+"4 x 3 = %i;\n" x1;
+"14 x 23 = %i;\n" x2;
+"10! = %i;\n" x3;
+
+fcn multiply(int x, int y) -> int {
+    return x * y;
+}
+
+fcn fact(int n) -> int {
+    if n < 1 : return 1;
+    return n * fact(n - 1);
+}

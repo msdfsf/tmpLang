@@ -1,0 +1,9 @@
+import foo.vi as namespace Foo;
+
+int x = 1;
+int y = 2;
+int z = 3;
+
+"Foo::x = %i\n" Foo::x;
+"Foo::y = %i\n" Foo::y;
+"Foo::z = %i\n" Foo::z;

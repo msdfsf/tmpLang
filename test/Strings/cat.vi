@@ -1,0 +1,44 @@
+
+u8[] arrA = [ '1', '2', '3', '4', '5' ];
+u8[] arrB = [ 'a', 'b', 'c', 'd' ];
+
+print(arrA);
+print(arrB);
+
+// stack
+u8[] arrC1 = (((arrA + 1) .. arrB) + 1) .. (arrA + 3) + 1;
+
+print(arrC1);
+
+// or
+u8[9] arrC2;
+arrC2 = arrA .. arrB;
+
+print(arrC2);
+
+// heap
+u8[const] arrC3 = alloc [] : arrA .. arrB;
+
+print(arrC3);
+
+// or
+u8[const] arrC4 = alloc [9];
+arrC4 = arrA .. arrB;
+
+print(arrC4);
+
+// slices, appending
+u8[20] arrC5;
+arrC5[0:] = arrA[1:] .. arrB[2:4];
+
+print(arrC5);
+
+// array-list appending
+u8[auton] arrC6;
+arrC6[] = arrA[1:] .. arrB[2:4];
+
+print(arrC6);
+
+fcn print(u8[const] arr) {
+    "%.*s\n"  arr.length, arr;
+}

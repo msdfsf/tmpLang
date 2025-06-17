@@ -1,0 +1,109 @@
+{
+  "name": "vi-debugger",
+  "displayName": "Vi Debugger",
+  "description": "Wrapper for gdb",
+  "publisher": "vi-made",
+  "version": "0.0.6",
+  "engines": {
+    "vscode": "^1.98.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "contributes": {
+    "commands": {
+      "command": "vi-debugger.ensureTasks",
+      "title": "Vi Debugger: Ensure Tasks",
+      "category": "Vi Debugger"
+    },
+    "breakpoints": [
+      {
+        "language": "vi"
+      }
+    ],
+    "configuration": {
+      "title": "ViDebugger",
+      "properties": {
+        "viDebugger.compilerPath": {
+          "type": "string",
+          "default": "./",
+          "description": "Path to the compiler folder, so compiler is then located in ./build/"
+        }
+      }
+    },
+    "debuggers": [
+      {
+        "type": "cppdbg",
+        "languages": [
+          "vi",
+          ".vi"
+        ],
+        "label": "Vi Debug",
+        "initialConfigurations": [
+          {
+            "name": "Debug Vi",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/out/to_debug.exe",
+            "stopAtEntry": false,
+            "preLaunchTask": "Vi Translate and build",
+            "cwd": "${workspaceFolder}",
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
+            "externalConsole": false,
+            "viDebugger.compilerPath": "./"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Vi Debug: Launch",
+            "description": "...",
+            "body": {
+              "name": "Debug Vi",
+              "type": "cppdbg",
+              "request": "launch",
+              "program": "${workspaceFolder}/out/to_debug.exe",
+              "stopAtEntry": false,
+              "preLaunchTask": "Vi Translate and build",
+              "cwd": "${workspaceFolder}",
+              "MIMode": "gdb",
+              "miDebuggerPath": "C:/msys64/ucrt64/bin/gdb.exe",
+              "externalConsole": false,
+              "viDebugger.compilerPath": "./"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:vi-debugger.ensureTasks",
+    "onDebug"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "compile": "npm run check-types && npm i --save-dev esbuild",
+    "check-types": "tsc --noEmit",
+    "watch": "npm-run-all -p watch:*",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "vscode:prepublish": "npm run package",
+    "package": "npm run check-types && npm i --save-dev esbuild"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.98.0",
+    "@typescript-eslint/eslint-plugin": "^8.25.0",
+    "@typescript-eslint/parser": "^8.25.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.25.1",
+    "eslint": "^9.21.0",
+    "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "vi-debugger": "file:"
+  }
+}

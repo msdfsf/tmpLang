@@ -1,0 +1,1 @@
+Adds language detection for .vi files and syntax highlighting.

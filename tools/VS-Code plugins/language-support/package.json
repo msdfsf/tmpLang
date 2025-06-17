@@ -1,0 +1,35 @@
+{
+	"name": "vi",
+	"displayName": "Vi",
+	"description": "Vi",
+	"publisher": "vi-made",
+	"version": "0.0.0",
+	"engines": {
+		"vscode": "*"
+	},
+	"contributes": {
+		"languages": [
+			{
+				"id": "vi",
+				"extensions": [
+					".vi"
+				],
+				"aliases": [
+					"Vi",
+					"vi"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "vi",
+				"scopeName": "source.vi",
+				"path": "./syntaxes/vi.tmLanguage.json"
+			}
+		]
+	},
+	"dependencies": {
+		"vi": "file:"
+	}
+}

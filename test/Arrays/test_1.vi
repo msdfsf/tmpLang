@@ -1,0 +1,113 @@
+
+fcn printArrayLength(int[const] arr) -> int {
+    return arr.length;
+}
+
+// array of constant compile-time known size
+int[2] arr;
+
+arr[0] = 1;
+arr[1] = 2;
+
+"arr: [%i, %i]\n" arr[0], arr[1];
+
+// can be implicitly treated as pointer
+int^ ptr = arr;
+"ptr = arr\n";
+"^ptr: %i;\n^(ptr + 1): %i;\n" ^ptr, ^(ptr + 1);
+
+ptr = arr + 1;
+"ptr = arr + 1\n";
+"^ptr: %i\n" ^ptr;
+
+// array length is obtainable
+"arr.len: %i\n" arr.length;
+
+// and works within functions
+"len(arr): %i\n" printArrayLength(arr);
+
+// * note: array length is only compile-time value,
+//         it is not stored anywhere in memory and 
+//         is passed as hidden argument to a function 
+
+// also can be initialized with values
+int[] arr2 = [3, 4];
+"arr2: [%i, %i]\n" arr2[0], arr2[1];
+
+// one can reassign array variable
+// each element is copied
+arr = arr2;
+"arr = arr2: [%i, %i]\n" arr[0], arr[1];
+
+// or using pointer
+arr = ptr;
+"arr = ptr: [%i, %i]\n" arr[0], arr[1];
+
+// every assignment to array-like variable is viewed as
+// assigning each element with expression on the left side
+// where array-like variables (or pointers in this case) 
+// are treated as elements on corresponding indexes
+// so following will copy arr2 to arr and add 1 to each element
+arr = arr2 + 1;
+"arr = arr + 1: [%i, %i]\n" arr[0], arr[1];
+
+// because of that, pointers cannot be offsetted directly in assignment
+// following will copy ptr + 1 to arr[0] and ptr + 2 to arr[1]
+// and add 1 to each element of arr
+arr = ptr + 1;
+"arr = ptr + 1: [%i, %i]\n" arr[0], arr[1];
+
+// size of right side have to be at least as big as left side
+int[4] arr3;
+arr3[0] = 5;
+arr3[1] = 6;
+"arr3: [%i, %i, undefined, undefined]\n" arr3[0], arr3[1];
+
+arr = arr3;
+"arr = arr3: [%i, %i]\n" arr[0], arr[1];
+
+// length of array always remain the same
+"len(arr): %i\n" printArrayLength(arr);
+
+// qualifiers also can be used with arrays
+// they also are related to each element, not the array itself
+const int[] carr = [ 1, 2 ];
+embed int[] earr = [ 3, 4 ];
+
+"const carr: [%i, %i]\n" carr[0], carr[1];
+"const earr: [%i, %i]\n" earr[0], earr[1];
+
+// arrays also can be allocated in runtime
+// it can be done as follows
+int darrLen = 2;
+
+int[const] darr = alloc int[darrLen];
+darr[0] = 1;
+darr[1] = 2;
+
+"darr: [%i, %i]\n" darr[0], darr[1];
+"len(darr): %i\n" printArrayLength(darr);
+
+// it can be then deallocated
+free darr;
+"free darr";
+"darr: [%i, %i]\n" darr[0], darr[1];
+
+
+// array list
+int[auton] arrList;
+arrList[0] = 1;
+arrList[1] = 2;
+
+"array list: [%i, %i]\n" arrList[0], arrList[1];
+"len(arrList): %i\n" printArrayLength(arrList);
+
+arrList[5] = 6;
+
+"arrList[5] = 6: %i\n" arrList[5];
+"len(arrList): %i\n" printArrayLength(arrList);
+
+// in case of array list it can be useful to also obtain allocated size
+"arrList size: %i\n" arrList.size;
+
+"arr size: %i\n" arr.size;

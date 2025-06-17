@@ -1,0 +1,11 @@
+
+def union DataType {
+    i32 i;
+    f32 f;
+}
+
+DataType dtype;
+dtype.i = 1;
+
+"DataType.i = %i;\n" dtype.i;
+"DataType.f = %f;\n" dtype.f;

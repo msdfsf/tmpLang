@@ -1,0 +1,5 @@
+import f1.vi as namespace F1;
+import f2.vi as namespace F2;
+import f3.vi as namespace F3;
+
+int x = 1;
