@@ -4,6 +4,7 @@
 #include "globals.h"
 #include "logger.h"
 #include "error.h"
+#include "lexer.h"
 
 #include <ctype.h>
 #include <filesystem>
@@ -86,59 +87,6 @@ namespace Utils {
 
     }
 
-    // null-terminated
-    int skipWhiteSpaces(char *const str, int *const idx) {
-
-        int i = *idx;
-        int lines = 0;
-        while (1) {
-
-            const char ch = str[i];
-
-            if (ch > 32) {
-                // assuming valid char
-                *idx = i;
-                return lines;
-            } else if (ch == EOL) {
-                lines++;
-            } else if (ch == EOS) {
-                *idx = i;
-                return -1;
-            }
-
-            i++;
-        
-        }
-    
-    }
-
-    // returns Err::UNEXPECTED_END_OF_FILE if end of file is reached, otherwise Err::OK
-    int skipWhiteSpaces(char *const str, Location* loc) {
-
-        int i = loc->idx;
-        int lines = 0;
-        while (1) {
-
-            const char ch = str[i];
-
-            if (ch > 32) {
-                // assuming valid char
-                loc->idx = i;
-                loc->line += lines;
-                return Err::OK;
-            } else if (ch == EOL) {
-                lines++;
-            } else if (ch == EOS) {
-                loc->idx = i;
-                return Err::UNEXPECTED_END_OF_FILE; // maybe special error?
-            }
-
-            i++;
-        
-        }
-    
-    }
-
     int skipTillWhiteSpace(char *const str) {
 
         int i = 0;
@@ -186,7 +134,7 @@ namespace Utils {
         }
 
 
-        char* arr = copyWhenAscii ? (char*) malloc(bytes * len) : NULL;
+        char* arr = (!copyWhenAscii && bytes == 1) ? NULL : (char*) malloc(bytes * len);
         switch (bytes) {
 
             case 1: {
@@ -261,131 +209,6 @@ namespace Utils {
         
         return arr;
 
-    }
-
-    // LOOK_AT : better name?
-    //           optimize?
-    int skipWhiteSpacesAndComments(char *const str, Location* loc) {
-
-        int i = loc->idx;
-        int lines = 0;
-        while (1) {
-
-            const char ch = str[i];
-            
-            if (ch == '/') {
-
-                const char nextCh = str[i + 1];
-                if (nextCh == '/') {
-                    // line comment
-
-                    i += 2;
-                    while (1) {
-
-                        const char ch = str[i];
-                        if (ch == EOL || ch == EOS) break;
-                        i++;
-                    
-                    }
-
-                    if (str[i] == EOS) {
-                        continue;
-                    }
-
-                    // i++;
-                    lines++;
-                
-                } else if (nextCh == SCOPE_BEGIN) {
-                    // block comment
-
-                    int startIdx = i;
-                    int startLines = lines;
-                    int toClose = 1;
-
-                    i += 2;
-                    while (1) {
-
-                        const char ch = str[i];
-
-                        if (ch == '\n') {
-                            lines++;
-                        } else if (ch == '/') {
-
-                            i++;
-                            const char nextCh = str[i];
-
-                            if (nextCh == SCOPE_BEGIN) {
-                                toClose++;
-                            } else if (nextCh == SCOPE_END) {
-                                toClose--;
-                                if (toClose <= 0) break;
-                            }
-                        
-                        } else if (ch == EOS) {
-
-                            loc->idx = i;
-                            loc->line += lines;
-
-                            if (toClose != 0) {
-                                Location tmp;
-                                tmp.idx = startIdx;
-                                tmp.line = startLines;
-                                tmp.file = loc->file;
-                                Logger::log(Logger::ERROR, ERR_STR(Err::UNTERMINATED_COMMENT), &tmp, 2);
-                                return Err::UNTERMINATED_COMMENT;
-                            }
-                            
-                            return Err::UNEXPECTED_END_OF_FILE;
-                        
-                        }
-
-                        i++;
-                    
-                    }
-
-                    // i++;
-                
-                } else {
-
-                    loc->idx = i;
-                    loc->line += lines;
-                    return Err::OK;
-                
-                }
-            
-            } else if (ch > 32) {
-                // assuming valid char
-                loc->idx = i;
-                loc->line += lines;
-                return Err::OK;
-            } else if (ch == EOL) {
-                lines++;
-            } else if (ch == EOS) {
-                Logger::log(Logger::ERROR, "Unexpected end of file! Showing the start of the relevant section.", loc, 1);
-                loc->idx = i;
-                loc->line += lines;
-                return Err::UNEXPECTED_END_OF_FILE; // maybe special error?
-            }
-
-            i++;
-
-        }
-
-    }
-
-    int cmpOneChar(Operator *op, uint32_t word) {
-        return op->word == word & 0xFF;
-    }
-
-    int cmpTwoChars(Operator *op, char* const str) {
-
-        const uint16_t wordA = op->word;
-        const uint16_t wordB = *((uint16_t *) str);
-
-        if (wordA < 256)
-            return wordA == wordB & 0xFF;
-        return wordA == wordB;
-    
     }
 
     int cmp(const char* strA, char* strB, const int lenB) {
@@ -466,7 +289,7 @@ namespace Utils {
             
             const char ch = str[i];
             
-            if (ch == EOL) {
+            if (ch == Lex::EOL) {
                 *tabCount = tbCnt;
                 return i + 1;
             }
@@ -484,7 +307,7 @@ namespace Utils {
 
         for (int i = idx; ; i++) {
             const char ch = str[i];
-            if (ch == EOL || ch == EOS) return i - 1;
+            if (ch == Lex::EOL || ch == Lex::EOS) return i - 1;
         }
 
     }
@@ -492,7 +315,7 @@ namespace Utils {
     int skipWhiteSpacesBack(char* const str, const int idx) {
 
         for (int i = idx - 1; i >= 0; i--) {
-            if (str[i] == EOL) return i + 1;
+            if (str[i] == Lex::EOL) return i + 1;
         }
 
         return 0;
@@ -586,7 +409,7 @@ namespace Utils {
             
             const char strCh = fname[i];
             
-            if (strCh == EOS) return lastOffset;
+            if (strCh == Lex::EOS) return lastOffset;
             if (strCh == '\\' || strCh == '/') lastOffset = i + 1;
             
             i++;
@@ -615,12 +438,12 @@ namespace Utils {
 
     void copy(Variable* dest, Variable* src) {
 
-        Location* loc = dest->loc;
+        Span* span = dest->span;
         Expression* ex = dest->expression;
         // Variable* aloc = dest->allocSize;
         // std::vector<ScopeName*> sc = dest->scopeNames;
         memcpy(dest, src, sizeof(Variable));
-        dest->loc = loc;
+        dest->span = span;
         dest->expression = ex;
         // dest->allocSize = aloc;
         // dest->scopeNames = sc;
@@ -657,7 +480,7 @@ namespace Utils {
 
         scA->type = scB->type;
         scA->scope = scB->scope;
-        scA->loc = scB->loc;
+        scA->span = scB->span;
         scA->parentIdx = scB->parentIdx;
         scA->snFlags = scB->snFlags;
 

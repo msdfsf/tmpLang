@@ -7,6 +7,7 @@
 #include "logger.h"
 #include "globals.h"
 #include "Utils.h"
+#include "lexer.h"
 
 #define DEFAULT_MESSAGE_LENGTH 256
 #define TAB_SIZE 4
@@ -34,7 +35,7 @@ namespace Logger {
     }
 
     // messy
-    void log(const uint32_t type, const char* const message, Location* loc, int len, ...) {
+    void log(const uint32_t type, const char* const message, Span* span, ...) {
 
         if (mute) return;
         if (!(verbosity & type)) return;
@@ -46,33 +47,16 @@ namespace Logger {
         int lnStartIdx = 0;
         int lnEndIdx = 0;
         int lnLength = 0;
+        int underlineLen = 0;
 
-        if (loc) {
+        if (span) {
             // TODO : buggy when \0
-            body = loc->file->buff;
-            idx = loc->idx;
+            body = span->file->buff;
+            idx = span->start.idx;
             lnStartIdx = Utils::findLineStart(body, idx, &tabCount);
             lnEndIdx = Utils::findLineEnd(body, idx);
             lnLength = lnEndIdx - lnStartIdx + 1;
-        }
-
-        switch (len) {
-
-            case STATEMENT : {
-                char* strOff = Utils::findChar(body + idx, STATEMENT_END);
-                len = (strOff) ? strOff - (body + idx) : 0;
-                break;
-            }
-            
-            case LINE :
-                len = 0;
-                break;
-
-            case CLOSURE : {
-                len = Utils::findClosureEnd(body + idx - 1, getEndClosure(body[idx - 1])) - 1;
-                break;
-            }
-        
+            underlineLen = span->end.idx - span->start.idx + 1;
         }
 
         const char* underlineEscColor = "";
@@ -92,7 +76,7 @@ namespace Logger {
             case ERROR : {
                 underlineEscColor = ERR_ESC;
                 printf(ERR_ESC "\nERROR" COLOR_RESET_ESC);
-                // printf("(%i, %i) : ", loc->line, idx - lnStartIdx + 1);
+                // printf("(%i, %i) : ", span->line, idx - lnStartIdx + 1);
                 break;
             }
         
@@ -101,24 +85,24 @@ namespace Logger {
         
         }
 
-        if (loc) {
-            printf("(%i, %i) : ", loc->line, idx - lnStartIdx + 1);
+        if (span) {
+            printf("(%i, %i) : ", span->end.ln, idx - lnStartIdx + 1);
         } else {
             if (type != PLAIN) printf(" : ");
         }
 
         va_list args;
-        va_start(args, len);
+        va_start(args, span);
         vprintf(message, args);
         va_end (args);
 
-        if (!loc) return;
+        if (!span) return;
 
         putchar('\n');
 
         // enough?
         char numbuff[32];
-        sprintf(numbuff, "%i | ", loc->line);
+        sprintf(numbuff, "%i | ", span->end.ln);
 
         printf("%s%.*s\n", numbuff, lnLength, body + lnStartIdx);
         
@@ -127,15 +111,15 @@ namespace Logger {
         int i = lnStartIdx;
         for (int i = 0; i < strlen(numbuff); i++) putchar(' ');
         for (; i < lnStartIdx + tabCount; i++) putchar('\t');
-        for (; i < loc->idx; i++) putchar(' ');
+        for (; i < idx; i++) putchar(' ');
         printf(underlineEscColor);
-        for (; i < loc->idx + len; i++) putchar('^');
+        for (; i < idx + underlineLen; i++) putchar('^');
         printf(COLOR_RESET_ESC);
         for (; i < lnEndIdx; i++) putchar(' ');
 
         putchar('\n');
         
-        printf(" in file: %s\n", loc->file->name);
+        printf(" in file: %s\n", span->file->name);
         
         putchar('\n');
 

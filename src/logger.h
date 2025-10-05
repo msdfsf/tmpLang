@@ -16,11 +16,13 @@ namespace Logger {
 
     // better name
     // loc->idx -1 has to point to start closure '(', '{', '<', '[', anything else is not supported for now
+    /*
     enum UnderlineEnd {
         STATEMENT   = -1,
         LINE        = -2,
         CLOSURE     = -3
     };
+    */
 
     // use Level enum to define bits
     extern uint32_t verbosity;
@@ -32,7 +34,7 @@ namespace Logger {
     //        for now we dont care
     extern uint64_t mute;
 
-    void log(const uint32_t type, const char* const message, Location* loc, const int len = 0, ...);
+    void log(const uint32_t type, const char* const message, Span* loc, ...);
     void log(const uint32_t type, const char* const message);
 
 }

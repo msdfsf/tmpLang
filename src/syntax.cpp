@@ -10,6 +10,7 @@
 #include "error.h"
 #include "logger.h"
 #include "utils.h"
+#include "lexer.h"
 
 
 
@@ -17,39 +18,39 @@
 Scope* SyntaxNode::root = NULL;
 INamed* SyntaxNode::dir = NULL;
 
-std::vector<LangDef*> SyntaxNode::langDefs;
-std::vector<CodeBlock*> SyntaxNode::codeBlocks;
-std::vector<ForeignFunction*> SyntaxNode::foreignFunctions;
+std::vector<LangDef*> NodeRegistry::langDefs;
+std::vector<CodeBlock*> NodeRegistry::codeBlocks;
+std::vector<ForeignFunction*> NodeRegistry::foreignFunctions;
 
-std::vector<Variable*> SyntaxNode::variables;
-std::vector<Variable*> SyntaxNode::fcnCalls;
-std::vector<Function*> SyntaxNode::fcns;
-std::vector<VariableDefinition*> SyntaxNode::customDataTypesReferences;
-std::vector<VariableAssignment*> SyntaxNode::variableAssignments;
-std::vector<Variable*> SyntaxNode::cmpTimeVars;
-std::vector<Variable*> SyntaxNode::arrays;
-std::vector<Loop*> SyntaxNode::loops;
-std::vector<Label*> SyntaxNode::labels;
-std::vector<Variable*> SyntaxNode::branchExpressions;
-std::vector<Statement*> SyntaxNode::statements;
-std::vector<VariableDefinition*> SyntaxNode::initializations;
-std::vector<ReturnStatement*> SyntaxNode::returnStatements;
-std::vector<SwitchCase*> SyntaxNode::switchCases;
-std::vector<VariableDefinition*> SyntaxNode::variableDefinitions;
+std::vector<Variable*> NodeRegistry::variables;
+std::vector<Variable*> NodeRegistry::fcnCalls;
+std::vector<Function*> NodeRegistry::fcns;
+std::vector<VariableDefinition*> NodeRegistry::customDataTypesReferences;
+std::vector<VariableAssignment*> NodeRegistry::variableAssignments;
+std::vector<Variable*> NodeRegistry::cmpTimeVars;
+std::vector<Variable*> NodeRegistry::arrays;
+std::vector<Loop*> NodeRegistry::loops;
+std::vector<Label*> NodeRegistry::labels;
+std::vector<Variable*> NodeRegistry::branchExpressions;
+std::vector<Statement*> NodeRegistry::statements;
+std::vector<VariableDefinition*> NodeRegistry::initializations;
+std::vector<ReturnStatement*> NodeRegistry::returnStatements;
+std::vector<SwitchCase*> NodeRegistry::switchCases;
+std::vector<VariableDefinition*> NodeRegistry::variableDefinitions;
 
-std::vector<ErrorSet*> SyntaxNode::customErrors;
-std::vector<Union*> SyntaxNode::unions;
+std::vector<ErrorSet*> NodeRegistry::customErrors;
+std::vector<Union*> NodeRegistry::unions;
 
-std::vector<Slice*> SyntaxNode::slices;
+std::vector<Slice*> NodeRegistry::slices;
 
-std::vector<VariableAssignment*> SyntaxNode::arraysAllocations;
+std::vector<VariableAssignment*> NodeRegistry::arraysAllocations;
 
-std::vector<ImportStatement*> SyntaxNode::imports;
+std::vector<ImportStatement*> NodeRegistry::imports;
 
-std::vector<TypeDefinition*> SyntaxNode::customDataTypes;
-std::vector<Enumerator*> SyntaxNode::enumerators;
+std::vector<TypeDefinition*> NodeRegistry::customDataTypes;
+std::vector<Enumerator*> NodeRegistry::enumerators;
 
-std::vector<GotoStatement*> SyntaxNode::gotos;
+std::vector<GotoStatement*> NodeRegistry::gotos;
 
 
 Variable* zero = new Variable {
@@ -67,21 +68,6 @@ Variable* internalVariables[] = {
 };
 
 const int internalVariablesCount = sizeof(internalVariables) / sizeof(Variable*);
-
-// helping functions (move to utils?)
-// 
-Location* getLocationStamp(Location* loc) {
-
-    Location* stamp = (Location*) malloc(sizeof(Location));
-    if (!stamp) return NULL;
-
-    stamp->file = loc->file;
-    stamp->idx = loc->idx;
-    stamp->line = loc->line;
-
-    return stamp;
-
-}
 
 
 
@@ -109,7 +95,7 @@ int validateScopeNames(Scope* sc, std::vector<INamedLoc*> names, Namespace** nsp
                 if (sc->fcn && sc->fcn->errorSet) {
                     tmpEset = sc->fcn->errorSet;
                 } else {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_NAMESPACE), nm->loc, nm->nameLen);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_NAMESPACE), nm->span, nm->nameLen);
                     return Err::UNKNOWN_NAMESPACE;
                 }
             
@@ -128,7 +114,7 @@ int validateScopeNames(Scope* sc, std::vector<INamedLoc*> names, Namespace** nsp
                 if (tmp->cvalue.dtypeEnum == DT_ERROR && !(tmp->cvalue.hasValue)) {
                     tmpEset = tmp->cvalue.err;
                 } else if (i + 1 < len) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), tmp->loc);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), tmp->span);
                     return Err::UNKNOWN_ERROR_SET;
                 }
             }
@@ -165,7 +151,7 @@ Operand::Operand() : SyntaxNode(NT_OPERAND) {
     // this->unrollExpression = 1;
     // this->value = NULL;
     // this->dataTypeEnum = DT_UNDEFINED;
-    // this->loc = NULL;
+    // this->span = NULL;
     // this->hasValue = 0;
     this->def = NULL;
 
@@ -178,7 +164,7 @@ Operand::Operand(Scope* scope) : SyntaxNode(NT_OPERAND) {
     this->unrollExpression = 1;
     this->cvalue.ptr = NULL;
     this->cvalue.dtypeEnum = DT_UNDEFINED;
-    this->loc = NULL;
+    this->span = NULL;
     this->cvalue.hasValue = 0;
     this->def = NULL;
 
@@ -186,14 +172,15 @@ Operand::Operand(Scope* scope) : SyntaxNode(NT_OPERAND) {
 
 VariableDefinition::VariableDefinition() : SyntaxNode(NT_VARIABLE_DEFINITION) {
     
+    this->var = new Variable();
     this->flags = 0;
 
 }
 
-VariableDefinition::VariableDefinition(Location* loc) : SyntaxNode(NT_VARIABLE_DEFINITION) {
+VariableDefinition::VariableDefinition(Span* span) : SyntaxNode(NT_VARIABLE_DEFINITION) {
     
-    this->loc = getLocationStamp(loc);
-    if (!this->loc) exit(1); // LOOK AT : maybe manage better
+    this->span = getSpanStamp(span);
+    if (!this->span) exit(1); // LOOK AT : maybe manage better
 
 }
 
@@ -216,10 +203,10 @@ VariableAssignment::VariableAssignment() : SyntaxNode(NT_VARIABLE_ASSIGNMENT) {
 
 }
 
-VariableAssignment::VariableAssignment(Location* loc) : VariableAssignment() {
+VariableAssignment::VariableAssignment(Span* span) : VariableAssignment() {
     
-    this->loc = getLocationStamp(loc);
-    if (!this->loc) exit(1); // LOOK AT : maybe manage better
+    this->span = getSpanStamp(span);
+    if (!this->span) exit(1); // LOOK AT : maybe manage better
 
 }
 
@@ -239,10 +226,10 @@ Variable::Variable() {
 
 }
 
-Variable::Variable(Location* loc) : Variable() {
+Variable::Variable(Span* span) : Variable() {
     
-    this->loc = getLocationStamp(loc);
-    if (!this->loc) exit(1); // LOOK AT : maybe manage better
+    this->span = getSpanStamp(span);
+    if (!this->span) exit(1); // LOOK AT : maybe manage better
     
 }
 
@@ -266,10 +253,10 @@ Variable::Variable(Scope* const sc, DataTypeEnum dtype) : Variable() {
 
 }
 
-Variable::Variable(Scope* const sc, DataTypeEnum dtype, Location* loc) : Variable(sc, dtype) {
+Variable::Variable(Scope* const sc, DataTypeEnum dtype, Span* span) : Variable(sc, dtype) {
     
-    this->loc = getLocationStamp(loc);
-    if (!this->loc) exit(1); // LOOK AT : maybe manage better
+    this->span = getSpanStamp(span);
+    if (!this->span) exit(1); // LOOK AT : maybe manage better
     
 }
 
@@ -319,6 +306,127 @@ Function::Function(Scope* sc, char* name, int nameLen, std::vector<VariableDefin
 }
 
 
+// LOOK AT:
+// As in compiler itself we dont really need to free memory
+// we dont need this function.
+// But for other programs, that may use compiler as library
+// as lsp that is being developed, we have to provide such
+// function.
+//
+// The way nodes are allocated and managed isn't really 
+// suited for 'clean' freeing, as pointer of freed node 
+// may be used somewhere else.
+//
+// For now, and maybe ever, it doesn't matter as there
+// is no need to partially free nodes in the nonsense way
+// that will cause troubles for the 'user'.
+// If such case will arise, nodes will have to be, for example,
+// be allocated in row in array-like structure/s, where their 
+// indexes will be used as identifiers and accessors.
+// Therefore once freed memory could be marked as some arbitrary
+// value representing invalid item (NULL), that could be checked
+// before access.
+//
+// Function will not clean parents references of deleting nodes
+// as it will only matter for the very first case. Therefore it's
+// pretty reasonable to leave this at caller responsibility if it's
+// desired.
+void freeNodeRecursively(SyntaxNode* node) {
+
+    if (!node) return;
+
+    delete node->span;
+
+    switch (node->type) {
+
+        case NT_SCOPE: {
+            
+            Scope* sc = (Scope*) node;
+            for (int i = 0; i < sc->children.size(); i++) {
+                freeNodeRecursively(sc->children[i]);
+            }
+            
+            delete sc;
+            
+            break;
+        
+        }
+        
+        case NT_VARIABLE_DEFINITION: {
+            
+            VariableDefinition* def = (VariableDefinition*) node;
+            freeNodeRecursively(def->var);
+            
+            delete def->dtype;
+            delete def;
+            
+            break;
+        
+        }
+
+        case NT_VARIABLE_ASSIGNMENT: {
+
+            VariableAssignment* ass = (VariableAssignment*) node;
+            freeNodeRecursively(ass->lvar);
+            freeNodeRecursively(ass->rvar);
+            
+            delete ass;
+
+            break;
+        
+        }
+
+        case NT_VARIABLE: {
+            
+            Variable* var = (Variable*) node;
+            
+            if (var->cvalue.dtypeEnum >= DT_STRING) {
+                delete var->cvalue.ptr;
+            }
+
+            delete var->expression;
+            delete var;
+            
+            break;
+        
+        }
+
+        case NT_FUNCTION: {
+
+            Function* fcn = (Function*) node;
+            for (int i = 0; i < fcn->inArgs.size(); i++) {
+                freeNodeRecursively(fcn->inArgs[i]);
+            }
+
+            freeNodeRecursively(fcn->outArg);
+            freeNodeRecursively(fcn->bodyScope);
+            
+            delete fcn->errorSetName;
+            delete fcn;
+            
+            break;
+        
+        }
+
+        case NT_RETURN_STATEMENT: {
+            
+            ReturnStatement* rs = (ReturnStatement*) node;
+            freeNodeRecursively(rs->var);
+            freeNodeRecursively(rs->err);
+            
+            delete rs;
+            
+            break;
+        
+        }
+
+        default:
+            delete node;
+    }
+
+}
+
+
 
 // expression evaluating stuff
 //
@@ -335,7 +443,7 @@ Function::Function(Scope* sc, char* name, int nameLen, std::vector<VariableDefin
 
 
 
-
+/*
 int applyUnaryOperatorAddress(Operand* operand) {
     
     Pointer* ptr = new Pointer;
@@ -426,7 +534,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 }
 
 
-
+*/
 
 
 
@@ -436,112 +544,112 @@ DataType dataTypes[DATA_TYPES_COUNT] = {
         
     // VOID
     {
-        (char*) KWS_VOID,
-        sizeof(KWS_VOID) - 1,
+        (char*) Lex::KWS_VOID,
+        sizeof(Lex::KWS_VOID) - 1,
         0,
         0
     },
 
     // INT
     {
-        (char*) KWS_INT,
-        sizeof(KWS_INT) - 1,
+        (char*) Lex::KWS_INT,
+        sizeof(Lex::KWS_INT) - 1,
         4,
         1
     },
 
     // INT_8
     {
-        (char*) KWS_INT_8,
-        sizeof(KWS_INT_8) - 1,
+        (char*) Lex::KWS_I8,
+        sizeof(Lex::KWS_I8) - 1,
         1,
         1
     },
 
     // INT_16
     {
-        (char*) KWS_INT_16,
-        sizeof(KWS_INT_16) - 1,
+        (char*) Lex::KWS_I16,
+        sizeof(Lex::KWS_I16) - 1,
         2,
         1
     },
 
     // INT_32
     {
-        (char*) KWS_INT_32,
-        sizeof(KWS_INT_32) - 1,
+        (char*) Lex::KWS_I32,
+        sizeof(Lex::KWS_I32) - 1,
         4,
         1
     },
 
     // INT_64
     {
-        (char*) KWS_INT_64,
-        sizeof(KWS_INT_64) - 1,
+        (char*) Lex::KWS_I64,
+        sizeof(Lex::KWS_I64) - 1,
         8,
         2
     },
 
     // UINT_8
     {
-        (char*) KWS_UINT_8,
-        sizeof(KWS_UINT_8) - 1,
+        (char*) Lex::KWS_U8,
+        sizeof(Lex::KWS_U8) - 1,
         1,
         1
     },
 
     // UINT_16
     {
-        (char*)KWS_UINT_16,
-        sizeof(KWS_UINT_16) - 1,
+        (char*) Lex::KWS_U16,
+        sizeof(Lex::KWS_U16) - 1,
         2,
         1
     },
 
     // UINT_32
     {
-        (char*)KWS_UINT_32,
-        sizeof(KWS_UINT_32) - 1,
+        (char*) Lex::KWS_U32,
+        sizeof(Lex::KWS_U32) - 1,
         4,
         1
     },
 
     // UINT_64
     {
-        (char*)KWS_UINT_64,
-        sizeof(KWS_UINT_64) - 1,
+        (char*) Lex::KWS_U64,
+        sizeof(Lex::KWS_U64) - 1,
         8,
         2
     },
 
     // FLOAT_32
     {
-        (char*) KWS_FLOAT_32,
-        sizeof(KWS_FLOAT_32) - 1,
+        (char*) Lex::KWS_F32,
+        sizeof(Lex::KWS_F32) - 1,
         4,
         3
     },
 
     // FLOAT_64
     {
-        (char*) KWS_FLOAT_64,
-        sizeof(KWS_FLOAT_64) - 1,
+        (char*) Lex::KWS_F64,
+        sizeof(Lex::KWS_F64) - 1,
         8,
         4
     },
 
     // STRING
     {
-        (char*) KWS_STRING,
-        sizeof(KWS_STRING) - 1,
+        (char*) "string",
+        sizeof("string") - 1,
         8 * 2,
         5
     },
 
     // POINTER
     {
-        (char*) KWS_POINTER,
-        sizeof(KWS_POINTER) - 1,
+        (char*) "ptr",
+        sizeof("ptr") - 1,
         8 * 8,
         5 
     },

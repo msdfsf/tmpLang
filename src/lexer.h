@@ -1,73 +1,110 @@
 #pragma once
 
 #include "globals.h"
+#include <array>
 
 namespace Lex {
 
-    const char EOS = '\0';
-    const char EOL = '\n';
+    enum TokenKind : int32_t;
+    enum TokenDetail : int32_t;
+    
+    union Token {
+        struct {
+            int32_t kind;
+            int32_t detail;
+        };
+        int64_t encoded;
+    };
+
+    union TokenValue {
+        uint64_t ival;
+        double  fval;
+        String* str;
+        void* any;
+    };
+
+    static inline uint64_t packTokens(TokenKind a, TokenKind b) {
+        return (b | (a << 8));
+    }
+
+    static inline uint16_t packChars(unsigned char a, unsigned char b) {
+        return (b | (a << 8));
+    }
+
+    static const char EOS = '\0';
+    static const char EOL = '\n';
 
     // As there are a lot of long names
     // groupless literals will be defined without
     // prefixes and other identification stuff...
-    const char POINTER = '^';
-    const char ADDRESS = '&';
-    const char STRING_LITERAL = '"';
-    const char RAW_POSTFIX = 'b';
-    const char CHAR_LITERAL = '\'';
-    const char ESCAPE_CHAR = '\\';
-    const char ARRAY_BEGIN = '[';
-    const char ARRAY_END = ']';
-    const char SCOPE_BEGIN = '{';
-    const char SCOPE_END = '}';
+    static const char POINTER = '^';
+    static const char ADDRESS = '&';
+    static const char STATEMENT_END = ';';
+    static const char STRING_LITERAL = '"';
+    static const char RAW_POSTFIX = 'b';
+    static const char CHAR_LITERAL = '\'';
+    static const char ESCAPE_CHAR = '\\';
+    static const char ARRAY_BEGIN = '[';
+    static const char ARRAY_END = ']';
+    static const char SCOPE_BEGIN = '{';
+    static const char SCOPE_END = '}';
+    static const char LABEL_END = ':';
+    static const char EQUAL = '=';
+    static const char SKIP = '_';
+    static const char LIST_SEPARATOR = ',';
+    static const uint16_t SCOPE_RESOLUTION = packChars(':', ':');
 
-    const char* KWS_VOID = "void";
-    const char* KWS_INT = "int";
-    const char* KWS_I8 = "i8";
-    const char* KWS_I16 = "i16";
-    const char* KWS_I32 = "i32";
-    const char* KWS_I64 = "i64";
-    const char* KWS_U8 = "u8";
-    const char* KWS_U16 = "u16";
-    const char* KWS_U32 = "u32";
-    const char* KWS_U64 = "u64";
-    const char* KWS_F32 = "f32";
-    const char* KWS_F64 = "f64";
-    const char* KWS_CONST = "const";
-    const char* KWS_EMBED = "embed";
-    const char* KWS_MUTON = "muton";
-    const char* KWS_AUTON = "auton";
-    const char* KWS_FCN = "fcn";
-    const char* KWS_DEF = "def";
-    const char* KWS_STRUCT = "struct";
-    const char* KWS_UNION = "union";
-    const char* KWS_IF = "if";
-    const char* KWS_ELSE = "else";
-    const char* KWS_FOR = "for";
-    const char* KWS_WHILE = "while";
-    const char* KWS_LOOP = "loop";
-    const char* KWS_WHEN = "when";
-    const char* KWS_CASE = "case";
-    const char* KWS_GOTO = "goto";
-    const char* KWS_ENUM = "enum";
-    const char* KWS_RETURN = "return";
-    const char* KWS_CONTINUE = "continue";
-    const char* KWS_BREAK = "break";
-    const char* KWS_USING = "using";
-    const char* KWS_SCOPE = "scope";
-    const char* KWS_NAMESPACE = "namespace";
-    const char* KWS_ALLOC = "alloc";
-    const char* KWS_FREE = "free";
-    const char* KWS_ERROR = "error";
-    const char* KWS_CATCH = "catch";
-    const char* KWS_IMPORT = "import";
-    const char* KWS_FROM = "from";
-    const char* KWS_TRUE = "true";
-    const char* KWS_FALSE = "false";
-    const char* KWS_NULL = "null";
+    static const char* KWS_ARRAY_LENGTH = "length";
+    static const char* KWS_ARRAY_SIZE = "size";
 
-    const char* CDS_NONE = "none";
-    const char* CDS_TEST = "test";
+    static const char* KWS_VOID = "void";
+    static const char* KWS_INT = "int";
+    static const char* KWS_I8 = "i8";
+    static const char* KWS_I16 = "i16";
+    static const char* KWS_I32 = "i32";
+    static const char* KWS_I64 = "i64";
+    static const char* KWS_U8 = "u8";
+    static const char* KWS_U16 = "u16";
+    static const char* KWS_U32 = "u32";
+    static const char* KWS_U64 = "u64";
+    static const char* KWS_F32 = "f32";
+    static const char* KWS_F64 = "f64";
+    static const char* KWS_CONST = "const";
+    static const char* KWS_EMBED = "embed";
+    static const char* KWS_MUTON = "muton";
+    static const char* KWS_AUTON = "auton";
+    static const char* KWS_FCN = "fcn";
+    static const char* KWS_DEF = "def";
+    static const char* KWS_STRUCT = "struct";
+    static const char* KWS_UNION = "union";
+    static const char* KWS_IF = "if";
+    static const char* KWS_ELSE = "else";
+    static const char* KWS_FOR = "for";
+    static const char* KWS_WHILE = "while";
+    static const char* KWS_LOOP = "loop";
+    static const char* KWS_WHEN = "when";
+    static const char* KWS_CASE = "case";
+    static const char* KWS_GOTO = "goto";
+    static const char* KWS_ENUM = "enum";
+    static const char* KWS_RETURN = "return";
+    static const char* KWS_CONTINUE = "continue";
+    static const char* KWS_BREAK = "break";
+    static const char* KWS_USING = "using";
+    static const char* KWS_SCOPE = "scope";
+    static const char* KWS_NAMESPACE = "namespace";
+    static const char* KWS_ALLOC = "alloc";
+    static const char* KWS_FREE = "free";
+    static const char* KWS_ERROR = "error";
+    static const char* KWS_CATCH = "catch";
+    static const char* KWS_IMPORT = "import";
+    static const char* KWS_FROM = "from";
+    static const char* KWS_TRUE = "true";
+    static const char* KWS_FALSE = "false";
+    static const char* KWS_AS = "as";
+    static const char* KWS_NULL = "null";
+
+    static const char* CDS_NONE = "none";
+    static const char* CDS_TEST = "test";
 
     enum Keyword {
         KW_VOID,
@@ -113,6 +150,7 @@ namespace Lex {
         KW_FROM,
         KW_TRUE,
         KW_FALSE,
+        KW_AS,
         KW_NULL,
         KW_COUNT
     };
@@ -123,7 +161,7 @@ namespace Lex {
         CD_COUNT
     };
 
-    static const const char* keywordStringTable[KW_COUNT] = {
+    static const char* keywordStringTable[KW_COUNT] = {
         KWS_VOID,
         KWS_INT,
         KWS_I8,
@@ -167,6 +205,7 @@ namespace Lex {
         KWS_FROM,
         KWS_TRUE,
         KWS_FALSE,
+        KWS_AS,
         KWS_NULL,
     };
 
@@ -175,56 +214,59 @@ namespace Lex {
         CDS_TEST,
     };
 
-    constexpr int KW_TABLE_SIZE = 203;
+    constexpr int KW_TABLE_SIZE = 158;
     constexpr std::array<int, KW_TABLE_SIZE> makeKeywordTable() {
-        std::array<int, KW_TABLE_SIZE> table = { 0 };
 
-        table[6] = KW_ELSE;
-        table[7] = KW_U32;
-        table[10] = KW_FROM;
-        table[12] = KW_INT;
-        table[17] = KW_I8;
-        table[19] = KW_FREE;
-        table[22] = KW_FALSE;
-        table[25] = KW_MUTON;
-        table[33] = KW_AUTON;
-        table[40] = KW_U64;
-        table[46] = KW_EMBED;
-        table[57] = KW_LOOP;
-        table[60] = KW_I16;
-        table[61] = KW_UNION;
-        table[70] = KW_ENUM;
-        table[83] = KW_BREAK;
-        table[84] = KW_IMPORT;
-        table[87] = KW_ALLOC;
-        table[90] = KW_WHEN;
-        table[91] = KW_F64;
-        table[99] = KW_CASE;
-        table[106] = KW_I64;
-        table[117] = KW_FOR;
-        table[121] = KW_DEF;
-        table[123] = KW_FCN;
-        table[124] = KW_TRUE;
-        table[126] = KW_I32;
-        table[130] = KW_USING;
-        table[131] = KW_NAMESPACE;
-        table[133] = KW_U8;
-        table[139] = KW_NULL;
-        table[146] = KW_IF;
-        table[150] = KW_ERROR;
-        table[152] = KW_U16;
-        table[156] = KW_CONST;
-        table[159] = KW_WHILE;
-        table[175] = KW_CONTINUE;
-        table[176] = KW_CATCH;
-        table[180] = KW_VOID;
-        table[184] = KW_RETURN;
-        table[190] = KW_SCOPE;
-        table[198] = KW_GOTO;
-        table[199] = KW_F32;
-        table[200] = KW_STRUCT;
+        std::array<int, KW_TABLE_SIZE> table = {};
 
+        table[6] = KW_I32;
+        table[9] = KW_FOR;
+        table[11] = KW_CATCH;
+        table[13] = KW_STRUCT;
+        table[14] = KW_FREE;
+        table[15] = KW_NAMESPACE;
+        table[19] = KW_CONTINUE;
+        table[21] = KW_INT;
+        table[23] = KW_IF;
+        table[30] = KW_VOID;
+        table[32] = KW_WHEN;
+        table[36] = KW_LOOP;
+        table[38] = KW_ERROR;
+        table[40] = KW_F64;
+        table[43] = KW_ELSE;
+        table[49] = KW_IMPORT;
+        table[52] = KW_RETURN;
+        table[59] = KW_BREAK;
+        table[61] = KW_FCN;
+        table[67] = KW_U8;
+        table[68] = KW_TRUE;
+        table[72] = KW_I16;
+        table[82] = KW_SCOPE;
+        table[83] = KW_U64;
+        table[85] = KW_MUTON;
+        table[86] = KW_U32;
+        table[99] = KW_ALLOC;
+        table[101] = KW_I64;
+        table[105] = KW_F32;
+        table[108] = KW_USING;
+        table[109] = KW_AUTON;
+        table[113] = KW_GOTO;
+        table[117] = KW_CONST;
+        table[122] = KW_CASE;
+        table[123] = KW_UNION;
+        table[125] = KW_EMBED;
+        table[127] = KW_FALSE;
+        table[129] = KW_ENUM;
+        table[133] = KW_NULL;
+        table[136] = KW_FROM;
+        table[139] = KW_I8;
+        table[140] = KW_AS;
+        table[144] = KW_U16;
+        table[145] = KW_WHILE;
+        table[149] = KW_DEF;
+        
         return table;
+
     };
     constexpr auto keywordTable = makeKeywordTable();
 
@@ -243,28 +285,72 @@ namespace Lex {
         TK_NUMBER,
         TK_STRING,
         TK_CHAR,
-        TK_POINTER,
         TK_EQUAL,
-        TK_ADDRESS,
-        TK_THE_REST,
-        TK_MEMBER_SELECTION,
         TK_SCOPE_RESOLUTION,
         TK_SCOPE_BEGIN,
         TK_SCOPE_END,
-        TK_ARRAY_BEGIN,
         TK_ARRAY_END,
-        TK_SKIP_VARIABLE,
         TK_LIST_SEPARATOR,
         TK_RAW,
         TK_PARENTHESIS_BEGIN,
         TK_PARENTHESIS_END,
         TK_ARROW,
+        TK_SKIP,
+        TK_FILE,
+        
+        // If used, detail should be valid OperatorEnum
+        TK_BINARY_OPERATOR,
+        // Not used as TokenDetail, since some operators may 
+        // represent other tokens. Such tokens are more 
+        // convenient to access via TokenKind, so storing 
+        // operators in this field is preferred.
+        // Colliding tokens will be represented by constants 
+        // with the same value, defined outside of this enum.
+        TK_OP_BEGIN,
+
+        TK_OP_PLUS,
+        TK_OP_MINUS,
+        TK_OP_INCREMENT,
+        TK_OP_DECREMENT,
+        TK_OP_MULTIPLICATION,
+        TK_OP_DIVISION,
+        TK_OP_MODULO,
+        TK_OP_AND,
+        TK_OP_OR,
+        TK_OP_XOR,
+        TK_OP_NEGATION,
+        TK_OP_SHIFT_RIGHT,
+        TK_OP_SHIFT_LEFT,
+        TK_OP_BOOL_AND,
+        TK_OP_BOOL_OR,
+        TK_OP_BOOL_NEGATION,
+        TK_OP_BOOL_EQUAL,
+        TK_OP_BOOL_NOT_EQUAL,
+        TK_OP_LESS_THAN,
+        TK_OP_LESS_THAN_OR_EQUAL,
+        TK_OP_GREATER_THAN,
+        TK_OP_GREATER_THAN_OR_EQUAL,
+        TK_OP_CONCATENATION,
+        TK_OP_MEMBER_SELECTION,
+        TK_OP_SUBSCRIPT,
+
+        TK_OP_END,
+
         TK_END,
     };
+
+    constexpr TokenKind TK_LABEL_END = TK_STATEMENT_BEGIN;
+    constexpr TokenKind TK_POINTER = TK_OP_XOR;
+    constexpr TokenKind TK_ADDRESS = TK_OP_AND;
+    constexpr TokenKind TK_ARRAY_BEGIN = TK_OP_SUBSCRIPT;
+    constexpr TokenKind TK_THE_REST = TK_OP_CONCATENATION;
+    constexpr TokenKind TK_SLICE = TK_STATEMENT_BEGIN;
 
     // CAUTION: Keyword enum must be aligned with 
     //          corresponding token representations
     enum TokenDetail : int32_t {
+        TD_NONE = -1,
+
         TD_KW_VOID,
         TD_KW_INT,
         TD_KW_I8,
@@ -276,7 +362,7 @@ namespace Lex {
         TD_KW_U32,
         TD_KW_U64,
         TD_KW_F32,
-        TD_KW_F64,
+        TD_KW_F64, // TODO : add last data type identifier
         TD_KW_CONST,
         TD_KW_EMBED,
         TD_KW_MUTON,
@@ -308,81 +394,187 @@ namespace Lex {
         TD_KW_FROM,
         TD_KW_TRUE,
         TD_KW_FALSE,
+        TD_KW_AS,
         TD_KW_NULL,
+
+        TD_CD_BEGIN,
+        TD_CD_TEST,
+        TD_CD_END,
         
+        TD_DT_VOID,
         TD_DT_I64,
         TD_DT_U64,
         TD_DT_F32,
         TD_DT_F64,
-        TD_DT_VOID,
+
     };
 
-    union Token {
-        struct {
-            int32_t kind;
-            int32_t detail;
-        };
-        int64_t encoded;
-    };
 
-    union TokenValue {
-        uint64_t ival;
-        double  fval;
-        String* str;
-        void* any;
-    };
 
-    Token nextToken(Location* const loc, TokenValue* val = NULL);
-    Token nextTokenSkipDecorators(Location* const loc, TokenValue* val = NULL);
+    const char* toStr(TokenKind token);
 
-    Token tryToken(Location* const loc, TokenKind token);
-    Token tryKeyword(Location* const loc, Keyword keyword);
+
+
+    // 'next' functions will commit changes to span
+    Token nextToken(Span* const span, TokenValue* val = NULL);
+    Token nextFileName(Span* const span, TokenValue* val = NULL);
+
+    // 'try' functions will not commit changes to span if token is not found
+    Token tryToken(Span* const span, Token token, TokenValue* val = NULL);
+    Token tryKeyword(Span* const span, Keyword keyword);
+
+    // 'peek' functions will not commit changes to span
+    Token peekToken(Span* const span, TokenValue* val = NULL);
+    Token peekNthToken(Span* const span, TokenValue* val, unsigned int n);
+    Token peekTokenSkipDecorators(Span* const span, TokenValue* val = NULL);
 
     unsigned int hash(const char* str);
 
-    int findBlockEnd(Location* const loc, const char bCh, const char eCh);
+    int findBlockEnd(Span* const span, const char bCh, const char eCh);
 
 
 
     // Keep them in the header to prevent compiler yelling
-    inline Token toToken(int64_t val) {
-        return (Token) { .encoded = val };
+    static inline Token toToken(int64_t val) {
+        return Token { .encoded = val };
     }
 
-    inline Token toToken(TokenKind val) {
-        return (Token) { .kind = val };
+    static inline Token toToken(TokenKind val) {
+        return Token { .kind = val };
     }
 
-    inline Token toToken(TokenDetail val) {
-        return (Token) { .detail = val };
+    static inline Token toToken(TokenDetail val) {
+        return Token { .detail = val };
     }
 
-    inline DataTypeEnum toDtype(Token val) {
-        return (DataTypeEnum) (val.detail - TD_DT_VOID);
+    static inline Token toTokenAsBinaryOperator(OperatorEnum val) {
+        return Token{ .kind = TK_BINARY_OPERATOR,.detail = val };
     }
 
-    inline DataTypeEnum toDtype(Keyword val) {
-        return (DataTypeEnum) (val - KW_VOID);
+    static inline DataTypeEnum toDtype(Token val) {
+
+        switch (val.detail) {
+            case TD_DT_F32: return DT_F32;
+            case TD_DT_F64: return DT_F64;
+            case TD_DT_I64: return DT_I64;
+            case TD_DT_U64: return DT_U64;
+            case TD_KW_FCN: return DT_FUNCTION;
+            default: return DT_VOID;
+        }
+    
     }
 
-    inline int isDtype(Token val) {
-        return (val.detail >= TD_DT_VOID && val.detail <= TD_DT_F64);
+    static inline DataTypeEnum toDtype(Keyword val) {
+        return (DataTypeEnum) (val == KW_FCN ? DT_FUNCTION : (val - KW_VOID));
     }
 
-    inline int isInt(Keyword val) {
+    static inline OperatorEnum toOperator(TokenValue val) {
+        return (OperatorEnum) val.ival;
+    }
+
+    static inline OperatorEnum toOperator(Token val) {
+        return (OperatorEnum) (val.kind - TK_OP_BEGIN + 1);
+    }
+
+    // Converts a Token to its corresponding unary OperatorEnum.
+    // Returns OP_NONE if the token cannot represent a unary operator.
+    static inline OperatorEnum toUnaryOperator(Token val) {
+
+        switch (val.kind) {
+
+            case TK_OP_PLUS             : return OP_UNARY_PLUS;
+            case TK_OP_MINUS            : return OP_UNARY_MINUS;
+            case TK_POINTER             : return OP_GET_VALUE;
+            case TK_ADDRESS             : return OP_GET_ADDRESS;
+            case TK_OP_INCREMENT        : return OP_INCREMENT;
+            case TK_OP_DECREMENT        : return OP_DECREMENT;
+            case TK_OP_NEGATION         : return OP_BITWISE_NEGATION;
+            case TK_OP_BOOL_NEGATION    : return OP_NEGATION;
+            default                     : return OP_NONE;
+        
+        }
+
+    }
+
+    static inline OperatorEnum toPostfixOperator(Token val) {
+
+        switch (val.kind) {
+
+            case TK_OP_INCREMENT        : return OP_INCREMENT;
+            case TK_OP_DECREMENT        : return OP_DECREMENT;
+            default                     : return OP_NONE;
+        
+        }
+
+    }
+
+    static inline OperatorEnum toBinaryOperator(Token val) {
+
+        if (val.kind == TK_BINARY_OPERATOR) return (OperatorEnum) val.detail;
+
+        switch (val.kind) {
+
+            case TK_OP_PLUS                     : return OP_ADDITION;
+            case TK_OP_MINUS                    : return OP_SUBTRACTION;
+            case TK_OP_MULTIPLICATION           : return OP_MULTIPLICATION;
+            case TK_OP_DIVISION                 : return OP_DIVISION;
+            case TK_OP_MODULO                   : return OP_MODULO;
+            case TK_OP_LESS_THAN                : return OP_LESS_THAN;
+            case TK_OP_GREATER_THAN             : return OP_GREATER_THAN;
+            case TK_OP_LESS_THAN_OR_EQUAL       : return OP_LESS_THAN_OR_EQUAL;
+            case TK_OP_GREATER_THAN_OR_EQUAL    : return OP_GREATER_THAN_OR_EQUAL;
+            case TK_OP_BOOL_EQUAL               : return OP_EQUAL;
+            case TK_OP_BOOL_NOT_EQUAL           : return OP_NOT_EQUAL;
+            case TK_OP_BOOL_AND                 : return OP_BOOL_AND;
+            case TK_OP_BOOL_OR                  : return OP_BOOL_OR;
+            case TK_OP_CONCATENATION            : return OP_CONCATENATION;
+            case TK_OP_MEMBER_SELECTION         : return OP_MEMBER_SELECTION;
+            case TK_OP_AND                      : return OP_BITWISE_AND;
+            case TK_OP_OR                       : return OP_BITWISE_OR;
+            case TK_OP_XOR                      : return OP_BITWISE_XOR;
+            case TK_OP_NEGATION                 : return OP_BITWISE_NEGATION;
+            case TK_OP_SHIFT_RIGHT              : return OP_SHIFT_RIGHT;
+            case TK_OP_SHIFT_LEFT               : return OP_SHIFT_LEFT;
+            case TK_ARRAY_BEGIN                 : return OP_SUBSCRIPT;
+            default                             : return OP_NONE;
+        
+        }
+
+    }
+
+    static inline int isKeyword(Token token, Keyword keyword) {
+        return (token.kind == TK_KEYWORD && token.detail == keyword);
+    }
+
+    static inline int isDtype(TokenDetail val) {
+        return ((val >= TD_KW_VOID && val <= TD_KW_F64) || val == Lex::TD_KW_FCN);
+    }
+
+    static inline int isDtype(Token val) {
+        return ((val.kind == Lex::TK_KEYWORD) && isDtype((TokenDetail) val.detail));
+    }
+
+    static inline int isInt(Keyword val) {
         return (val >= KW_INT && val <= KW_U64);
     }
 
-    inline uint64_t packTokens(TokenKind a, TokenKind b) {
-        return (b | (a << 8));
+    static inline int isOperator(Token val) {
+        return (val.kind > TK_OP_BEGIN && val.kind < TK_OP_END);
     }
 
-    inline uint16_t packChars(unsigned char a, unsigned char b) {
-        return (b | (a << 8));
+    static inline int isPostfixOperator(Token val) {
+        return val.kind == TK_OP_INCREMENT || val.kind == TK_OP_DECREMENT;    
     }
     
-    inline int compareChars(const char* str, uint16_t ch) {
+    static inline int compareChars(const char* str, uint16_t ch) {
         return (str[0] == (char)(ch & 0xFF)) && (str[1] == (char)(ch >> 8));
+    }
+
+    template <typename T>
+    static inline uint64_t toIntStr(T ch) {
+        uint64_t tmp = 0;
+        memcpy(&tmp, &ch, sizeof(T));
+        return tmp;
     }
 
 }

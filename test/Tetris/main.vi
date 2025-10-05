@@ -1297,7 +1297,7 @@ fcn getInput() -> int {
 
         } else if key == KC_A {
            
-           requestedActions[Action.SWAP] = true;
+            requestedActions[Action.SWAP] = true;
 
         } else if key == KC_R {
             

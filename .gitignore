@@ -5,6 +5,9 @@ out/*
 src/.vscode/
 tmp/*
 
+*.exe
+*.txt
+
 .vscode/
 
 !doc/doc.html

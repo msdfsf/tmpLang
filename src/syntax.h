@@ -47,7 +47,7 @@ struct BreakStatement;
 struct GotoStatement;
 struct Label;
 struct WrapperExpression;
-struct ExpressionWrapper;
+// struct ExpressionWrapper;
 struct Expression;
 struct ConstExpression;
 struct OperatorExpression;
@@ -229,95 +229,12 @@ extern const int internalVariablesCount;
 //    OPERATORS
 // ================================= //
 
-// also indexes operators array
-enum OperatorEnum {
-    OP_NONE = -1,
-    OP_UNARY_PLUS = 0,
-    OP_UNARY_MINUS,
-    OP_ADDITION,
-    OP_SUBTRACTION,
-    OP_MULTIPLICATION,
-    OP_DIVISION,
-    OP_MODULO,
-    OP_GET_ADDRESS,
-    OP_GET_VALUE,
-    OP_BITWISE_AND,
-    OP_BITWISE_OR,
-    OP_BITWISE_XOR,
-    OP_BITWISE_NEGATION,
-    OP_SHIFT_RIGHT,
-    OP_SHIFT_LEFT,
-    OP_EQUAL,
-    OP_NOT_EQUAL,
-    OP_LESS_THAN,
-    OP_GREATER_THAN,
-    OP_LESS_THAN_OR_EQUAL,
-    OP_GREATER_THAN_OR_EQUAL,
-    OP_BOOL_AND,
-    OP_BOOL_OR,
-    OP_INCREMENT,
-    OP_DECREMENT,
-    OP_SUBSCRIPT,
-    OP_MEMBER_SELECTION,
-    OP_DEREFERENCE_MEMBER_SELECTION,
-    OP_NEGATION,
-    OP_CONCATENATION,
-    // OP_CAST // to tie cast to dtype, not sure about it as operator, but lets see
-};
-/*
-struct OperatorMap {
-
-    int (*unaryPlus) (Operand* op);
-    int (*unaryMinus) (Operand* op);
-    int (*addition) (Operand* a, Operand* b);
-    int (*subtraction) (Operand* a, Operand* b);
-    int (*multiplication) (Operand* a, Operand* b);
-    int (*division) (Operand* a, Operand* b);
-    int (*modulo) (Operand* a, Operand* b);
-    int (*address) (Operand* op);
-    int (*subscript) (Operand* a, Operand* b);
-    int (*memberSelection) (Operand* ans, Operand* a, Operand* b);
-    int (*equal) (Operand* a, Operand* b);
-    int (*notEqual) (Operand* a, Operand* b);
-    int (*lessThan) (Operand* a, Operand* b);
-    int (*greaterThan) (Operand* a, Operand* b);
-    int (*lessThanOrEqual) (Operand* a, Operand* b);
-    int (*greaterThanOrEqual) (Operand* a, Operand* b);
-    int (*boolAnd) (Operand* a, Operand* b);
-    int (*boolOr) (Operand* a, Operand* b);
-
-    constexpr OperatorMap() : 
-        unaryPlus(NULL), 
-        unaryMinus(NULL),
-        addition(NULL), 
-        subtraction(NULL),
-        multiplication(NULL), 
-        division(NULL),
-        modulo(NULL),
-        address(NULL),
-        subscript(NULL),
-        memberSelection(NULL),
-        equal(NULL),
-        notEqual(NULL),
-        lessThan(NULL),
-        greaterThan(NULL),
-        lessThanOrEqual(NULL),
-        greaterThanOrEqual(NULL),
-        boolAnd(NULL),
-        boolOr(NULL)
-    {
-    };
-    
-};
-*/
-
 struct Operator {
     
-    uint32_t word;
     int rank; // precedence of operator, zero->positive-whatever, high->low *(precedence seems too long for usage)
     uint64_t flag;
 
-    constexpr Operator(uint32_t w, int r, uint64_t f) : word(w), rank(r), flag(f) {}
+    constexpr Operator(int r, uint64_t f) : rank(r), flag(f) {}
     
 };
 
@@ -326,217 +243,36 @@ struct Operator {
 //               operatorFunctions in interpreter.cpp
 //               ... maybe some other stuff ...
 constexpr auto operators = std::to_array<Operator>({
-    
-    // OP_UNARY_PLUS
-    {
-        '+',
-        1,
-        IS_UNARY | IS_ONE_CHAR
-    },
-
-    // OP_UNARY_MINUS
-    {
-        '-',
-        1,
-        IS_UNARY | IS_ONE_CHAR
-    },
-
-    // OP_ADDITION
-    {
-        '+',
-        3,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_SUBTRACTION
-    {
-        '-',
-        3,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_MULTIPLICATION
-    {
-        '*',
-        2,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_DIVISION
-    {
-        '/',
-        2,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_MODULO
-    {
-        '%',
-        2,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_GET_ADDRESS
-    {
-        '&',
-        1,
-        IS_UNARY | IS_ONE_CHAR
-    },
-
-    // OP_GET_VALUE
-    {
-        '^',
-        1,
-        IS_UNARY | IS_ONE_CHAR
-    },
-
-    // OP_BITWISE_AND
-    {
-        '&',
-        7,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_BITWISE_OR
-    {
-        '|',
-        9,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_BITWISE_XOR
-    {
-        '^',
-        8,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_BITWISE_NEGATION
-    {
-        '~',
-        1,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_SHIFT_RIGHT
-    {
-        toDoubleChar('>', '>'),
-        4,
-        IS_BINARY | IS_TWO_CHAR
-    },
-
-    // OP_SHIFT_LEFT
-    {
-        toDoubleChar('<', '<'),
-        4,
-        IS_BINARY | IS_TWO_CHAR
-    },
-
-    // OP_EQUAL
-    {
-        toDoubleChar('=', '='),
-        6,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_NOT_EQUAL
-    {
-        toDoubleChar('!', '='),
-        6,
-        IS_BINARY | IS_TWO_CHAR
-    },
-
-    // OP_LESS_THAN
-    {
-        '<',
-        5,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_GREATER_THAN
-    {
-        '>',
-        5,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_LESS_THAN_OR_EQUAL
-    {
-        toDoubleChar('<', '='),
-        5,
-        IS_BINARY | IS_TWO_CHAR
-    },
-
-    // OP_GREATER_THAN_OR_EQUAL
-    {
-        toDoubleChar('>', '='),
-        5,
-        IS_BINARY | IS_TWO_CHAR
-    },
-
-    // OP_BOOL_AND
-    {
-        toDoubleChar('&', '&'),
-        10,
-        IS_BINARY | IS_TWO_CHAR
-    },
-
-    // OP_BOOL_OR
-    {
-        toDoubleChar('|', '|'),
-        11,
-        IS_UNARY | IS_TWO_CHAR
-    },
-
-    // OP_INCREMENT
-    {
-        toDoubleChar('+', '+'),
-        0,
-        IS_UNARY | IS_TWO_CHAR
-    },
-
-    // OP_DECREMENT
-    {
-        toDoubleChar('-', '-'),
-        0,
-        IS_UNARY | IS_TWO_CHAR
-    },
-
-    // OP_SUBSCRIPT
-    {
-        '[',
-        0,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_MEMBER_SELECTION
-    {
-        '.',
-        0,
-        IS_BINARY | IS_ONE_CHAR
-    },
-
-    // OP_DEREFERENCE_MEMBER_SELECTION
-    {
-        '.',
-        0,
-        IS_UNARY | IS_ONE_CHAR
-    },
-
-    // OP_NEGATION
-    {
-        '!',
-        1,
-        IS_UNARY | IS_ONE_CHAR
-    },
-
-    // OP_CONCATENATION
-    {
-        toDoubleChar('.', '.'),
-        4,
-        IS_BINARY | IS_TWO_CHAR
-    }
-
+    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_UNARY_PLUS
+    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_UNARY_MINUS
+    Operator(3,  IS_BINARY | IS_ONE_CHAR), // OP_ADDITION
+    Operator(3,  IS_BINARY | IS_ONE_CHAR), // OP_SUBTRACTION
+    Operator(2,  IS_BINARY | IS_ONE_CHAR), // OP_MULTIPLICATION
+    Operator(2,  IS_BINARY | IS_ONE_CHAR), // OP_DIVISION
+    Operator(2,  IS_BINARY | IS_ONE_CHAR), // OP_MODULO
+    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_GET_ADDRESS
+    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_GET_VALUE
+    Operator(7,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_AND
+    Operator(9,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_OR
+    Operator(8,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_XOR
+    Operator(1,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_NEGATION
+    Operator(4,  IS_BINARY | IS_TWO_CHAR), // OP_SHIFT_RIGHT
+    Operator(4,  IS_BINARY | IS_TWO_CHAR), // OP_SHIFT_LEFT
+    Operator(6,  IS_BINARY | IS_ONE_CHAR), // OP_EQUAL
+    Operator(6,  IS_BINARY | IS_TWO_CHAR), // OP_NOT_EQUAL
+    Operator(5,  IS_BINARY | IS_ONE_CHAR), // OP_LESS_THAN
+    Operator(5,  IS_BINARY | IS_ONE_CHAR), // OP_GREATER_THAN
+    Operator(5,  IS_BINARY | IS_TWO_CHAR), // OP_LESS_THAN_OR_EQUAL
+    Operator(5,  IS_BINARY | IS_TWO_CHAR), // OP_GREATER_THAN_OR_EQUAL
+    Operator(10, IS_BINARY | IS_TWO_CHAR), // OP_BOOL_AND
+    Operator(11, IS_UNARY | IS_TWO_CHAR),  // OP_BOOL_OR
+    Operator(0,  IS_UNARY | IS_TWO_CHAR),  // OP_INCREMENT
+    Operator(0,  IS_UNARY | IS_TWO_CHAR),  // OP_DECREMENT
+    Operator(0,  IS_BINARY | IS_ONE_CHAR), // OP_SUBSCRIPT
+    Operator(0,  IS_BINARY | IS_ONE_CHAR), // OP_MEMBER_SELECTION
+    Operator(0,  IS_UNARY | IS_ONE_CHAR),  // OP_DEREFERENCE_MEMBER_SELECTION
+    Operator(1,  IS_UNARY | IS_ONE_CHAR),  // OP_NEGATION
+    Operator(4,  IS_BINARY | IS_TWO_CHAR)  // OP_CONCATENATION
 });
 
 const std::size_t OPERATORS_COUNT = operators.size();
@@ -548,11 +284,8 @@ const std::size_t OPERATORS_COUNT = operators.size();
 //    SYNTAX NODES
 // ================================= //
 
-struct SyntaxNode {
-
-    static Scope* root;
-    static INamed* dir;
-
+namespace NodeRegistry {
+    
     static std::vector<LangDef*> langDefs;
     static std::vector<CodeBlock*> codeBlocks;
     static std::vector<ForeignFunction*> foreignFunctions;
@@ -587,13 +320,20 @@ struct SyntaxNode {
 
     static std::vector<GotoStatement*> gotos;
 
+};
+
+struct SyntaxNode {
+
+    static Scope* root;
+    static INamed* dir;
+
     // as files are parsed only once and linked via pointers
     // need option to get access to the original node
     SyntaxNode* ogNode = NULL;
     
     NodeType type;
     Scope* scope;
-    Location* loc;
+    Span* span;
 
     int parentIdx;
     uint64_t snFlags; // sn as syntax node
@@ -645,13 +385,12 @@ struct Namespace : Scope, INamedEx {
 
 };
 
-// TODO : think of better name
-struct INamedVar : INamedEx {
-    std::vector<INamedLoc*> scopeNames;
+struct QualifiedName : INamedEx {
+    std::vector<INamedLoc*> path;
 };
 
 int validateScopeNames(Scope* sc, std::vector<INamedLoc*> names, Namespace** nspace, ErrorSet** eset);
-int getLValueLocation(DataTypeEnum dtype, void* dtypeDef, Location* loc); // for error purposes, for now here
+int getLValueSpan(DataTypeEnum dtype, void* dtypeDef, Span* span); // for error purposes, for now here
 /*
 struct ScopeName : INamedEx {
     // we need to know which scope name we are dealing with to adjust render as 
@@ -680,7 +419,7 @@ struct Using : SyntaxNode {
 // used for interoperability to keep code of the foreign language
 struct IForeignCode {
     
-    Location* tagLoc;
+    Span* tagLoc;
 
     char* tagStr;
     int tagLen;
@@ -782,7 +521,7 @@ struct Expression {
 };
 
 struct Statement : SyntaxNode {
-    Variable* op;
+    Variable* op; // TODO : change name
     Statement() : SyntaxNode(NT_STATEMENT) {};
 };
 // LOOK AT : is there a better way
@@ -793,7 +532,7 @@ struct VariableDefiniton : SyntaxNode {
     int flags;
 
     VariableDefiniton() {};
-    VariableDefiniton(Location* loc);
+    VariableDefiniton(Span* span);
     virtual void print(int level);
 
 };
@@ -818,6 +557,11 @@ struct StringInitialization : Expression {
 
     StringInitialization() {
         type = EXT_STRING_INITIALIZATION;
+    };
+
+    StringInitialization(String* str) {
+        rawPtr = str->buff;
+        rawPtrLen = str->len;
     };
 
     // pointer to start of the string in source file
@@ -872,7 +616,7 @@ struct VariableDefinition : SyntaxNode {
 
 
     // only for custom data types as they will be linked at the end
-    INamedVar* dtype;
+    QualifiedName* dtype;
     // char* dtypeName;
     //int dtypeNameLen;
     
@@ -883,7 +627,7 @@ struct VariableDefinition : SyntaxNode {
     // TypeDefinition* dtype;
 
     VariableDefinition();
-    VariableDefinition(Location* loc);
+    VariableDefinition(Span* span);
     VariableDefinition(Variable* var, int flags);
 
 };
@@ -895,12 +639,12 @@ struct VariableAssignment : SyntaxNode {
     // Operand* offsetVar; // for arrays and maybe something else
 
     VariableAssignment();
-    VariableAssignment(Location* loc);
+    VariableAssignment(Span* span);
 
 };
 
 extern Variable* zero;
-struct Variable : INamedVar, Operand {
+struct Variable : QualifiedName, Operand {
 
     // Variable* parentStruct;
     // Variable* attribute;
@@ -911,10 +655,10 @@ struct Variable : INamedVar, Operand {
     uint64_t flags = 0; // TODO : get rid of, didn't helped to solve the problem
 
     Variable();
-    Variable(Location* loc);
+    Variable(Span* span);
     Variable(Scope* scope);
     Variable(Scope* const sc, DataTypeEnum dtype);
-    Variable(Scope* const sc, DataTypeEnum dtype, Location* loc);
+    Variable(Scope* const sc, DataTypeEnum dtype, Span* span);
     Variable(Scope* const sc, DataTypeEnum dtype, char* name, int nameLen);
     Variable(Scope* const sc, Value value, char* name, int nameLen);
     Variable(Variable* var);
@@ -941,7 +685,7 @@ struct Function : SyntaxNode, FunctionPrototype, INamedEx {
     int icnt = 0; // counter of function usage by interpreter
     int istackIdx = 0; // 0 is neutral value, no additional stack is used, so indexing is from 1
     
-    INamedVar* errorSetName;
+    QualifiedName* errorSetName;
     ErrorSet* errorSet;
     /*
     char* tagStr;
@@ -960,10 +704,13 @@ struct ForeignFunction : Function, IForeignCode {
 
 };
 
-struct FunctionCall : Expression, INamedVar {
+struct FunctionCall : Expression, QualifiedName {
 
     FunctionCall() {
         type = EXT_FUNCTION_CALL;
+        fcn = NULL;
+        fptr = NULL;
+        outArg = NULL;
     };
 
     Function* fcn;
@@ -1055,7 +802,7 @@ struct BreakStatement : SyntaxNode {
 
 struct GotoStatement : SyntaxNode, INamed {
 
-    Location* loc;
+    Span* span;
     Label* label;
     
     GotoStatement() : SyntaxNode(NT_GOTO_STATEMENT) {};
@@ -1064,7 +811,7 @@ struct GotoStatement : SyntaxNode, INamed {
 
 struct Label : SyntaxNode, INamed {
 
-    Location* loc;
+    Span* span;
 
     Label() : SyntaxNode(NT_LABEL) {};
 
@@ -1077,10 +824,12 @@ struct OperatorExpression : Expression {
     // Operator* oper;
 };
 
+/*
 struct ExpressionWrapper : SyntaxNode {
     Variable* operand;
     ExpressionWrapper() : SyntaxNode(NT_EXPRESSION_WRAPPER) {};
 };
+*/
 
 // LOOK AT : think about better name
 struct WrapperExpression : Expression {
@@ -1133,39 +882,10 @@ struct TernaryExpression : BinaryExpression {
 //    DATA TYPES
 // ================================= //
 
-enum DataTypeEnum : int {
-    DT_VOID = 0,
-    DT_INT,
-    DT_I8,
-    DT_I16,
-    DT_I32,
-    DT_I64,
-    DT_U8,
-    DT_U16,
-    DT_U32,
-    DT_U64,
-    DT_F32,
-    DT_F64,
-    DT_STRING,
-    DT_POINTER,
-    DT_ARRAY,
-    DT_SLICE,
-    DT_MULTIPLE_TYPES,
-    DT_CUSTOM,
-    DT_UNION,
-    DT_ERROR,
-    DT_MEMBER, // dont know about this one, represents the right side of member reference operator 'point . x'
-    DT_ENUM,
-    DT_FUNCTION, // FunctionPrototype
-    DT_UNDEFINED
-};
-
-const int DATA_TYPES_COUNT = DT_UNDEFINED + 1;
-
-#define IS_INT(x) ((x) >= DT_INT && (x) <= DT_UINT_64)
-#define IS_SIGNED_INT(x) ((x) >= DT_INT && (x) <= DT_INT_64)
-#define IS_UNSIGNED_INT(x) ((x) >= DT_UINT_8 && (x) <= DT_UINT_64)
-#define IS_FLOAT(x) ((x) >= DT_FLOAT_32 && (x) <= DT_FLOAT_64)
+#define IS_INT(x) ((x) >= DT_INT && (x) <= DT_U64)
+#define IS_SIGNED_INT(x) ((x) >= DT_INT && (x) <= DT_I64)
+#define IS_UNSIGNED_INT(x) ((x) >= DT_U8 && (x) <= DT_U64)
+#define IS_FLOAT(x) ((x) >= DT_F32 && (x) <= DT_F64)
 
 struct DataType : INamedEx {
     
@@ -1308,3 +1028,4 @@ struct ImportStatement : SyntaxNode {
 
 };
 
+void freeNodeRecursively(SyntaxNode* node);

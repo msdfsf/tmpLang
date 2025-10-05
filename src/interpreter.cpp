@@ -222,61 +222,61 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
     struct DataTypeToCppType;
 
     template<>
-    struct DataTypeToCppType<DT_INT_8> {
+    struct DataTypeToCppType<DT_I8> {
         using type = int8_t;
         static constexpr auto member = &Value::i8;
     };
 
     template<>
-    struct DataTypeToCppType<DT_INT_16> {
+    struct DataTypeToCppType<DT_I16> {
         using type = int16_t;
         static constexpr auto member = &Value::i16;
     };
 
     template<>
-    struct DataTypeToCppType<DT_INT_32> {
+    struct DataTypeToCppType<DT_I32> {
         using type = int32_t;
         static constexpr auto member = &Value::i32;
     };
 
     template<>
-    struct DataTypeToCppType<DT_INT_64> {
+    struct DataTypeToCppType<DT_I64> {
         using type = int64_t;
         static constexpr auto member = &Value::i64;
     };
 
     template<>
-    struct DataTypeToCppType<DT_UINT_8> {
+    struct DataTypeToCppType<DT_U8> {
         using type = uint8_t;
         static constexpr auto member = &Value::u8;
     };
 
     template<>
-    struct DataTypeToCppType<DT_UINT_16> {
+    struct DataTypeToCppType<DT_U16> {
         using type = uint16_t;
         static constexpr auto member = &Value::u16;
     };
 
     template<>
-    struct DataTypeToCppType<DT_UINT_32> {
+    struct DataTypeToCppType<DT_U32> {
         using type = uint32_t;
         static constexpr auto member = &Value::u32;
     };
 
     template<>
-    struct DataTypeToCppType<DT_UINT_64> {
+    struct DataTypeToCppType<DT_U64> {
         using type = uint64_t;
         static constexpr auto member = &Value::u64;
     };
 
     template<>
-    struct DataTypeToCppType<DT_FLOAT_32> {
+    struct DataTypeToCppType<DT_F32> {
         using type = float;
         static constexpr auto member = &Value::f32;
     };
 
     template<>
-    struct DataTypeToCppType<DT_FLOAT_64> {
+    struct DataTypeToCppType<DT_F64> {
         using type = double;
         static constexpr auto member = &Value::f64;
     };
@@ -288,17 +288,17 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         auto M = DataTypeToCppType<TargetType>::member;
 
         switch (value->dtypeEnum) {
-            case DT_INT_8:      value->*M = static_cast<T>(value->i8);  break;
-            case DT_INT_16:     value->*M = static_cast<T>(value->i16); break;
+            case DT_I8:     value->*M = static_cast<T>(value->i8);  break;
+            case DT_I16:    value->*M = static_cast<T>(value->i16); break;
             case DT_INT:
-            case DT_INT_32:     value->*M = static_cast<T>(value->i32); break;
-            case DT_INT_64:     value->*M = static_cast<T>(value->i64); break;
-            case DT_UINT_8:     value->*M = static_cast<T>(value->u8);  break;
-            case DT_UINT_16:    value->*M = static_cast<T>(value->u16); break;
-            case DT_UINT_32:    value->*M = static_cast<T>(value->u32); break;
-            case DT_UINT_64:    value->*M = static_cast<T>(value->u64); break;
-            case DT_FLOAT_32:   value->*M = static_cast<T>(value->f32); break;
-            case DT_FLOAT_64:   value->*M = static_cast<T>(value->f64); break;
+            case DT_I32:    value->*M = static_cast<T>(value->i32); break;
+            case DT_I64:    value->*M = static_cast<T>(value->i64); break;
+            case DT_U8:     value->*M = static_cast<T>(value->u8);  break;
+            case DT_U16:    value->*M = static_cast<T>(value->u16); break;
+            case DT_U32:    value->*M = static_cast<T>(value->u32); break;
+            case DT_U64:    value->*M = static_cast<T>(value->u64); break;
+            case DT_F32:    value->*M = static_cast<T>(value->f32); break;
+            case DT_F64:    value->*M = static_cast<T>(value->f64); break;
             default:
                 return; // TODO
         
@@ -317,17 +317,17 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         switch (dtype) {
             
-            case DT_INT_8 :     cast<DT_INT_8>(value); return;
-            case DT_INT_16 :    cast<DT_INT_16>(value); return;
+            case DT_I8 :    cast<DT_I8>(value); return;
+            case DT_I16 :   cast<DT_I16>(value); return;
             case DT_INT : 
-            case DT_INT_32 :    cast<DT_INT_32>(value); return;
-            case DT_INT_64 :    cast<DT_INT_64>(value); return;
-            case DT_UINT_8 :    cast<DT_UINT_8>(value); return;
-            case DT_UINT_16 :   cast<DT_UINT_16>(value); return;
-            case DT_UINT_32 :   cast<DT_UINT_32>(value); return;
-            case DT_UINT_64 :   cast<DT_UINT_64>(value); return;
-            case DT_FLOAT_32 :  cast<DT_FLOAT_32>(value); return;
-            case DT_FLOAT_64 :  cast<DT_FLOAT_64>(value); return;
+            case DT_I32 :   cast<DT_I32>(value); return;
+            case DT_I64 :   cast<DT_I64>(value); return;
+            case DT_U8 :    cast<DT_U8>(value); return;
+            case DT_U16 :   cast<DT_U16>(value); return;
+            case DT_U32 :   cast<DT_U32>(value); return;
+            case DT_U64 :   cast<DT_U64>(value); return;
+            case DT_F32 :   cast<DT_F32>(value); return;
+            case DT_F64 :   cast<DT_F64>(value); return;
             case DT_STRING :    /* TODO */ return;
             case DT_POINTER :   /* TODO */ return;
             case DT_ARRAY :     /* TODO */ return;
@@ -370,22 +370,22 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
 
     inline void applyBinaryOperatorAdditionI32(Value* a, Value* b) {
-        cast<DT_INT_32>(b);
+        cast<DT_I32>(b);
         a->i32 = a->i32 + b->i32;
     }
 
     inline void applyBinaryOperatorAdditionI64(Value* a, Value* b) {
-        cast<DT_INT_64>(b);
+        cast<DT_I64>(b);
         a->i64 = a->i64 + b->i64;
     }
 
     inline void applyBinaryOperatorAdditionF32(Value* a, Value* b) {
-        cast<DT_FLOAT_32>(b);
+        cast<DT_F32>(b);
         a->f32 = a->f32 + b->f32;
     }
 
     inline void applyBinaryOperatorAdditionF64(Value* a, Value* b) {
-        cast<DT_FLOAT_64>(b);
+        cast<DT_F64>(b);
         a->f64 = a->f64 + b->f64;
     }
 
@@ -398,77 +398,77 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
 
     inline void applyBinaryOperatorSubtractionI32(Value* a, Value* b) {
-        cast<DT_INT_32>(b);
+        cast<DT_I32>(b);
         a->i32 = a->i32 - b->i32;
     }
 
     inline void applyBinaryOperatorSubtractionI64(Value* a, Value* b) {
-        cast<DT_INT_64>(b);
+        cast<DT_I64>(b);
         a->i64 = a->i64 - b->i64;
     }
 
     inline void applyBinaryOperatorSubtractionF32(Value* a, Value* b) {
-        cast<DT_FLOAT_32>(b);
+        cast<DT_F32>(b);
         a->f32 = a->f32 - b->f32;
     }
 
     inline void applyBinaryOperatorSubtractionF64(Value* a, Value* b) {
-        cast<DT_FLOAT_64>(b);
+        cast<DT_F64>(b);
         a->f64 = a->f64 - b->f64;
     }
 
 
     inline void applyBinaryOperatorMultiplicationI32(Value* a, Value* b) {
-        cast<DT_INT_32>(b);
+        cast<DT_I32>(b);
         a->i32 = a->i32 * b->i32;
     }
 
     inline void applyBinaryOperatorMultiplicationI64(Value* a, Value* b) {
-        cast<DT_INT_64>(b);
+        cast<DT_I64>(b);
         a->i64 = a->i64 * b->i64;
     }
 
     inline void applyBinaryOperatorMultiplicationF32(Value* a, Value* b) {
-        cast<DT_FLOAT_32>(b);
+        cast<DT_F32>(b);
         a->f32 = a->f32 * b->f32;
     }
 
     inline void applyBinaryOperatorMultiplicationF64(Value* a, Value* b) {
-        cast<DT_FLOAT_64>(b);
+        cast<DT_F64>(b);
         a->f64 = a->f64 * b->f64;
     }
 
 
 
     inline void applyBinaryOperatorDivisionI32(Value* a, Value* b) {
-        cast<DT_INT_32>(b);
+        cast<DT_I32>(b);
         a->i32 = a->i32 / b->i32;
     }
 
     inline void applyBinaryOperatorDivisionI64(Value* a, Value* b) {
-        cast<DT_INT_64>(b);
+        cast<DT_I64>(b);
         a->i64 = a->i64 / b->i64;
     }
 
     inline void applyBinaryOperatorDivisionF32(Value* a, Value* b) {
-        cast<DT_FLOAT_32>(b);
+        cast<DT_F32>(b);
         a->f32 = a->f32 / b->f32;
     }
 
     inline void applyBinaryOperatorDivisionF64(Value* a, Value* b) {
-        cast<DT_FLOAT_64>(b);
+        cast<DT_F64>(b);
         a->f64 = a->f64 / b->f64;
     }
 
 
 
     inline void applyBinaryOperatorModuloI32(Value* a, Value* b) {
-        cast<DT_INT_32>(b);
+        cast<DT_I32>(b);
         a->i32 = a->i32 % b->i32;
     }
 
     inline void applyBinaryOperatorModuloI64(Value* a, Value* b) {
-        cast<DT_INT_64>(b);
+        cast<DT_I64>(b);
         a->i64 = a->i64 % b->i64;
     }
 

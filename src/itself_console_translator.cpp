@@ -1,7 +1,7 @@
 // #pragma once
 
 #include "itself_console_translator.h"
-
+#include "lexer.h"
 
 
 #define CSP_MAX_TAB_LEVEL 4
@@ -33,8 +33,8 @@ static void printWhileLoop(FILE* file, int level, WhileLoop* const node, Variabl
 static void printForLoop(FILE* file, int level, ForLoop* const node, Variable* lvalue = NULL);
 static void printExpression(FILE* file, int level, Expression* const node, Variable* lvalue = NULL);
 static void printWrapperExpression(FILE* file, int level, WrapperExpression* const node, Variable* lvalue = NULL);
-static void printExpressionWrapper(FILE* file, int level, ExpressionWrapper* const node, Variable* lvalue = NULL);
 static void printConstExpression(FILE* file, int level, ConstExpression* const node, Variable* lvalue = NULL);
+static void printCatchExpression(FILE * file, int level, Catch* const node, Variable * lvalue);
 static void printOperatorExpression(FILE* file, int level, OperatorExpression* const node, Variable* lvalue = NULL);
 static void printUnaryExpression(FILE* file, int level, UnaryExpression* const node, Variable* lvalue = NULL);
 static void printBinaryExpression(FILE* file, int level, BinaryExpression* const node, Variable* lvalue = NULL);
@@ -154,7 +154,6 @@ void print(FILE* file, int level, SyntaxNode* node, Variable* lvalue = NULL) {
             printTernaryOperator(file, level, (TernaryOperator*) node, lvalue);
             break;
         case NT_EXPRESSION_WRAPPER :
-            printExpressionWrapper(file, level, (ExpressionWrapper*) node, lvalue);
             break;     
     
         default:
@@ -188,19 +187,19 @@ void printDataType(const DataTypeEnum dtypeEnum) {
                 printf("int");
                 break;
                 
-            case DT_INT_32 :
+            case DT_I32 :
                 printf("i32");
                 break;
                 
-            case DT_INT_64 :
+            case DT_I64 :
                 printf("i64");
                 break;
                 
-            case DT_FLOAT_32 :
+            case DT_F32 :
                 printf("f32");
                 break;
                 
-            case DT_FLOAT_64 :
+            case DT_F64 :
                 printf("f64");
                 break;
 
@@ -248,28 +247,29 @@ void printOperandValue(Operand* op) {
 
         }
 
-        case DT_INT_32 : {
+        case DT_I32 : {
             printf("%i", op->cvalue.i32);
             break;
         }
 
-        case DT_INT_64 : {
+        case DT_I64 : {
             printf("%li", op->cvalue.i64);
             break;
         }
 
-        case DT_FLOAT_32 : {
+        case DT_F32 : {
             printf("%.2f", op->cvalue.f32);
             break;
         }
 
-        case DT_FLOAT_64 : {
+        case DT_F64 : {
             printf("%.2f", op->cvalue.f64);
             break;
         }
 
         case DT_STRING : {
-            printf("\"%s\"", (char*) op->cvalue.str);
+            StringInitialization* init = (StringInitialization*) op->cvalue.str;
+            printf("\"%.*s\"", init->rawPtrLen, init->rawPtr);
             break;
         }
 
@@ -286,8 +286,9 @@ void printDataType(DataType* const dtype, const DataTypeEnum dtypeEnum) {
 
     if (dtypeEnum == DT_CUSTOM) {
 
-        printf("%.*s", dtype->name, dtype->nameLen);    
-    
+        printf("%.*s", dtype->name, dtype->nameLen);
+        return;
+
     } else if (dtypeEnum == DT_POINTER) {
 
         Pointer* const ptr = (Pointer*) dtype;
@@ -295,11 +296,68 @@ void printDataType(DataType* const dtype, const DataTypeEnum dtypeEnum) {
 
         printDataType((DataType*) ptr->pointsTo, ptr->pointsToEnum);
         printf("%s", ptrDtype->name);
+        
+        return;
     
-    } else {
+    }
 
-        printf("%s", dtype->name);
-    
+    switch (dtypeEnum) {
+
+    case DT_INT:
+        printf("int");
+        break;
+
+    case DT_I8:
+        printf("int8_t");
+        break;
+
+    case DT_I16:
+        printf("int16_t");
+        break;
+
+    case DT_I32:
+        printf("int32_t");
+        break;
+
+    case DT_I64:
+        printf("int64_t");
+        break;
+
+    case DT_U8:
+        printf("uint8_t");
+        break;
+
+    case DT_U16:
+        printf("uint16_t");
+        break;
+
+    case DT_U32:
+        printf("uint32_t");
+        break;
+
+    case DT_U64:
+        printf("uint64_t");
+        break;
+
+    case DT_F32:
+        printf("float");
+        break;
+
+    case DT_F64:
+        printf("double");
+        break;
+
+    case DT_POINTER:
+        printf("void*");
+        break;
+
+    case DT_ERROR:
+        printf("int");
+        break;
+
+    default:
+        printf("%s", (dataTypes + dtypeEnum)->name);
+
     }
 
 }
@@ -677,7 +735,7 @@ void printBranch(FILE* file, int level, Branch* const node, Variable* lvalue) {
     CSP_GEN_TAB(tab, level);
 
     // basic if branche
-    printf("%s%s ", tab, KWS_IF);
+    printf("%s%s ", tab, Lex::KWS_IF);
     printVariable(file, level, node->expressions[0]);
     putchar('\n');
     printScope(file, level, node->scopes[0]);
@@ -685,7 +743,7 @@ void printBranch(FILE* file, int level, Branch* const node, Variable* lvalue) {
     // if elses
     int i = 1;
     for (; i < node->expressions.size(); i++) {
-        printf("%s%s %s ", tab, KWS_ELSE, KWS_IF);
+        printf("%s%s %s ", tab, Lex::KWS_ELSE, Lex::KWS_IF);
         printVariable(file, level, node->expressions[i]);
         putchar('\n');
         printScope(file, level, node->scopes[i]);
@@ -693,7 +751,7 @@ void printBranch(FILE* file, int level, Branch* const node, Variable* lvalue) {
 
     // final else if present
     if (i < node->scopes.size()) {
-        printf("%s%s\n", tab, KWS_ELSE);
+        printf("%s%s\n", tab, Lex::KWS_ELSE);
         printScope(file, level, node->scopes[(int) node->scopes.size() - 1]);
     }
 
@@ -709,7 +767,7 @@ void printWhileLoop(FILE* file, int level, WhileLoop* const node, Variable* lval
     char tab[CSP_MAX_TAB_LEVEL + 1];
     CSP_GEN_TAB(tab, level);
 
-    printf("%s%s ", tab, KWS_WHILE);
+    printf("%s%s ", tab, Lex::KWS_WHILE);
     printVariable(file, level, node->expression);
     putchar('\n');
     printScope(file, level, node->bodyScope);
@@ -763,22 +821,42 @@ void printNamespace(FILE* file, int level, Namespace* const node, Variable* lval
 }
 
 void printExpression(FILE* file, int level, Expression* const node, Variable* lvalue) {
+    
+    switch (node->type) {
+
+        case EXT_WRAPPER:
+            printWrapperExpression(file, level, (WrapperExpression*)node, lvalue);
+            break;
+        case EXT_UNARY:
+            printUnaryExpression(file, level, (UnaryExpression*)node, lvalue);
+            break;
+        case EXT_BINARY:
+            printBinaryExpression(file, level, (BinaryExpression*)node, lvalue);
+            break;
+        case EXT_TERNARY:
+            printTernaryExpression(file, level, (TernaryExpression*)node, lvalue);
+            break;
+        case EXT_FUNCTION_CALL:
+            printFunctionCall(file, level, (FunctionCall*)node, lvalue);
+            break;
+        case EXT_ARRAY_INITIALIZATION:
+            printTypeInitialization(file, level, (TypeInitialization*)node, lvalue);
+            break;
+        case EXT_TYPE_INITIALIZATION:
+            printTypeInitialization(file, level, (TypeInitialization*)node, lvalue);
+            break;
+        case EXT_STRING_INITIALIZATION:
+            printStringInitialization(file, level, (StringInitialization*)node, lvalue);
+            break;
+        case EXT_CATCH:
+            printCatchExpression(file, level, (Catch*)node, lvalue);
+            break;
+
+    }
 
 }
 
 void printForeignCode() {
-
-}
-
-void printExpressionWrapper(FILE* file, int level, ExpressionWrapper* const node, Variable* lvalue) {
-
-    level = (level > CSP_MAX_TAB_LEVEL) ? CSP_MAX_TAB_LEVEL : level;
-    char tab[CSP_MAX_TAB_LEVEL + 1];
-    CSP_GEN_TAB(tab, level);
-
-    printf("%s", tab);
-    printVariable(file, level, node->operand);
-    printf(";\n");
 
 }
 
@@ -793,6 +871,12 @@ void printConstExpression(FILE* file, int level, ConstExpression* const node, Va
 }
 
 void printOperatorExpression(FILE* file, int level, OperatorExpression* const node, Variable* lvalue) {
+
+}
+
+void printCatchExpression(FILE* file, int level, Catch* const node, Variable* lvalue) {
+
+    printf("catch");
 
 }
 
@@ -851,15 +935,52 @@ void printStatement(FILE* file, int level, Statement* const node, Variable* lval
 
 void printFunctionCall(FILE* file, int level, FunctionCall* const node, Variable* lvalue) {
 
-    printf("%.*s(", node->nameLen, node->name);
-    for (int i = 0; i < ((int) node->inArgs.size()) - 1; i++) {
-        printVariable(file, level, node->inArgs[i]);
-        putchar(',');
-        putchar(' ');
-    } if ((int) node->inArgs.size() - 1 >= 0) {
-        printVariable(file, level, node->inArgs[node->inArgs.size() - 1]);
+    if (node->fptr) {
+
+        printf("%.*s_%i(", node->nameLen, node->name, node->fptr->id);
+    
+    } else if (node->fcn->internalIdx <= 0) {
+        
+        printf("%.*s_%i(", node->nameLen, node->name, node->fcn->id);
+    
+    } else {
+
+        printf("%.*s(", node->nameLen, node->name);
+
     }
-    putchar(')');
+
+    const int inArgsCnt = node->inArgs.size();
+    int multipleTypes = 0;
+    for (int i = 0; i < inArgsCnt; i++) {
+        printVariable(file, level, node->inArgs[i]);
+        
+        if (!multipleTypes) {
+
+            Variable* tmp;
+            if (node->fcn) { 
+                tmp = node->fcn->inArgs[i]->var;
+            } else {
+                tmp = node->fptr;
+            }
+
+            if (tmp->cvalue.dtypeEnum == DT_MULTIPLE_TYPES) {
+                multipleTypes = 1;
+            } else if (tmp->cvalue.dtypeEnum == DT_ARRAY && !(tmp->cvalue.arr->flags & IS_ARRAY_LIST)) {
+                fputc(',', file);
+                printVariable(file, 0, node->inArgs[i]->cvalue.arr->length);
+            }
+        
+        }
+
+        if (i < inArgsCnt - 1) {
+            fputc(',', file);
+            fputc(' ', file);
+        }
+        //Variable* const var = inArgs[i];
+        //printf("%s %.*s, ", (dataTypes + var->dataTypeEnum)->word, var->nameLen, var->name);
+    }
+
+    fputc(')', file);
 
 }
 
@@ -876,13 +997,8 @@ void printOperand(FILE* file, int level, Operand* const node, Variable* lvalue) 
 
 void printOperator(FILE* file, int spaces, Operator* const node) {
 
-    const char A = node->word;
-    const char B = node->word >> 8;
-    const char C = node->word >> 16;
-    const char D = node->word >> 24;
-
-    if (spaces) printf(" %c%c%c%c ", A, B, C, D);
-    else printf("%c%c%c%c", A, B, C, D);
+    //if (spaces) printf(" %c%c%c%c ", A, B, C, D);
+    //else printf("%c%c%c%c", A, B, C, D);
 
 }
 

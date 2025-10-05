@@ -5,6 +5,7 @@
 #include "syntax.h"
 #include "utils.h"
 #include "interpreter.h"
+#include "lexer.h"
 #include <iterator>
 #include "c_translator.h"
 #include <cstring>
@@ -27,9 +28,9 @@ namespace Validator {
 
     Function* findExactFunction(Scope* scope, INamed* const name, FunctionPrototype* const fptr);
     int findClosestFunction(Operand* callOp, Function** outFcn);
-    Variable* findDefinition(Scope* scope, INamedVar* const inVar, int idx);
+    Variable* findDefinition(Scope* scope, QualifiedName* const inVar, int idx);
 
-    int isUnique(Scope* sc, INamed* named, Location* loc);
+    int isUnique(Scope* sc, INamed* named, Span* span);
     
     int computeSizeOfDataType(TypeDefinition* const def);
 
@@ -61,9 +62,9 @@ namespace Validator {
         // link user defined data types with definitions
         //
 
-        for (int i = 0; i < (int) SyntaxNode::customDataTypesReferences.size(); i++) {
+        for (int i = 0; i < (int) NodeRegistry::customDataTypesReferences.size(); i++) {
 
-            VariableDefinition* const varDef = SyntaxNode::customDataTypesReferences[i];
+            VariableDefinition* const varDef = NodeRegistry::customDataTypesReferences[i];
 
             void** dtype;
             int* dtypeEnum;
@@ -77,10 +78,10 @@ namespace Validator {
             }
 
             Scope* scope = varDef->scope;
-            if (varDef->dtype->scopeNames.size() > 0) { 
+            if (varDef->dtype->path.size() > 0) {
                 Namespace* nspace = NULL;
                 ErrorSet* eset = NULL;
-                const int err = validateScopeNames(scope, varDef->dtype->scopeNames, &nspace, &eset);
+                const int err = validateScopeNames(scope, varDef->dtype->path, &nspace, &eset);
                 if (err != Err::OK) return err;
                 if (eset) {
                     continue;
@@ -116,21 +117,21 @@ namespace Validator {
                 continue;
             }
             
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_DATA_TYPE), varDef->loc, varDef->dtype->nameLen);
+            Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_DATA_TYPE), varDef->span, varDef->dtype->nameLen);
             return Err::UNKNOWN_DATA_TYPE;
         
         }
 
         // validate error sets
         {
-            int varId = SyntaxNode::variables.size();
-            int errId = SyntaxNode::customErrors.size() + 1;
+            int varId = NodeRegistry::variables.size();
+            int errId = NodeRegistry::customErrors.size() + 1;
             
-            for (int i = 0; i < SyntaxNode::customErrors.size(); i++) {
+            for (int i = 0; i < NodeRegistry::customErrors.size(); i++) {
                 // hasValue is used to mark if error set have its definition or not,
                 // if not, then hasValue is true, as there is nothing to expand to
                 
-                ErrorSet* const eset = SyntaxNode::customErrors[i];
+                ErrorSet* const eset = NodeRegistry::customErrors[i];
                 for (int i = 0; i < eset->vars.size(); i++) {
                     
                     Variable* const var = eset->vars[i];
@@ -151,39 +152,39 @@ namespace Validator {
         }
 
         // link error sets with functions
-        for (int i = 0; i < SyntaxNode::fcns.size(); i++) {
+        for (int i = 0; i < NodeRegistry::fcns.size(); i++) {
 
-            Function* const fcn = SyntaxNode::fcns[i];
-            INamedVar* const errName = fcn->errorSetName;
+            Function* const fcn = NodeRegistry::fcns[i];
+            QualifiedName* const errName = fcn->errorSetName;
 
             if (!errName) {
                 fcn->errorSet = NULL;
                 continue;
             }
 
-            if (errName->scopeNames.size() > 0) {
+            if (errName->path.size() > 0) {
 
                 Namespace* nspace = NULL;
                 ErrorSet* eset = NULL;
 
-                const int err = validateScopeNames(fcn->scope, errName->scopeNames, &nspace, &eset);
+                const int err = validateScopeNames(fcn->scope, errName->path, &nspace, &eset);
                 if (err != Err::OK) return err;
 
                 if (!eset) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->loc);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->span);
                     return Err::UNKNOWN_ERROR_SET;
                 }
 
                 if (nspace) {
                     eset = Utils::find<ErrorSet>(nspace->customErrors, errName->name, errName->nameLen);
                     if (!eset) {
-                        Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->loc);
+                        Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->span);
                         return Err::UNKNOWN_ERROR_SET;
                     }
                 } else if (eset) {
                     eset = Utils::find<ErrorSet>(eset->scope, errName->name, errName->nameLen, &Scope::customErrors);
                     if (!eset) {
-                        Logger::log(Logger::ERROR, "Unknown or empty error set!", fcn->loc);
+                        Logger::log(Logger::ERROR, "Unknown or empty error set!", fcn->span);
                         return Err::UNKNOWN_ERROR_SET;
                     }
                 }
@@ -194,7 +195,7 @@ namespace Validator {
 
                 ErrorSet* const eset = Utils::find<ErrorSet>(fcn->scope, errName->name, errName->nameLen, &Scope::customErrors);
                 if (!eset) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->loc);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->span);
                     return Err::UNKNOWN_ERROR_SET;
                 }
 
@@ -205,9 +206,9 @@ namespace Validator {
         }
 
         // validate custom typedef
-        for (int i = 0; i < SyntaxNode::customDataTypes.size(); i++) {
+        for (int i = 0; i < NodeRegistry::customDataTypes.size(); i++) {
 
-            TypeDefinition* const def = SyntaxNode::customDataTypes[i];
+            TypeDefinition* const def = NodeRegistry::customDataTypes[i];
             const int isUnion = def->type == NT_UNION;
 
             for (int i = 0; i < def->vars.size(); i++) {
@@ -215,7 +216,7 @@ namespace Validator {
                 Variable* const var = def->vars[i];
 
                 if (isUnion && var->expression || var->cvalue.hasValue) {
-                    Logger::log(Logger::ERROR, "Default values are not allowed within union initialization!", var->loc, var->nameLen);
+                    Logger::log(Logger::ERROR, "Default values are not allowed within union initialization!", var->span, var->nameLen);
                     return Err::INVALID_RVALUE;
                 }
 
@@ -224,7 +225,7 @@ namespace Validator {
                 // in case of custom data type check if its defined before
                 if (var->cvalue.def->parentIdx >= def->parentIdx) {
                     TypeDefinition* const tmpDef = var->cvalue.def;
-                    Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_DECLARATION_ORDER), var->def->loc, var->def->dtype->nameLen, def->nameLen, def->name);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_DECLARATION_ORDER), var->def->span, var->def->dtype->nameLen, def->nameLen, def->name);
                     return Err::INVALID_DECLARATION_ORDER;
                 }
             }
@@ -234,22 +235,22 @@ namespace Validator {
         // link variables with definitions
         // in case of scopeNames var is the last name (ex. point.x, var is then x)
         // scopeNames are sorted from left to right as written
-        for (int i = 0; i < SyntaxNode::variables.size(); i++) {
+        for (int i = 0; i < NodeRegistry::variables.size(); i++) {
 
-            Variable* const var = SyntaxNode::variables[i];
+            Variable* const var = NodeRegistry::variables[i];
             Variable* tmpVar;
             // const int scopeNamesLen = var->scopeNames.size();
 
             Scope* scope = var->scope;
-            if (var->scopeNames.size() > 0) { 
+            if (var->path.size() > 0) { 
                 Namespace* nspace = NULL;
                 ErrorSet* eset = NULL;
-                const int err = validateScopeNames(var->scope, var->scopeNames, &nspace, &eset);
+                const int err = validateScopeNames(var->scope, var->path, &nspace, &eset);
                 if (err != Err::OK) return err;
                 if (eset) {
                     tmpVar = Utils::find<Variable>(eset->vars, var->name, var->nameLen);
                     if (!tmpVar) {
-                        Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), var->loc, var->nameLen);
+                        Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), var->span, var->nameLen);
                         return Err::UNKNOWN_ERROR_SET;
                     }
                     copy(var, tmpVar);
@@ -328,13 +329,13 @@ namespace Validator {
 
                 var->cvalue.i64 = size;
                 var->cvalue.hasValue = 1;
-                var->cvalue.dtypeEnum = DT_INT_64;
+                var->cvalue.dtypeEnum = DT_I64;
                 
                 continue;
             
             }
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_VARIABLE), var->loc, var->nameLen, var->nameLen, var->name);
+            Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_VARIABLE), var->span, var->nameLen, var->nameLen, var->name);
             return Err::UNKNOWN_VARIABLE;
             
         }
@@ -342,9 +343,9 @@ namespace Validator {
 
 
         // verify and link goto statements
-        for (int i = 0; i < SyntaxNode::gotos.size(); i++) {
+        for (int i = 0; i < NodeRegistry::gotos.size(); i++) {
 
-            GotoStatement* gt = SyntaxNode::gotos[i];
+            GotoStatement* gt = NodeRegistry::gotos[i];
 
             Label* lb = Utils::find<Label>(gt->scope, gt->name, gt->nameLen, &Scope::labels);
             if (lb) {
@@ -352,7 +353,7 @@ namespace Validator {
                 continue;
             }
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_VARIABLE), gt->loc, gt->nameLen, gt->nameLen, gt->name);
+            Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_VARIABLE), gt->span, gt->nameLen, gt->nameLen, gt->name);
             return Err::UNKNOWN_VARIABLE;
 
         }
@@ -361,9 +362,9 @@ namespace Validator {
 
         // verify that each function is in global scope 
         // or in namespace that is in global scope
-        for (int i = 0; i < SyntaxNode::fcns.size(); i++) {
+        for (int i = 0; i < NodeRegistry::fcns.size(); i++) {
             
-            Function* const fcn = SyntaxNode::fcns[i];
+            Function* const fcn = NodeRegistry::fcns[i];
 
             Scope* sc = fcn->scope;
             while (sc) {
@@ -372,7 +373,7 @@ namespace Validator {
             }
             //Scope* const sc = fcn->scope->type == NT_SCOPE ? fcn->scope : fcn->scope->scope;
             if (sc != SyntaxNode::root) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::GLOBAL_SCOPE_REQUIRED), fcn->loc, fcn->nameLen);
+                Logger::log(Logger::ERROR, ERR_STR(Err::GLOBAL_SCOPE_REQUIRED), fcn->span, fcn->nameLen);
                 return Err::GLOBAL_SCOPE_REQUIRED;
             }
 
@@ -381,9 +382,9 @@ namespace Validator {
 
 
         // link function calls with definitions
-        for (int i = 0; i < (int) SyntaxNode::fcnCalls.size(); i++) {
+        for (int i = 0; i < (int) NodeRegistry::fcnCalls.size(); i++) {
 
-            Variable* fcnCallOp = SyntaxNode::fcnCalls[i];
+            Variable* fcnCallOp = NodeRegistry::fcnCalls[i];
             FunctionCall* fcnCall = (FunctionCall*) (fcnCallOp->expression);
 
             if (fcnCall->fcn) continue;
@@ -395,7 +396,7 @@ namespace Validator {
                
                 Variable* var = findDefinition(fcnCallOp->scope, fcnCall, fcnCallOp->parentIdx);
                 if (!var) {
-                    Logger::log(Logger::ERROR, ERR_STR(err), fcnCallOp->loc, fcnCall->nameLen);
+                    Logger::log(Logger::ERROR, ERR_STR(err), fcnCallOp->span, fcnCall->nameLen);
                     return err;
                 }
 
@@ -418,15 +419,15 @@ namespace Validator {
         }
 
         /*
-        for (int i = 0; i < SyntaxNode::fcns.size(); i++) {
+        for (int i = 0; i < NodeRegistry::fcns.size(); i++) {
 
-            Function* fcn = SyntaxNode::fcns[i];
+            Function* fcn = NodeRegistry::fcns[i];
             if (fcn->errorSetNameLen <= 0) continue;
 
             ErrorSet* errorSet = Utils::find<ErrorSet>(fcn->scope, fcn->errorSetName, fcn->errorSetNameLen, &Scope::customErrors);
 
             if (!errorSet) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->loc);
+                Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_ERROR_SET), fcn->span);
                 return Err::UNKNOWN_ERROR_SET;
             }
 
@@ -439,9 +440,9 @@ namespace Validator {
         // compute enum values
         //
 
-        for (int i = 0; i < SyntaxNode::enumerators.size(); i++) {
+        for (int i = 0; i < NodeRegistry::enumerators.size(); i++) {
 
-            Enumerator* en = SyntaxNode::enumerators[i];
+            Enumerator* en = NodeRegistry::enumerators[i];
 
             int err;
             int64_t lastValue = -1;
@@ -477,10 +478,10 @@ namespace Validator {
         // compute all cmptime vars
         //
         
-        for (int i = 0; i < (int) SyntaxNode::cmpTimeVars.size(); i++) {
+        for (int i = 0; i < (int) NodeRegistry::cmpTimeVars.size(); i++) {
 
             int err;
-            Variable* var = SyntaxNode::cmpTimeVars[i];
+            Variable* var = NodeRegistry::cmpTimeVars[i];
 
             if (!(var->expression)) continue;
             
@@ -500,9 +501,9 @@ namespace Validator {
         //
 
         // for now messy
-        for (int i = 0; i < (int) SyntaxNode::arrays.size(); i++) {
+        for (int i = 0; i < (int) NodeRegistry::arrays.size(); i++) {
 
-            Variable* var = SyntaxNode::arrays[i];
+            Variable* var = NodeRegistry::arrays[i];
             Array* arr = var->cvalue.arr;
 
             // arr->flags : info about length
@@ -519,7 +520,7 @@ namespace Validator {
                 }
 
                 if (!(arr->length) || !(arr->length->expression)) {
-                    Logger::log(Logger::ERROR, "Array declaration have to have length defineed either as compile-time expression or be a qualifier. Length cannot be empty without right side.", var->loc, var->nameLen);
+                    Logger::log(Logger::ERROR, "Array declaration have to have length defineed either as compile-time expression or be a qualifier. Length cannot be empty without right side.", var->span, var->nameLen);
                     return Err::INVALID_ARRAY_LENGTH;
                 }
 
@@ -541,7 +542,7 @@ namespace Validator {
                 Variable* alloc = ((FunctionCall*) (var->expression))->inArgs[0];
 
                 if (arr->flags & IS_CMP_TIME) {
-                    Logger::log(Logger::ERROR, "TODO error: invalid use of alloc!", var->loc, var->nameLen);
+                    Logger::log(Logger::ERROR, "TODO error: invalid use of alloc!", var->span, var->nameLen);
                     return Err::CANNOT_EVALUATE_EXPRESION_AT_CMP_TIME;
                 }
 
@@ -571,13 +572,13 @@ namespace Validator {
                 Variable lenVar;
                 const int err = evaluateArrayLength(alloc, &lenVar);
                 if (err < 0) {
-                    Logger::log(Logger::ERROR, "!!! evaluateArrayLength failed with error: %i !!! ", var->loc, 0, err);
+                    Logger::log(Logger::ERROR, "!!! evaluateArrayLength failed with error: %i !!! ", var->span, 0, err);
                     return err;
                 }
 
                 alloc->cvalue.arr->length->cvalue.hasValue = lenVar.cvalue.hasValue;
                 alloc->cvalue.arr->length->cvalue.i64 = lenVar.cvalue.i64;
-                alloc->cvalue.arr->length->cvalue.dtypeEnum = DT_INT_64;
+                alloc->cvalue.arr->length->cvalue.dtypeEnum = DT_I64;
                 alloc->cvalue.arr->length->expression = lenVar.expression;
                 //var->cvalue.arr->pointsTo = NULL;
 
@@ -592,17 +593,17 @@ namespace Validator {
             if (arr->length && (arr->length->cvalue.hasValue || arr->length->expression)) {
                 stripWrapperExpressions(arr->length);
                 const int dt = evaluateDataTypes(arr->length);
-                if (dt > 0 && dt <= DT_UINT_64) {
+                if (dt > 0 && dt <= DT_U64) {
                     if (!(arr->length->cvalue.hasValue)) {
                         const int err = evaluate(arr->length);
                         if (err < 0) {
-                            Logger::log(Logger::ERROR, "TODO error: array length has to be known at compile time!", var->loc, 1);
+                            Logger::log(Logger::ERROR, "TODO error: array length has to be known at compile time!", var->span, 1);
                             return Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED;
                         }
                     }
                     continue;
                 } else {
-                    Logger::log(Logger::ERROR, "TODO error: array length has to be int!", var->loc, 1);
+                    Logger::log(Logger::ERROR, "TODO error: array length has to be int!", var->span, 1);
                     return Err::INVALID_DATA_TYPE;
                 }
             }
@@ -615,7 +616,7 @@ namespace Validator {
 
             err = evaluateArrayLength(var, &lenVar);
             if (err < 0) {
-                Logger::log(Logger::ERROR, "!!! evaluateArrayLength failed with error: %i !!! ", var->loc, 0, err);
+                Logger::log(Logger::ERROR, "!!! evaluateArrayLength failed with error: %i !!! ", var->span, 0, err);
                 return err;
             }
 
@@ -630,13 +631,13 @@ namespace Validator {
             }
 
             if (len == 0) {
-                Logger::log(Logger::ERROR, "Array length cannot be zero!", var->loc, var->nameLen);
+                Logger::log(Logger::ERROR, "Array length cannot be zero!", var->span, var->nameLen);
                 return Err::INVALID_ARRAY_LENGTH;
             }
 
             var->cvalue.arr->length->cvalue.hasValue = 1;
             var->cvalue.arr->length->cvalue.i64 = len;
-            var->cvalue.arr->length->cvalue.dtypeEnum = DT_INT_64;
+            var->cvalue.arr->length->cvalue.dtypeEnum = DT_I64;
             //var->cvalue.arr->pointsTo = NULL;
             var->cvalue.hasValue = 1;
 
@@ -645,32 +646,32 @@ namespace Validator {
 
 
         // link function calls with definitions, verify arguments etc.
-        for (int i = 0; i < (int) SyntaxNode::fcnCalls.size(); i++) {
-            const int err = validateFunctionCall(SyntaxNode::fcnCalls[i]);
+        for (int i = 0; i < (int) NodeRegistry::fcnCalls.size(); i++) {
+            const int err = validateFunctionCall(NodeRegistry::fcnCalls[i]);
             if (err < 0) return err;
         }
 
 
 
         // validate return statements
-        for (int i = 0; i < SyntaxNode::returnStatements.size(); i++) {
+        for (int i = 0; i < NodeRegistry::returnStatements.size(); i++) {
 
-            ReturnStatement* rt = SyntaxNode::returnStatements[i];
+            ReturnStatement* rt = NodeRegistry::returnStatements[i];
             Function* fc = rt->fcn;
             Value* outValue = &(fc->outArg->var->cvalue);
 
             if (!fc) {
-                Logger::log(Logger::ERROR, "Unexpected return statement outside of the function!", rt->loc);
+                Logger::log(Logger::ERROR, "Unexpected return statement outside of the function!", rt->span);
                 return Err::UNEXPECTED_SYMBOL;
             }
 
             if (outValue->dtypeEnum != DT_VOID && !rt->var && !rt->err) {
-                Logger::log(Logger::ERROR, "Not enough return arguments!", rt->loc); // TODO : better error message
+                Logger::log(Logger::ERROR, "Not enough return arguments!", rt->span); // TODO : better error message
                 return Err::NOT_ENOUGH_ARGUMENTS;
             }
 
             if (outValue->dtypeEnum == DT_VOID && rt->var) {
-                Logger::log(Logger::ERROR, "Too many return arguments!", rt->loc); // TODO : better error message
+                Logger::log(Logger::ERROR, "Too many return arguments!", rt->span); // TODO : better error message
                 return Err::TOO_MANY_ARGUMENTS;
             }
 
@@ -694,8 +695,8 @@ namespace Validator {
 
                 if (err < 0) {
                     int len = outValue->dtypeEnum == DT_CUSTOM ? fc->outArg->dtype->nameLen : dataTypes[outValue->dtypeEnum].nameLen;
-                    Logger::log(Logger::PLAIN, "", rt->loc);
-                    Logger::log(Logger::ERROR, "In following declaration:", fc->outArg->loc, len);
+                    Logger::log(Logger::PLAIN, "", rt->span);
+                    Logger::log(Logger::ERROR, "In following declaration:", fc->outArg->span, len);
                     return err;
                 }
                 /*
@@ -708,7 +709,7 @@ namespace Validator {
                     return err;
                 }
                 if (!validateImplicitCast((DataTypeEnum) rtType, fc->outArg)) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_TYPE_CONVERSION), rt->loc, 1, (dataTypes + rtType)->name, (dataTypes + fc->outArg)->name);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_TYPE_CONVERSION), rt->span, 1, (dataTypes + rtType)->name, (dataTypes + fc->outArg)->name);
                     return Err::INVALID_TYPE_CONVERSION;
                 }
                 */
@@ -725,7 +726,7 @@ namespace Validator {
                 if (!err) return err;
 
                 if (!err) {
-                    Logger::log(Logger::ERROR, "Expected error set, pure namespace given!", rt->loc);
+                    Logger::log(Logger::ERROR, "Expected error set, pure namespace given!", rt->span);
                     return Err::UNKNOWN_ERROR_SET;
                 }
             
@@ -743,9 +744,9 @@ namespace Validator {
         // so, if lvalue is
         //  1) just variable, then, after evaluation, variable is the answer,
         //  2) expression, then, after evaluation, the first expression has to be unary and operator be 'get value' or binary and operator be 'subscript'
-        for (int i = 0; i < SyntaxNode::variableAssignments.size(); i++) {
+        for (int i = 0; i < NodeRegistry::variableAssignments.size(); i++) {
             
-            VariableAssignment* const varAss = SyntaxNode::variableAssignments[i];
+            VariableAssignment* const varAss = NodeRegistry::variableAssignments[i];
 
             TypeDefinition* dtypeLDef = NULL;
 
@@ -769,12 +770,12 @@ namespace Validator {
                     (lvalueEx->type == EXT_SLICE)
                 )
             ) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_LVALUE), varAss->loc, varAss->loc->idx);// - varAss->lvar->loc->idx);
+                Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_LVALUE), varAss->span, varAss->span->end.idx);// - varAss->lvar->span->idx);
                 return Err::INVALID_LVALUE;
             }
 
             if (varAss->lvar->def && varAss->lvar->def->flags & IS_CONST) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::CANNOT_ASSIGN_TO_CONST), varAss->loc, 1);
+                Logger::log(Logger::ERROR, ERR_STR(Err::CANNOT_ASSIGN_TO_CONST), varAss->span, 1);
                 return Err::CANNOT_ASSIGN_TO_CONST;
             }
 
@@ -782,7 +783,7 @@ namespace Validator {
                 if (dtypeL == DT_ARRAY) {
                     Array* arr = (Array*) dtypeLDef;
                     if (!(arr->flags & IS_ARRAY_LIST || arr->flags & IS_DYNAMIC)) {
-                        Logger::log(Logger::ERROR, "Cannot realocate array of const length!", varAss->rvar->loc, 0);
+                        Logger::log(Logger::ERROR, "Cannot realocate array of const length!", varAss->rvar->span, 0);
                         return Err::CANNOT_ASSIGN_TO_CONST;
                     }
                 }
@@ -796,7 +797,7 @@ namespace Validator {
             if (dtypeL == DT_CUSTOM) {
 
                 if (dtypeR != DT_CUSTOM) {
-                    Logger::log(Logger::ERROR, "Invalid type conversion, rvalue should be proper type initialization!", varAss->loc, 0);
+                    Logger::log(Logger::ERROR, "Invalid type conversion, rvalue should be proper type initialization!", varAss->span, 0);
                     return Err::INVALID_TYPE_CONVERSION;
                 }
 
@@ -868,16 +869,16 @@ namespace Validator {
 
 
         // validationg loops
-        for (int i = 0; i < SyntaxNode::loops.size(); i++) {
+        for (int i = 0; i < NodeRegistry::loops.size(); i++) {
             
-            Loop* loop = SyntaxNode::loops[i];
+            Loop* loop = NodeRegistry::loops[i];
             
             
             stripWrapperExpressions(&(loop->array));
 
             DataTypeEnum dtype = (DataTypeEnum) evaluateDataTypes(loop->array);
             if (dtype != DT_ARRAY) {
-                Logger::log(Logger::ERROR, "Only array is allowed!", loop->loc, strlen(KWS_LOOP));
+                Logger::log(Logger::ERROR, "Only array is allowed!", loop->span, strlen(Lex::KWS_LOOP));
                 return Err::INVALID_DATA_TYPE;
             }
 
@@ -889,7 +890,7 @@ namespace Validator {
             /*
             DataTypeEnum dtype = (DataTypeEnum) evaluate(loop->array);
             if (dtype < Err::OK) {
-                Logger::log(Logger::ERROR, "ASD", loop->loc, strlen(KWS_LOOP));
+                Logger::log(Logger::ERROR, "ASD", loop->span, strlen(KWS_LOOP));
                 return dtype;
             }
             */
@@ -899,9 +900,9 @@ namespace Validator {
 
 
         // initializations
-        for (int i = 0; i < SyntaxNode::initializations.size(); i++) {
+        for (int i = 0; i < NodeRegistry::initializations.size(); i++) {
 
-            VariableDefinition* const varDef = SyntaxNode::initializations[i];
+            VariableDefinition* const varDef = NodeRegistry::initializations[i];
             Variable* var = varDef->var;
             
             const Value value = var->cvalue;
@@ -924,7 +925,7 @@ namespace Validator {
                     const int err = validatePointerAssignment(val);
                     if (err < 0) return err;
                 } else {
-                    Logger::log(Logger::ERROR, "TODO: Invalid type conversion!", var->loc);
+                    Logger::log(Logger::ERROR, "TODO: Invalid type conversion!", var->span);
                     return err;
                 }
             }
@@ -936,7 +937,7 @@ namespace Validator {
 
                 Function* fcn = findExactFunction(varDef->scope, tmp, value.fcn);
                 if (!fcn) {
-                    Logger::log(Logger::ERROR, "Function doesnt match pointer definition!", var->loc, var->nameLen);
+                    Logger::log(Logger::ERROR, "Function doesnt match pointer definition!", var->span, var->nameLen);
                     return Err::NO_MATCHING_FUNCTION_FOUND;
                 }
 
@@ -948,25 +949,25 @@ namespace Validator {
         }
 
         // branch expressions
-        for (int i = 0; i < SyntaxNode::branchExpressions.size(); i++) {
+        for (int i = 0; i < NodeRegistry::branchExpressions.size(); i++) {
 
-            Variable* op = SyntaxNode::branchExpressions[i];
+            Variable* op = NodeRegistry::branchExpressions[i];
             int dtype = evaluateDataTypes(op);
             if (IS_INT(dtype) || dtype == DT_POINTER) continue;
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_DATA_TYPE), op->loc, 1);
+            Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_DATA_TYPE), op->span, 1);
             return Err::INVALID_DATA_TYPE;
 
         }
 
         // switch cases
-        for (int i = 0; i < SyntaxNode::switchCases.size(); i++) {
+        for (int i = 0; i < NodeRegistry::switchCases.size(); i++) {
             
-            SwitchCase* const sw = SyntaxNode::switchCases[i];
+            SwitchCase* const sw = NodeRegistry::switchCases[i];
             
             int dtype = evaluateDataTypes(sw->switchExp);
             if (dtype < 0) {
-                Logger::log(Logger::ERROR, "TODO error", sw->loc, 1);
+                Logger::log(Logger::ERROR, "TODO error", sw->span, 1);
                 return dtype;
             }
 
@@ -974,7 +975,7 @@ namespace Validator {
                 
                 int dtype = evaluateDataTypes(sw->casesExp[i]);
                 if (dtype < 0) {
-                    Logger::log(Logger::ERROR, "", sw->loc, 1);
+                    Logger::log(Logger::ERROR, "", sw->span, 1);
                     return dtype;
                 }
 
@@ -986,9 +987,9 @@ namespace Validator {
         }
 
         // statements
-        for (int i = 0; i < SyntaxNode::statements.size(); i++) {
+        for (int i = 0; i < NodeRegistry::statements.size(); i++) {
 
-            Statement* st = SyntaxNode::statements[i];
+            Statement* st = NodeRegistry::statements[i];
             Variable* op = st->op;
             int dtype = evaluateDataTypes(op);
             if (dtype < 0) return dtype; 
@@ -1014,7 +1015,7 @@ namespace Validator {
         *arr = *(var->cvalue.arr);
         arr->length = len;
         //len->snFlags = IS_LENGTH;
-        len->cvalue.dtypeEnum = DT_UINT_64;
+        len->cvalue.dtypeEnum = DT_U64;
         var->cvalue.arr = arr;
 
         return Err::OK;
@@ -1103,7 +1104,7 @@ namespace Validator {
                     
                     if (lenA.cvalue.hasValue && lenB.cvalue.hasValue) {
                         len->cvalue.hasValue = 1;
-                        len->cvalue.dtypeEnum = DT_INT_64;
+                        len->cvalue.dtypeEnum = DT_I64;
                         len->cvalue.i64 += lenA.cvalue.i64 + lenB.cvalue.i64;
                         return Err::OK;
                     }
@@ -1185,7 +1186,7 @@ namespace Validator {
                 if (len->expression) return Err::OK;
 
                 len->cvalue.hasValue = 1;
-                len->cvalue.dtypeEnum = DT_INT_64;
+                len->cvalue.dtypeEnum = DT_I64;
                 len->cvalue.i64 = ((ArrayInitialization*) (var->expression))->attributes.size();
                 len->snFlags |= flag;
 
@@ -1226,7 +1227,7 @@ namespace Validator {
                     // expression cannot be computed cmp-time
                     
                     slice->len = new Variable();
-                    slice->len->cvalue.dtypeEnum = DT_UINT_64;
+                    slice->len->cvalue.dtypeEnum = DT_U64;
 
                     BinaryExpression* len = new BinaryExpression();
                     len->operandA = slice->eidx;
@@ -1240,7 +1241,7 @@ namespace Validator {
                 }
 
                 Value ans = slice->eidx->cvalue;
-                ans.dtypeEnum = DT_INT_64;
+                ans.dtypeEnum = DT_I64;
                 Interpreter::applyOperator(OP_SUBTRACTION, &ans, &(slice->bidx->cvalue));
                 
                 if (!slice->len) slice->len = new Variable();
@@ -1248,7 +1249,7 @@ namespace Validator {
                 slice->len->expression = NULL;
                 
                 len->cvalue.hasValue = 1;
-                len->cvalue.dtypeEnum = DT_INT_64;
+                len->cvalue.dtypeEnum = DT_I64;
                 len->cvalue.i64 = ans.i64 + (isEndLength ? 0 : 1);
 
                 return Err::OK;
@@ -1262,7 +1263,7 @@ namespace Validator {
                 StringInitialization* init = (StringInitialization*) var->expression;
 
                 len->cvalue.hasValue = 1;
-                len->cvalue.dtypeEnum = DT_INT_64;
+                len->cvalue.dtypeEnum = DT_I64;
 
                 if (init->wideStr) {
                     len->cvalue.i64 = init->wideLen;
@@ -1280,16 +1281,16 @@ namespace Validator {
 
     }
 
-    Variable* findErrorInErrorSet(ErrorSet* eset, INamedVar* var) {
+    Variable* findErrorInErrorSet(ErrorSet* eset, QualifiedName* var) {
 
         Namespace* tmpNspace;
         
         int i = 0;
-        const int len = var->scopeNames.size();
+        const int len = var->path.size();
         
         for (i = 0; i < len; i++) {
 
-            INamedLoc* nm = var->scopeNames[i];
+            INamedLoc* nm = var->path[i];
             Variable* tmp = Utils::find(eset->vars, nm->name, nm->nameLen);
             if (!tmp) return NULL;
             
@@ -1302,7 +1303,7 @@ namespace Validator {
     }
 
     // scope cannot be NULL
-    Variable* findDefinition(Scope* scope, INamedVar* const inVar, int idx) {
+    Variable* findDefinition(Scope* scope, QualifiedName* const inVar, int idx) {
 
         char* const name = inVar->name;
         const int nameLen = inVar->nameLen;
@@ -1352,7 +1353,7 @@ namespace Validator {
     }
     
     template <typename T>
-    inline int isUniqueInCollection(std::vector<T*> collection, INamed* named, Location* loc) {
+    inline int isUniqueInCollection(std::vector<T*> collection, INamed* named, Span* span) {
 
         for (int i = 0; i < collection.size(); i++) {
 
@@ -1360,7 +1361,7 @@ namespace Validator {
             if (item->snFlags & IS_UNIQUE) continue;
 
             if (Utils::match(named, item)) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), loc, named->nameLen);
+                Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), span, named->nameLen);
                 return Err::SYMBOL_ALREADY_DEFINED;
             }
             //item->snFlags |= IS_UNIQUE;
@@ -1371,12 +1372,12 @@ namespace Validator {
 
     }
 
-    int isUnique(Scope* sc, INamed* named, Location* loc) {
+    int isUnique(Scope* sc, INamed* named, Span* span) {
 
-        if (isUniqueInCollection(sc->defs, named, loc) < 0) return Err::SYMBOL_ALREADY_DEFINED;
-        if (isUniqueInCollection(sc->fcns, named, loc) < 0) return Err::SYMBOL_ALREADY_DEFINED;
-        if (isUniqueInCollection(sc->customDataTypes, named, loc) < 0) return Err::SYMBOL_ALREADY_DEFINED;
-        if (isUniqueInCollection(sc->labels, named, loc) < 0) return Err::SYMBOL_ALREADY_DEFINED;
+        if (isUniqueInCollection(sc->defs, named, span) < 0) return Err::SYMBOL_ALREADY_DEFINED;
+        if (isUniqueInCollection(sc->fcns, named, span) < 0) return Err::SYMBOL_ALREADY_DEFINED;
+        if (isUniqueInCollection(sc->customDataTypes, named, span) < 0) return Err::SYMBOL_ALREADY_DEFINED;
+        if (isUniqueInCollection(sc->labels, named, span) < 0) return Err::SYMBOL_ALREADY_DEFINED;
 
         return Err::OK;
     
@@ -1434,13 +1435,13 @@ namespace Validator {
         const char* const name = call->name;
         const int nameLen = call->nameLen;
 
-        if (call->scopeNames.size() > 0) {
+        if (call->path.size() > 0) {
 
             Namespace* nspace = NULL;
             ErrorSet* eset = NULL;
 
             Logger::mute = 1;
-            const int err = validateScopeNames(scope, call->scopeNames, &nspace, &eset);
+            const int err = validateScopeNames(scope, call->path, &nspace, &eset);
             Logger::mute = 0;
 
             if (err < 0 || eset || !nspace) return;
@@ -1564,7 +1565,7 @@ namespace Validator {
                     IS_SIGNED_INT(cDtype) && IS_UNSIGNED_INT(fDtype) ||
                     IS_SIGNED_INT(cDtype) && IS_UNSIGNED_INT(fDtype)
                     ) {
-                    if ((cDtype - fDtype <= DT_UINT_64 - DT_INT_64)) {
+                    if ((cDtype - fDtype <= DT_U64 - DT_I64)) {
                         score += FOS_SIGN_CHANGE;
                     }
                     else {
@@ -1575,7 +1576,7 @@ namespace Validator {
                 }
 
                 if (IS_FLOAT(cDtype) && IS_FLOAT(fDtype)) {
-                    if ((cDtype - fDtype <= DT_UINT_64 - DT_INT_64)) {
+                    if ((cDtype - fDtype <= DT_U64 - DT_I64)) {
                         score += FOS_PROMOTION;
                     }
                     else {
@@ -1645,7 +1646,7 @@ namespace Validator {
                 return Err::NO_MATCHING_FUNCTION_FOUND;
             }
 
-            //Logger::log(Logger::ERROR, ERR_STR(Err::MORE_THAN_ONE_OVERLOAD_MATCH), callOp->loc, 1);
+            //Logger::log(Logger::ERROR, ERR_STR(Err::MORE_THAN_ONE_OVERLOAD_MATCH), callOp->span, 1);
             return Err::MORE_THAN_ONE_OVERLOAD_MATCH;
 
         }
@@ -1777,7 +1778,7 @@ namespace Validator {
         const int areNamed = dtypeInit->attributes.size() == 0 || dtypeInit->attributes[0]->name;
 
         if (count < dtypeInit->attributes.size()) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::TYPE_INIT_ATTRIBUTES_COUNT_MISMATCH), dtype->loc, dtype->nameLen, dtypeInit->attributes.size(), dtype->vars.size());
+            Logger::log(Logger::ERROR, ERR_STR(Err::TYPE_INIT_ATTRIBUTES_COUNT_MISMATCH), dtype->span, dtype->nameLen, dtypeInit->attributes.size(), dtype->vars.size());
             return Err::TYPE_INIT_ATTRIBUTES_COUNT_MISMATCH;
         }
 
@@ -1785,19 +1786,19 @@ namespace Validator {
 
             if (dtypeInit->attributes.size() > 1) {
                 Variable* var = dtypeInit->attributes[1];
-                Logger::log(Logger::ERROR, "Only one attribute can be set while initializing union!", var->loc, var->nameLen);
+                Logger::log(Logger::ERROR, "Only one attribute can be set while initializing union!", var->span, var->nameLen);
                 return Err::TYPE_INIT_ATTRIBUTES_COUNT_MISMATCH;
             }
 
             if (dtypeInit->fillVar) {
                 Variable* var = dtypeInit->fillVar;
-                Logger::log(Logger::ERROR, "Fill th rest option is not allowed while initializing union!", var->loc, 2);
+                Logger::log(Logger::ERROR, "Fill th rest option is not allowed while initializing union!", var->span, 2);
                 return Err::TYPE_INIT_ATTRIBUTES_COUNT_MISMATCH;
             }
 
             if (!areNamed) {
                 Variable* var = dtypeInit->attributes[0];
-                Logger::log(Logger::ERROR, "Only initialization through specifying name of attribute is allowed while initializing union!", var->loc, 1);
+                Logger::log(Logger::ERROR, "Only initialization through specifying name of attribute is allowed while initializing union!", var->span, 1);
                 return Err::TYPE_INIT_ATTRIBUTES_COUNT_MISMATCH;    
             }
 
@@ -1817,7 +1818,7 @@ namespace Validator {
 
                 const int idx = Utils::findIdx(dtype->vars, attribute->name, attribute->nameLen);
                 if (idx < 0) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_ATTRIBUTE_NAME), attribute->loc, attribute->nameLen, attribute->nameLen, attribute->name);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_ATTRIBUTE_NAME), attribute->span, attribute->nameLen, attribute->nameLen, attribute->name);
                     return Err::INVALID_ATTRIBUTE_NAME;    
                 }
 
@@ -1897,7 +1898,7 @@ namespace Validator {
                     evaluate(arr->length);
                     
                     if (!(arr->length->cvalue.hasValue)) {
-                        Logger::log(Logger::ERROR, "Was unable to compute array length while computing size of the %.*s!", var->loc, var->nameLen, def->nameLen, def->name);
+                        Logger::log(Logger::ERROR, "Was unable to compute array length while computing size of the %.*s!", var->span, var->nameLen, def->nameLen, def->name);
                         return Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED;
                     }
 
@@ -1948,7 +1949,7 @@ namespace Validator {
         for (int i = 0; i < fcnInCount - variableNumberOfArguments; i++) {
 
             if (j >= fcnCall->inArgs.size()) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::NOT_ENOUGH_ARGUMENTS), fcnCallOp->loc, fcnCall->nameLen);
+                Logger::log(Logger::ERROR, ERR_STR(Err::NOT_ENOUGH_ARGUMENTS), fcnCallOp->span, fcnCall->nameLen);
                 return Err::NOT_ENOUGH_ARGUMENTS;
             }
 
@@ -1968,14 +1969,14 @@ namespace Validator {
             if (fcnVar->cvalue.dtypeEnum == DT_ARRAY) {
                 
                 if (!(fcnCallVar->cvalue.dtypeEnum == DT_ARRAY)) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::ARRAY_EXPECTED), fcnCallVar->loc, 1);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::ARRAY_EXPECTED), fcnCallVar->span, 1);
                     return Err::ARRAY_EXPECTED;
                 }
                 
                 Variable* var = fcnCallVar;
                 stripWrapperExpressions((Variable**) & var);
                 if (!(var->def) || !(var->def->var->cvalue.arr)) {
-                    Logger::log(Logger::ERROR, "TODO error: array expected!", fcnCallVar->loc, fcnCallVar->nameLen);
+                    Logger::log(Logger::ERROR, "TODO error: array expected!", fcnCallVar->span, fcnCallVar->nameLen);
                     return Err::ARRAY_EXPECTED;
                 }
 
@@ -2014,7 +2015,7 @@ namespace Validator {
             
             if (!validateImplicitCast((DataTypeEnum) fcnCallVarDtype, fcnVar->cvalue.dtypeEnum)) {
                 // error : cannot cast
-                Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_TYPE_CONVERSION), fcnCallVar->loc, 1, (dataTypes + fcnVar->cvalue.dtypeEnum)->name, (dataTypes + fcnCallVarDtype)->name);
+                Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_TYPE_CONVERSION), fcnCallVar->span, 1, (dataTypes + fcnVar->cvalue.dtypeEnum)->name, (dataTypes + fcnCallVarDtype)->name);
                 return Err::INVALID_TYPE_CONVERSION;
             }
 
@@ -2025,7 +2026,7 @@ namespace Validator {
         const int fcnCallInCount = fcnCall->inArgs.size();
 
         if (j < fcnCallInCount && !variableNumberOfArguments) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::TOO_MANY_ARGUMENTS), fcnCallOp->loc, fcnCall->nameLen);
+            Logger::log(Logger::ERROR, ERR_STR(Err::TOO_MANY_ARGUMENTS), fcnCallOp->span, fcnCall->nameLen);
             return Err::TOO_MANY_ARGUMENTS;
         }
         
@@ -2057,7 +2058,7 @@ namespace Validator {
             } else {
                 err = evaluateDataTypes(var);
                 if (err < 0) {
-                    Logger::log(Logger::ERROR, "caused by %i argument", var->loc, 1, j);
+                    Logger::log(Logger::ERROR, "caused by %i argument", var->span, 1, j);
                 }
             }
 
@@ -2335,12 +2336,12 @@ namespace Validator {
                         
                         if (dtypeA == DT_ARRAY) {
 
-                            if (Utils::match(bex->operandB, KWS_ARRAY_LENGTH)) {
+                            if (Utils::match(bex->operandB, Lex::KWS_ARRAY_LENGTH)) {
 
                                 const int err = evaluateArrayLength(bex->operandA, IS_LENGTH);
                                 if (err < 0) return err;
 
-                            } else if (Utils::match(bex->operandB, KWS_ARRAY_SIZE)) {
+                            } else if (Utils::match(bex->operandB, Lex::KWS_ARRAY_SIZE)) {
 
                                 const int err = evaluateArrayLength(bex->operandA, IS_LENGTH | IS_SIZE);
                                 if (err < 0) return err;
@@ -2350,7 +2351,7 @@ namespace Validator {
                                 return Err::UNEXPECTED_SYMBOL;
                             }
                             
-                            return DT_UINT_64;
+                            return DT_U64;
 
                         }
 
@@ -2359,7 +2360,7 @@ namespace Validator {
                             Enumerator* en = (Enumerator*) customDtypeA;
                             Variable* var = Utils::find(en->vars, bex->operandB->name, bex->operandB->nameLen);
                             if (!var) {
-                                Logger::log(Logger::ERROR, "Unable to find member of enum!", bex->operandB->loc, 0);
+                                Logger::log(Logger::ERROR, "Unable to find member of enum!", bex->operandB->span, 0);
                                 return Err::UNEXPECTED_SYMBOL;
                             }
 
@@ -2379,7 +2380,7 @@ namespace Validator {
                             Pointer* ptr = (Pointer*) customDtypeA;
 
                             if (ptr->pointsToEnum != DT_CUSTOM || !ptr->pointsTo) {
-                                Logger::log(Logger::ERROR, "Invalid type of dereferenced pointer for member selection!", var->loc, var->nameLen);
+                                Logger::log(Logger::ERROR, "Invalid type of dereferenced pointer for member selection!", var->span, var->nameLen);
                                 return Err::INVALID_TYPE_CONVERSION;
                             }
 
@@ -2387,14 +2388,14 @@ namespace Validator {
                             customDtypeA = (TypeDefinition*) (ptr->pointsTo);
 
                         } else if (dtypeA != DT_CUSTOM) {
-                            Logger::log(Logger::ERROR, "Invalid type for member selection!", bex->operandB->loc, bex->operandB->nameLen);
+                            Logger::log(Logger::ERROR, "Invalid type for member selection!", bex->operandB->span, bex->operandB->nameLen);
                             return Err::INVALID_TYPE_CONVERSION;
                         }
 
                         Variable* var = (Variable*) bex->operandB;
                         Variable* ans = Utils::find<Variable>(customDtypeA->vars, var->name, var->nameLen);
                         if (!ans) {
-                            Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_ATTRIBUTE_NAME), var->loc, var->nameLen, var->nameLen, var->name);
+                            Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_ATTRIBUTE_NAME), var->span, var->nameLen, var->nameLen, var->name);
                             return Err::INVALID_ATTRIBUTE_NAME;
                         }
 
@@ -2414,8 +2415,8 @@ namespace Validator {
                     case OP_LESS_THAN_OR_EQUAL :
                     case OP_GREATER_THAN_OR_EQUAL : {
                         
-                        const int isAValid = dtypeA <= DT_FLOAT_64 || dtypeA == DT_POINTER || dtypeA == DT_ERROR;
-                        const int isBValid = dtypeB <= DT_FLOAT_64 || dtypeB == DT_POINTER || dtypeB == DT_ERROR;
+                        const int isAValid = dtypeA <= DT_F64 || dtypeA == DT_POINTER || dtypeA == DT_ERROR;
+                        const int isBValid = dtypeB <= DT_F64 || dtypeB == DT_POINTER || dtypeB == DT_ERROR;
                         
                         if (isAValid || isBValid) {
                             rdtype = DT_INT;
@@ -2431,8 +2432,8 @@ namespace Validator {
                     case OP_BITWISE_OR :
                     case OP_BITWISE_XOR : {
                         
-                        const int isAValid = dtypeA <= DT_UINT_64;
-                        const int isBValid = dtypeB <= DT_UINT_64;
+                        const int isAValid = dtypeA <= DT_U64;
+                        const int isBValid = dtypeB <= DT_U64;
 
                         if (isAValid || isBValid) {
                             rdtype = DT_INT;
@@ -2530,7 +2531,7 @@ namespace Validator {
 
                 idxDtype = (DataTypeEnum) evaluateDataTypes(sex->bidx);
                 if (idxDtype == DT_UNDEFINED && !sex->bidx->expression) {
-                    sex->bidx->cvalue.dtypeEnum = DT_INT_64;
+                    sex->bidx->cvalue.dtypeEnum = DT_I64;
                     sex->bidx->cvalue.hasValue = 1;
                     sex->bidx->cvalue.i64 = 0;
                 } else if (!validateImplicitCast(idxDtype, DT_INT)) {
@@ -2653,7 +2654,7 @@ namespace Validator {
                 if (dtype < Err::OK) return dtype;
 
                 if (!(uex->operand->cvalue.hasValue)) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED), uex->operand->loc);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED), uex->operand->span);
                     return Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED;
                 }
 
@@ -2672,7 +2673,7 @@ namespace Validator {
                 if (dtypeA < Err::OK) return dtypeA;
 
                 if (!(bex->operandA->cvalue.hasValue)) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED), bex->operandA->loc);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED), bex->operandA->span);
                     return Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED;
                 }
 
@@ -2680,7 +2681,7 @@ namespace Validator {
                 if (dtypeB < Err::OK) return dtypeB;
 
                 if (!(bex->operandB->cvalue.hasValue)) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED), bex->operandB->loc);
+                    Logger::log(Logger::ERROR, ERR_STR(Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED), bex->operandB->span);
                     return Err::COMPILE_TIME_KNOWN_EXPRESSION_REQUIRED;
                 }
 
@@ -2782,15 +2783,15 @@ namespace Validator {
 
     void copy(Variable* dest, Variable* src) {
 
-        Location* loc = dest->loc;
+        Span* span = dest->span;
         Expression* ex = dest->expression;
         // Variable* aloc = dest->allocSize;
-        // std::vector<ScopeName*> sc = dest->scopeNames;
+        // std::vector<ScopeName*> sc = dest->path;
         memcpy(dest, src, sizeof(Variable));
-        dest->loc = loc;
+        dest->span = span;
         dest->expression = ex;
         // dest->allocSize = aloc;
-        // dest->scopeNames = sc;
+        // dest->path = sc;
     
     }
 
@@ -2878,7 +2879,7 @@ namespace Validator {
                 dfex->fcn = fex->fcn;
                 dfex->name = fex->name;
                 dfex->nameLen = fex->nameLen;
-                dfex->scopeNames = fex->scopeNames;
+                dfex->path = fex->path;
                 dfex->id = fex->id;
 
                 for (int i = 0; i < fex->inArgs.size(); i++) {

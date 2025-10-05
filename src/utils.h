@@ -14,8 +14,8 @@ namespace Utils {
     void replaceString(String buff, String rstr, const int idx, const int len);
 
     int skipWhiteSpaces(char* const str, int* const idx);
-    int skipWhiteSpaces(char* const str, Location* loc);
-    int skipWhiteSpacesAndComments(char* const str, Location* loc);
+    int skipWhiteSpaces(char* const str, Span* span);
+    int skipWhiteSpacesAndComments(char* const str, Span* span);
     int skipWhiteSpacesAndComments(char* const str, int* const idx);
     int skipTillWhiteSpace(char* const str);
     int skipWhiteSpacesBack(char* const str, const int idx);
@@ -44,6 +44,11 @@ namespace Utils {
     int stripDir(char* fname);
 
     inline uint32_t reverse(uint32_t word);
+
+    Namespace* getCopy(Namespace* nspace);
+    Function* getCopy(Function* nspace);
+
+    VariableDefinition* createEmptyVariableDefinition();
 
     char* encodeUtf8(const char* const str, const int strLen, int* lenOut, int* maxCharSizeOut, int copyWhenAscii = 0);
 

@@ -8,7 +8,7 @@
 
 namespace Err {
     
-    enum Err : uint64_t {
+    enum Err : int64_t {
         OK                              = 0,
         MALLOC                          = -1,
         UNEXPECTED_END_OF_FILE          = -2,
@@ -66,6 +66,9 @@ namespace Err {
         CIRCULAR_IMPORT                 = -54,
         FILE_DOES_NOT_EXISTS            = -55,
         UNKNOWN_DIRECTIVE               = -56,
+        INVALID_ARGUMENTS               = -57,
+        NOT_YET_IMPLEMENTED             = -58,
+        IO_ERROR                        = -59,
     };
 
     const char* const str[] = {
@@ -77,7 +80,7 @@ namespace Err {
         "Invalid operator '%.*s'!",
         "Variable '%.*s' already defined!",
         "Function already defined!",
-        "Unexpected symbol!",
+        "Unexpected symbol! %s expected.",
         "Unknown variable '%.*s'!",
         "Unknown function '%.*s'!",
         "Invalid number literal!",
@@ -127,6 +130,9 @@ namespace Err {
         "Circular import detected!",
         "File '%s' does not exists!",
         "Unknown directive!",
+        "Invalid arguments!",
+        "Not yet implemented!",
+        "IO error!",
     };
 
 }

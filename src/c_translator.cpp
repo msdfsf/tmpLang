@@ -1,5 +1,3 @@
-// #pragma once
-
 #include <stdio.h>
 
 #include "c_translator.h"
@@ -106,7 +104,6 @@ static void printBranch(FILE* file, int level, Branch* const node, Variable* lva
 static void printWhileLoop(FILE* file, int level, WhileLoop* const node, Variable* lvalue = NULL);
 static void printForLoop(FILE* file, int level, ForLoop* const node, Variable* lvalue = NULL);
 static void printWrapperExpression(FILE* file, int level, WrapperExpression* const node, Variable* lvalue = NULL);
-static void printExpressionWrapper(FILE* file, int level, ExpressionWrapper* const node, Variable* lvalue = NULL);
 static void printConstExpression(FILE* file, int level, ConstExpression* const node, Variable* lvalue = NULL);
 static void printOperatorExpression(FILE* file, int level, OperatorExpression* const node, Variable* lvalue = NULL);
 static void printUnaryExpression(FILE* file, int level, UnaryExpression* const node, Variable* lvalue = NULL);
@@ -292,7 +289,6 @@ void c_print(FILE* file, int level, SyntaxNode* const node, Variable* lvalue = N
             printTernaryOperator(file, level, (TernaryOperator*) node, lvalue);
             break;
         case NT_EXPRESSION_WRAPPER :
-            printExpressionWrapper(file, level, (ExpressionWrapper*) node, lvalue);
             break;   
     
         default:
@@ -412,11 +408,11 @@ char* escapePath(const std::filesystem::path& path) {
 
 }
 
-void printDebugLine(FILE* file, Location* loc) {
+void printDebugLine(FILE* file, Span* span) {
     if (!translatorC.debugInfo) return;
-    if (loc && lastLine != loc->line) {
-        if (!loc->file->absPathRaw) loc->file->absPathRaw = escapePath(loc->file->absPath);
-        fprintf(file, "\n#line %i \"%s\"\n", loc->line, loc->file->absPathRaw);
+    if (span && lastLine != span->start.ln) {
+        if (!span->file->absPathRaw) span->file->absPathRaw = escapePath(span->file->absPath);
+        fprintf(file, "\n#line %i \"%s\"\n", span->start.ln, span->file->absPathRaw);
     }
 
 }
@@ -451,31 +447,31 @@ void printOperandValue(FILE* file, Operand* op) {
 
         }
 
-        case DT_INT_32 : {
+        case DT_I32 : {
             fprintf(file, "%i", op->cvalue.i32);
             break;
         }
 
         case DT_POINTER :
-        case DT_INT_64 : {
+        case DT_I64 : {
             fprintf(file, "%li", op->cvalue.i64);
             break;
         }
 
-        case DT_UINT_8:
-        case DT_UINT_16:
-        case DT_UINT_32:
-        case DT_UINT_64: {
+        case DT_U8:
+        case DT_U16:
+        case DT_U32:
+        case DT_U64: {
             fprintf(file, "%lu", op->cvalue.i64);
             break;
         }
 
-        case DT_FLOAT_32 : {
+        case DT_F32 : {
             fprintf(file, "%.9g%s", op->cvalue.f32, fmod(op->cvalue.f32, 1) == 0 ? ".f" : "f");
             break;
         }
 
-        case DT_FLOAT_64 : {
+        case DT_F64 : {
             fprintf(file, "%.17g%s", op->cvalue.f64, fmod(op->cvalue.f64, 1) == 0 ? "." : "");
             break;
         }
@@ -506,43 +502,43 @@ void printDataType(FILE* file, const DataTypeEnum dtypeEnum) {
             fprintf(file, "int");
             break;
             
-        case DT_INT_8 :
+        case DT_I8 :
             fprintf(file, "int8_t");
             break;
         
-        case DT_INT_16:
+        case DT_I16:
             fprintf(file, "int16_t");
             break;
 
-        case DT_INT_32 :
+        case DT_I32 :
             fprintf(file, "int32_t");
             break;
             
-        case DT_INT_64 :
+        case DT_I64 :
             fprintf(file, "int64_t");
             break;
 
-        case DT_UINT_8 :
+        case DT_U8 :
             fprintf(file, "uint8_t");
             break;
         
-        case DT_UINT_16 :
+        case DT_U16 :
             fprintf(file, "uint16_t");
             break;
 
-        case DT_UINT_32 :
+        case DT_U32 :
             fprintf(file, "uint32_t");
             break;
 
-        case DT_UINT_64 :
+        case DT_U64 :
             fprintf(file, "uint64_t");
             break;
 
-        case DT_FLOAT_32 :
+        case DT_F32 :
             fprintf(file, "float");
             break;
             
-        case DT_FLOAT_64 :
+        case DT_F64 :
             fprintf(file, "double");
             break;
 
@@ -1239,7 +1235,7 @@ void printArray(FILE* file, Variable* lvalue, Variable* rvalue) {
                 printVariable(file, 0, slice->eidx);
                 fputc('-', file);
             } else {
-                slice->eidx->cvalue.dtypeEnum = DT_INT_64;
+                slice->eidx->cvalue.dtypeEnum = DT_I64;
                 printVariable(file, 0, slice->eidx);
                 fputc('+', file);
             }
@@ -1286,7 +1282,7 @@ void printArray(FILE* file, Variable* lvalue, Variable* rvalue) {
                 fprintf(file, ";{int off0=");
                 printArrayListLength(file, bex->operandA);
                 fprintf(file, ";int len0=");
-                arr->length->cvalue.dtypeEnum = DT_INT_64;
+                arr->length->cvalue.dtypeEnum = DT_I64;
                 printVariable(file, 0, arr->length);
                 //arr->length->cvalue.dtypeEnum = DT_UNDEFINED;
                 fputc(';', file);
@@ -1377,7 +1373,7 @@ void printVariableDefinition(FILE* file, int level, VariableDefinition* const no
 
     if (node->flags & IS_CMP_TIME && node->var->cvalue.dtypeEnum != DT_ARRAY) return;
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     if (node->var->expression && node->var->expression->type == EXT_CATCH) {
         printCatchExpression(file, level, (Catch*) node->var->expression, node->var, SyntaxNode::root == node->scope);
@@ -1468,7 +1464,7 @@ void printVariableDefinition(FILE* file, int level, VariableDefinition* const no
 
 void printVariableAssignment(FILE* file, int level, VariableAssignment* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     if (!node->rvar) {
         printVariable(file, level, node->lvar);
@@ -1652,7 +1648,7 @@ void printVariableAssignment(FILE* file, int level, VariableAssignment* const no
 
 void printTypeDefinition(FILE* file, int level, TypeDefinition* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     if (node->type == NT_UNION) {
         fprintf(tFile, "typedef union %.*s_%i{", node->nameLen, node->name, node->id);
@@ -1782,7 +1778,7 @@ void printStringInitialization(FILE* file, int level, StringInitialization* cons
 
     switch (node->wideDtype) {
 
-        case DT_UINT_8: {
+        case DT_U8: {
             uint8_t* arr = (uint8_t*) node->wideStr;
 
             for (int i = 0; i < node->wideLen - 1; i++) {
@@ -1793,7 +1789,7 @@ void printStringInitialization(FILE* file, int level, StringInitialization* cons
             break;
         }
 
-        case DT_UINT_16: {
+        case DT_U16: {
             uint16_t* arr = (uint16_t*) node->wideStr;
 
             for (int i = 0; i < node->wideLen - 1; i++) {
@@ -1804,7 +1800,7 @@ void printStringInitialization(FILE* file, int level, StringInitialization* cons
             break;
         }
 
-        case DT_UINT_32: {
+        case DT_U32: {
             uint32_t* arr = (uint32_t*) node->wideStr;
 
             for (int i = 0; i < node->wideLen - 1; i++) {
@@ -1815,7 +1811,7 @@ void printStringInitialization(FILE* file, int level, StringInitialization* cons
             break;
         }
 
-        case DT_UINT_64: {
+        case DT_U64: {
             uint64_t* arr = (uint64_t*) node->wideStr;
 
             for (int i = 0; i < node->wideLen - 1; i++) {
@@ -2050,7 +2046,7 @@ void printFunction(FILE* file, int level, Function* const node, Variable* lvalue
     if (node->snFlags & IS_RENDERED) return;
     if (node->internalIdx == -1) return;
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     printFunctionDefinition(fdFile, node);
     fputc(';', fdFile);
@@ -2067,7 +2063,7 @@ void printBranch(FILE* file, int level, Branch* const node, Variable* lvalue) {
 
     // basic if branch
     // LOOK AT : maybe get rid of '()', as expression should have them already
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     fprintf(file, "if (");
     printVariable(file, level, node->expressions[0]);
@@ -2093,7 +2089,7 @@ void printBranch(FILE* file, int level, Branch* const node, Variable* lvalue) {
 
 void printSwitchCase(FILE* file, int level, SwitchCase* const node, Variable* lvalue) {
     
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     fprintf(file, "switch (");
     printVariable(file, level, node->switchExp);
     fprintf(file, "){");
@@ -2115,7 +2111,7 @@ void printSwitchCase(FILE* file, int level, SwitchCase* const node, Variable* lv
 
 void printWhileLoop(FILE* file, int level, WhileLoop* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     
     fprintf(file, "while(");
     printOperand(file, level, node->expression);
@@ -2128,7 +2124,7 @@ void printWhileLoop(FILE* file, int level, WhileLoop* const node, Variable* lval
 
 void printForLoop(FILE* file, int level, ForLoop* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     fprintf(file, "for(");
 
@@ -2147,7 +2143,7 @@ void printForLoop(FILE* file, int level, ForLoop* const node, Variable* lvalue) 
 
 void printLoop(FILE* file, int level, Loop* node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     fprintf(file, "for(");
 
@@ -2187,7 +2183,7 @@ void printLoop(FILE* file, int level, Loop* node, Variable* lvalue) {
 
 void printReturnStatement(FILE* file, int level, ReturnStatement* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
 
     if (node->err) {
         fprintf(file, "*err = ");
@@ -2207,28 +2203,28 @@ void printReturnStatement(FILE* file, int level, ReturnStatement* const node, Va
 
 void printContinueStatement(FILE* file, int level, ContinueStatement* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     fprintf(file, "continue;");
 
 }
 
 void printBreakStatement(FILE* file, int level, BreakStatement* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     fprintf(file, "break;");
 
 }
 
 void printGotoStatement(FILE* file, int level, GotoStatement* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     fprintf(file, "goto %.*s;", node->nameLen, node->name);
 
 }
 
 void printLabel(FILE* file, int level, Label* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     fprintf(file, "%.*s:", node->nameLen, node->name);
 
 }
@@ -2237,7 +2233,7 @@ void printNamespace(FILE* file, int level, Namespace* const node, Variable* lval
 
     if (node->snFlags & IS_RENDERED) return;
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     
     for (int i = 0; i < node->children.size(); i++) {
         // meh..
@@ -2254,13 +2250,6 @@ void printNamespace(FILE* file, int level, Namespace* const node, Variable* lval
 void printWrapperExpression(FILE* file, int level, WrapperExpression* const node, Variable* lvalue) {
     
     printVariable(file, level, node->operand, lvalue);
-
-}
-
-void printExpressionWrapper(FILE *file, int level, ExpressionWrapper* const node, Variable *lvalue) {
-
-    printVariable(file, level, node->operand);
-    fputc(';', file);
 
 }
 
@@ -2330,7 +2319,7 @@ void printTernaryExpression(FILE* file, int level, TernaryExpression* const node
 
 void printStatement(FILE* file, int level, Statement* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     printVariable(file, level, node->op);
     fputc(';', file);
 
@@ -2481,7 +2470,7 @@ void printUnion(FILE* file, int level, Union* const node, Variable* lvalue) {
 
 void printErrorSet(FILE* file, int level, ErrorSet* const node, Variable* lvalue) {
 
-    printDebugLine(file, node->loc);
+    printDebugLine(file, node->span);
     
     fprintf(vFile, "const int %.*s_%i=%lu;", node->nameLen, node->name, node->id, node->value);
     

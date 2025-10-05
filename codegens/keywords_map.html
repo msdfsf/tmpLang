@@ -156,6 +156,7 @@
     from
     true
     false
+    as
     null
     </textarea>
 
@@ -354,7 +355,7 @@
                     for (let i = 0; i < keywords.length; i++) {
                         
                         const keyword = keywords[i];
-                        const hash = hashFcn(keyword) % size;
+                        const hash = hashFcn(keyword, seed) % size;
                         
                         if (table[hash] !== null) {
                             collision = true;
