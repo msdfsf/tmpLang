@@ -1,26 +1,30 @@
-// TODO : maybe exchange FILE for something generic and custom...
-// NOTE : for now std::vectors/arrays are main collections as 
-//        it's easy to work with and debug them. Later they will
-//        be exchanged for more appropriate collections.
+// This header contains all syntax related stuff that directly
+// reprsents it or helps in some way.
+// Most of stuff here are core parts of the system, so they are
+// in one file as mainly used together anyway.
+// May be splited or wrapped into more files/namespaces, but
+// for now I feel like this is the most comfortable layaut at least
+// for my self.
 
 #pragma once
 
-#include <vector>
 #include <string>
 #include <cstdint>
 #include <array>
-#include <unordered_map>
 
 #include "globals.h"
+#include "operators.h"
+#include "data_types.h"
+#include "keywords.h"
+#include "array_list.h"
+#include "dynamic_arena.h"
+#include "ordered_dict.h"
 
-#define IS_MEMBER_SELECTION(x) ((x) == OP_MEMBER_SELECTION || ((x) == OP_DEREFERENCE_MEMBER_SELECTION))
 
-struct Translator;
 
-enum InternalFunction : uint32_t;
-
-enum KeyWordType : int;
-struct KeyWord;
+// =========================================
+// FORWARD DECLARATIONS
+// ===
 
 struct SyntaxNode;
 struct Scope;
@@ -46,8 +50,6 @@ struct ContinueStatement;
 struct BreakStatement;
 struct GotoStatement;
 struct Label;
-struct WrapperExpression;
-// struct ExpressionWrapper;
 struct Expression;
 struct ConstExpression;
 struct OperatorExpression;
@@ -55,12 +57,7 @@ struct UnaryExpression;
 struct BinaryExpression;
 struct TernaryExpression;
 struct Statement;
-struct Operator;
-struct Operand;
 struct FunctionCall;
-struct UnaryOperator;
-struct BinaryOperator;
-struct TernaryOperator;
 struct ImportStatement;
 struct Union;
 struct GetLength;
@@ -69,41 +66,56 @@ struct Catch;
 struct Using;
 
 struct ScopeName;
-enum ScopeType : int;
 
 struct IForeignCode;
 struct CodeBlock;
 struct ForeignFunction;
 struct LangDef;
 
-enum DataTypeEnum : int;
-struct DataType;
 struct TypeDefinition;
 struct Pointer;
 struct Array;
 struct Slice;
 
-enum ExpressionType : int;
+
+
+// ======================================
+// ENUMS & BASIC TYPES
+// ===
+
+typedef OrderedDict::Container ODictSyntaxNode;
+
+struct DArrayVariable            { DArray::Container base; };
+struct DArrayFunction            { DArray::Container base; };
+struct DArrayUnion               { DArray::Container base; };
+struct DArrayLabel               { DArray::Container base; };
+struct DArrayErrorSet            { DArray::Container base; };
+struct DArrayTypeDefinition      { DArray::Container base; };
+struct DArrayEnumerator          { DArray::Container base; };
+struct DArrayNamespace           { DArray::Container base; };
+struct DArrayINamedLoc           { DArray::Container base; };
+struct DArrayGotoStatement       { DArray::Container base; };
+struct DArrayUsing               { DArray::Container base; };
+struct DArrayValue               { DArray::Container base; };
+struct DArrayScope               { DArray::Container base; };
+struct DArraySyntaxNode          { DArray::Container base; };
+struct DArrayLangDef             { DArray::Container base; };
+struct DArrayCodeBlock           { DArray::Container base; };
+struct DArrayForeignFunction     { DArray::Container base; };
+struct DArrayVariableDefinition  { DArray::Container base; };
+struct DArrayVariableAssignment  { DArray::Container base; };
+struct DArrayLoop                { DArray::Container base; };
+struct DArrayStatement           { DArray::Container base; };
+struct DArrayReturnStatement     { DArray::Container base; };
+struct DArraySwitchCase          { DArray::Container base; };
+struct DArraySlice               { DArray::Container base; };
+struct DArrayImportStatement     { DArray::Container base; };
 
 
 
-// for now here because of cross reference stuff 
-struct Translator {
+typedef int AllocType;
 
-    FILE* mainFile;
-    int debugInfo;
-
-    void (*init)                        (char* const dirName);
-    void (*printNode)                   (FILE* file, int level, SyntaxNode* const node, Variable* lvalue);
-    void (*printExpression)             (FILE* file, int level, Expression* const node, Variable* lvalue);
-    void (*printForeignCode)            ();
-    void (*exit)                        ();
-
-};
-
-
-
-enum NodeType : int {
+enum NodeType : AllocType {
     NT_SCOPE,
     NT_VARIABLE_DEFINITION,
     NT_VARIABLE_ASSIGNMENT,
@@ -124,324 +136,171 @@ enum NodeType : int {
     NT_LABEL,
     NT_NAMESPACE,
     NT_STATEMENT,
-    NT_FUNCTION_CALL,
-    NT_OPERAND,
-    NT_UNARY_OPERATOR,
-    NT_BINARY_OPERATOR,
-    NT_TERNARY_OPERATOR,
     NT_CODE_BLOCK,
-    NT_EXPRESSION_WRAPPER,
     NT_ERROR,
     NT_UNION,
     NT_USING,
     NT_IMPORT,
+    NT_COUNT
 };
 
-
-
-// each bit corresponds with the InternaFunction enum
-// indicates if function was used at least once in code
-extern uint64_t internalFunctionUsed;
-
-enum InternalFunction : uint32_t {
-    IF_PRINTF = 1,
-    IF_ALLOC  = 2,
-    IF_FREE   = 3,
+enum AllocExType : AllocType {
+    AT_BYTE = NT_COUNT,
+    AT_EXT_FUNCTION_CALL,
+    AT_EXT_OPERATION,
+    AT_EXT_UNARY,
+    AT_EXT_BINARY,
+    AT_EXT_TERNARY,
+    AT_EXT_TYPE_INITIALIZATION,
+    AT_EXT_STRING_INITIALIZATION,
+    AT_EXT_ARRAY_INITIALIZATION,
+    AT_EXT_SLICE,
+    AT_EXT_CATCH,
+    AT_EXT_GET_LENGTH,
+    AT_EXT_GET_SIZE,
+    AT_INAMED,
+    AT_POINTER,
+    AT_ARRAY,
+    AT_QUALIFIED_NAME,
+    AT_FUNCTION_PROTOTYPE,
+    AT_FOREIGN_FUNCTION,
+    AT_COUNT
 };
 
-
-
-// ================================= //
-//  Section:
-//    KEY WORDS
-// ================================= //
-
-enum KeyWordType : int {
-    KW_VOID,
-    KW_INT,
-    KW_INT_8,
-    KW_INT_16,
-    KW_INT_32,
-    KW_INT_64,
-    KW_UINT_8,
-    KW_UINT_16,
-    KW_UINT_32,
-    KW_UINT_64,
-    KW_FLOAT_32,
-    KW_FLOAT_64,
-    KW_STRING,
-    KW_CMP_TIME,
-    KW_CONST,
-    KW_FUNCTION,
-    KW_IF,
-    KW_FOR,
-    KW_WHILE,
-    KW_GOTO,
-    KW_ENUM,
-    KW_TYPE_DEF,
-    KW_RETURN,
-    KW_CONTINUE,
-    KW_LOOP,
-    KW_BREAK,
-    KW_USING,
-    KW_NAMESPACE,
-    KW_ELSE,
-    KW_SWITCH_CASE,
-    KW_SWITCH_CASE_CASE,
-    KW_ALLOC,
-    KW_FREE,
-    KW_ERROR,
-    KW_UNION,
-    KW_CATCH,
-    KW_IMPORT,
-    KW_SCOPE,
-    KW_AUTON,
-    KW_MUTON,
-};
-
-enum TypedefKeyWord {
-    TKW_STRUCT,
-    TKW_UNION,
-};
-
-enum DirectiveKeyWord : int {
-    DKW_LANG_DEF,
-    DKW_IMPORT
-};
-
-struct KeyWord {
-    int type;
-    const char* str;
-};
-
-enum InternalVariablesEnum : int {
-    IV_NULL,
-    IV_TRUE,
-    IV_FALSE
-};
-
-// internal Variables such as null, true, false etc...
-extern Variable* internalVariables[];
-extern const int internalVariablesCount;
-
-// ================================= //
-//  Section:
-//    OPERATORS
-// ================================= //
-
-struct Operator {
-    
-    int rank; // precedence of operator, zero->positive-whatever, high->low *(precedence seems too long for usage)
-    uint64_t flag;
-
-    constexpr Operator(int r, uint64_t f) : rank(r), flag(f) {}
-    
-};
-
-// indexed by OperatorEnum
-// !!! CAUTION : on change update :
-//               operatorFunctions in interpreter.cpp
-//               ... maybe some other stuff ...
-constexpr auto operators = std::to_array<Operator>({
-    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_UNARY_PLUS
-    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_UNARY_MINUS
-    Operator(3,  IS_BINARY | IS_ONE_CHAR), // OP_ADDITION
-    Operator(3,  IS_BINARY | IS_ONE_CHAR), // OP_SUBTRACTION
-    Operator(2,  IS_BINARY | IS_ONE_CHAR), // OP_MULTIPLICATION
-    Operator(2,  IS_BINARY | IS_ONE_CHAR), // OP_DIVISION
-    Operator(2,  IS_BINARY | IS_ONE_CHAR), // OP_MODULO
-    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_GET_ADDRESS
-    Operator(1,  IS_UNARY | IS_ONE_CHAR), // OP_GET_VALUE
-    Operator(7,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_AND
-    Operator(9,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_OR
-    Operator(8,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_XOR
-    Operator(1,  IS_BINARY | IS_ONE_CHAR), // OP_BITWISE_NEGATION
-    Operator(4,  IS_BINARY | IS_TWO_CHAR), // OP_SHIFT_RIGHT
-    Operator(4,  IS_BINARY | IS_TWO_CHAR), // OP_SHIFT_LEFT
-    Operator(6,  IS_BINARY | IS_ONE_CHAR), // OP_EQUAL
-    Operator(6,  IS_BINARY | IS_TWO_CHAR), // OP_NOT_EQUAL
-    Operator(5,  IS_BINARY | IS_ONE_CHAR), // OP_LESS_THAN
-    Operator(5,  IS_BINARY | IS_ONE_CHAR), // OP_GREATER_THAN
-    Operator(5,  IS_BINARY | IS_TWO_CHAR), // OP_LESS_THAN_OR_EQUAL
-    Operator(5,  IS_BINARY | IS_TWO_CHAR), // OP_GREATER_THAN_OR_EQUAL
-    Operator(10, IS_BINARY | IS_TWO_CHAR), // OP_BOOL_AND
-    Operator(11, IS_UNARY | IS_TWO_CHAR),  // OP_BOOL_OR
-    Operator(0,  IS_UNARY | IS_TWO_CHAR),  // OP_INCREMENT
-    Operator(0,  IS_UNARY | IS_TWO_CHAR),  // OP_DECREMENT
-    Operator(0,  IS_BINARY | IS_ONE_CHAR), // OP_SUBSCRIPT
-    Operator(0,  IS_BINARY | IS_ONE_CHAR), // OP_MEMBER_SELECTION
-    Operator(0,  IS_UNARY | IS_ONE_CHAR),  // OP_DEREFERENCE_MEMBER_SELECTION
-    Operator(1,  IS_UNARY | IS_ONE_CHAR),  // OP_NEGATION
-    Operator(4,  IS_BINARY | IS_TWO_CHAR)  // OP_CONCATENATION
-});
-
-const std::size_t OPERATORS_COUNT = operators.size();
-
-
-
-// ================================= //
-//  Section:
-//    SYNTAX NODES
-// ================================= //
-
-namespace NodeRegistry {
-    
-    static std::vector<LangDef*> langDefs;
-    static std::vector<CodeBlock*> codeBlocks;
-    static std::vector<ForeignFunction*> foreignFunctions;
-
-    static std::vector<Variable*> variables;
-    static std::vector<Variable*> fcnCalls;
-    static std::vector<Function*> fcns;
-    static std::vector<VariableDefinition*> customDataTypesReferences;
-    static std::vector<VariableAssignment*> variableAssignments;
-    static std::vector<Variable*> cmpTimeVars;
-    static std::vector<Variable*> arrays;
-    static std::vector<Loop*> loops;
-    static std::vector<Label*> labels;
-    static std::vector<Variable*> branchExpressions;
-    static std::vector<Statement*> statements;
-    static std::vector<VariableDefinition*> initializations;
-    static std::vector<ReturnStatement*> returnStatements;
-    static std::vector<SwitchCase*> switchCases;
-    static std::vector<VariableDefinition*> variableDefinitions;
-
-    static std::vector<ErrorSet*> customErrors;
-    static std::vector<Union*> unions;
-
-    static std::vector<Slice*> slices;
-
-    static std::vector<VariableAssignment*> arraysAllocations;
-
-    static std::vector<ImportStatement*> imports;
-
-    static std::vector<TypeDefinition*> customDataTypes;
-    static std::vector<Enumerator*> enumerators;
-
-    static std::vector<GotoStatement*> gotos;
-
-};
-
-struct SyntaxNode {
-
-    static Scope* root;
-    static INamed* dir;
-
-    // as files are parsed only once and linked via pointers
-    // need option to get access to the original node
-    SyntaxNode* ogNode = NULL;
-    
-    NodeType type;
-    Scope* scope;
-    Span* span;
-
-    int parentIdx;
-    uint64_t snFlags; // sn as syntax node
-
-    SyntaxNode(NodeType nodeType) { type = nodeType; snFlags = 0; };
-
-};
-
-enum ScopeType : int {
-    SC_GLOBAL = 1,
-    SC_COMMON = 0
-};
-
-struct Scope : SyntaxNode {
-
-    // the function this scope is in
-    // NULL if main
-    Function* fcn; // TODO : remove
-
-    std::vector<SyntaxNode*> children;
-
-    // LOOK AT : unite?
-    //std::vector<Variable*> vars;
-    //std::vector<VariableDefinition*> defs;
-    //std::vector<Scope*> scopes;
-
-    // helps to link variables with definitions.
-    // nodes such as Enumerator, Scope, VariableDefinition...
-    // so we can track their order and dont have to go through all childrens.
-    // std::vector<SyntaxNode*> defSearch;
-    std::unordered_map<std::string_view, SyntaxNode*> defSearch;
-
-    std::vector<Variable*> defs; // as vars, so can be searched by name
-    std::vector<Function*> fcns;
-    std::vector<Union*> unions;
-    std::vector<Label*> labels;
-    std::vector<ErrorSet*> customErrors;
-    std::vector<TypeDefinition*> customDataTypes; // TODO : do we need it?
-    std::vector<Enumerator*> enums; // LOOK AT : maybe unite enum under Variable interface or something
-    std::vector<Namespace*> namespaces;
-    std::vector<GotoStatement*> gotos;
-    std::vector<Using*> usings;
-
-    Scope() : SyntaxNode(NT_SCOPE) {};
-
-};
-
-struct Namespace : Scope, INamedEx {
-
-};
-
-struct QualifiedName : INamedEx {
-    std::vector<INamedLoc*> path;
-};
-
-int validateScopeNames(Scope* sc, std::vector<INamedLoc*> names, Namespace** nspace, ErrorSet** eset);
-int getLValueSpan(DataTypeEnum dtype, void* dtypeDef, Span* span); // for error purposes, for now here
 /*
-struct ScopeName : INamedEx {
-    // we need to know which scope name we are dealing with to adjust render as 
-    // different languages can have different symbols for accessing different 
-    // things, or dont have any at all (enums in C)
-    ScopeType type;
-
-    // hmm actualy dont know where to put this function and if its needed
-    // but for now lets keep it here, so its not waving around as lil lost kitty
-    static int validateScopeNames(std::vector<ScopeName*> names, TypeDefinition** dtype);
-};
-
-enum ScopeType : int {
+enum ScopeType {
     SC_ENUM,
     SC_STRUCT,
     SC_NAMESPACE
 };
 */
 
+enum ScopeType {
+    SC_GLOBAL = 1,
+    SC_COMMON = 0
+};
+
+enum ExpressionType {
+    EXT_FUNCTION_CALL = AT_EXT_FUNCTION_CALL,
+    EXT_OPERATION,
+    EXT_UNARY,
+    EXT_BINARY,
+    EXT_TERNARY,
+    EXT_TYPE_INITIALIZATION,
+    EXT_STRING_INITIALIZATION,
+    EXT_ARRAY_INITIALIZATION,
+    EXT_SLICE,
+    EXT_CATCH,
+    EXT_GET_LENGTH,
+    EXT_GET_SIZE,
+};
+
+enum ExpressionQualifier {
+    EXQ_VARIABLE,
+    EXQ_CONSTANT,
+    EXQ_COMPILE_TIME
+};
+
+struct QualifiedName : INamedEx {
+    uint16_t pathSize;
+    INamed* path;
+};
+
+
+
+// ======================================
+//  SYNTAX NODES
+// ===
+
+struct SyntaxNode {
+
+    static Scope* root;
+    static INamed dir;
+
+    // as files are parsed only once and linked via pointers
+    // need option to get access to the original node
+    SyntaxNode* ogNode = NULL;
+
+    NodeType type;
+    Scope* scope = NULL;
+    Span* span;
+
+    int parentIdx;
+    uint64_t flags; // sn as syntax node
+
+};
+
+struct Scope {
+
+    SyntaxNode base;
+
+    // the function this scope is in
+    // NULL if main
+    Function* fcn = 0; // TODO : remove
+
+    DArraySyntaxNode children;
+
+    // helps to link variables with definitions.
+    // nodes such as Enumerator, Scope, VariableDefinition...
+    // so we can track their order and dont have to go through all childrens.
+    // std::vector<Handler> defSearch;
+    ODictSyntaxNode defSearch;
+
+    // TODO : doing a lot of small alocations doesnt
+    //        feel right, its better to treat it as block
+    //        and create custom allocator underhood.
+    union {
+        DArray::Container arrays[10];
+        struct {
+            DArrayVariable       defs; // as vars, so can be searched by name
+            DArrayFunction       fcns;
+            DArrayUnion          unions;
+            DArrayLabel          labels;
+            DArrayErrorSet       customErrors;
+            DArrayTypeDefinition customDataTypes; // TODO : do we need it?
+            DArrayEnumerator     enums; // LOOK AT : maybe unite enum under Variable interface or something
+            DArrayNamespace      namespaces;
+            DArrayGotoStatement  gotos;
+            DArrayUsing          usings;
+        };
+    };
+};
+
+struct Namespace {
+    Scope scope;
+    INamedEx name;
+};
+
 // only as defSearch
-struct Using : SyntaxNode {
-    Using() : SyntaxNode(NT_USING) {};
+struct Using {
+    SyntaxNode base;
     SyntaxNode* var; // node that is being included
 };
 
 // used for interoperability to keep code of the foreign language
 struct IForeignCode {
-    
     Span* tagLoc;
 
-    char* tagStr;
-    int tagLen;
-
-    char* codeStr;
-    int codeLen;
-
+    String tagStr;
+    String codeStr;
 };
 
-struct CodeBlock : IForeignCode, SyntaxNode {
-
-    CodeBlock() : SyntaxNode(NT_CODE_BLOCK) {};
-
+struct CodeBlock {
+    SyntaxNode base;
+    IForeignCode code;
 };
 
-struct Enumerator : SyntaxNode, INamedEx {
-    
+struct Enumerator {
+    SyntaxNode base;
+    INamedEx name;
+
     DataTypeEnum dtype;
-    std::vector<Variable*> vars;
+    DArrayVariable vars;
+};
 
-    Enumerator() : SyntaxNode(NT_ENUMERATOR) {};
-
+struct Statement {
+    SyntaxNode base;
+    Variable* operand;
 };
 
 struct Value {
@@ -472,97 +331,23 @@ struct Value {
 
 };
 
-struct Operand : SyntaxNode {
-
-    VariableDefinition* def;
-
-    Value cvalue; // c as compiler
-    Value ivalue; // i as interpreter
-    // TODO : isnt it part of cvalue?
-    
-    // void* dtype; // !!! if DT_POINTER points to Pointer struct, if DT_ARRAY points to Array struct, if DT_CUSTOM points to TypeDefinition otherwise points to DataType !!!
-
-    std::vector<Value> istack;
-    // std::vector<ScopeName*> scopeNames;
-
-    int unrollExpression; // DEPRECATED: should be removed so code should rly fully on Value interface!!!!! LOOk AT : maybe get rid of Operand itself and use Variable instead as before? or have two types of operand constant and dynamic?
-    Expression* expression;
-
-    Operand();
-    Operand(Scope* scope);
-
-};
-
-enum ExpressionType :int {
-    EXT_FUNCTION_CALL,
-    EXT_UNARY,
-    EXT_BINARY,
-    EXT_TERNARY,
-    EXT_TYPE_INITIALIZATION,
-    EXT_STRING_INITIALIZATION,
-    EXT_ARRAY_INITIALIZATION,
-    EXT_SLICE,
-    EXT_CATCH,
-    EXT_GET_LENGTH,
-    EXT_GET_SIZE,
-    EXT_WRAPPER,
-};
-
-enum ExpressionQualifire {
-    EXQ_VARIABLE,
-    EXQ_CONSTANT,
-    EXQ_COMPILE_TIME
-};
-
 struct Expression {
-
     ExpressionType type;
-
 };
 
-struct Statement : SyntaxNode {
-    Variable* op; // TODO : change name
-    Statement() : SyntaxNode(NT_STATEMENT) {};
-};
-// LOOK AT : is there a better way
-/*
-struct VariableDefiniton : SyntaxNode {
-    
-    Variable* var;
-    int flags;
+struct TypeInitialization {
+    Expression base;
 
-    VariableDefiniton() {};
-    VariableDefiniton(Span* span);
-    virtual void print(int level);
-
-};
-*/
-
-struct TypeInitialization : Expression {
-
-    TypeInitialization() {
-        type = EXT_TYPE_INITIALIZATION;
-    };
-
-    std::vector<Variable*> attributes;
-    int* idxs; // maps attributes to og indicies in TypeDefinition 
+    DArrayVariable attributes;
+    int* idxs; // maps attributes to og indicies in TypeDefinition
 
     // to fill the rest of the attributes with the same value
     // if NULL then no filling
     Variable* fillVar;
-
 };
 
-struct StringInitialization : Expression {
-
-    StringInitialization() {
-        type = EXT_STRING_INITIALIZATION;
-    };
-
-    StringInitialization(String* str) {
-        rawPtr = str->buff;
-        rawPtrLen = str->len;
-    };
+struct StringInitialization {
+    Expression base;
 
     // pointer to start of the string in source file
     char* rawPtr;
@@ -574,355 +359,225 @@ struct StringInitialization : Expression {
     void* wideStr;
     DataTypeEnum wideDtype;
     int wideLen;
-    
 };
 
-struct ArrayInitialization : Expression {
-
-    ArrayInitialization() {
-        type = EXT_ARRAY_INITIALIZATION;
-    };
-
-    std::vector<Variable*> attributes;
-
+struct ArrayInitialization {
+    Expression base;
+    DArrayVariable attributes;
 };
 
-struct Catch : Expression {
-    
-    Catch() {
-        type = EXT_CATCH;
-    };
+struct Catch {
+    Expression base;
 
     FunctionCall* call;
-    
+
     // its either one of these, other is NULL
     Variable* err;
     Scope* scope;
-
 };
 
-struct GetLength : Expression {
+struct GetLength {
+    Expression base;
     Array* arr;
 };
 
-struct GetSize : Expression {
+struct GetSize {
+    Expression base;
     Array* arr;
 };
 
-struct VariableDefinition : SyntaxNode {
-     
+struct VariableDefinition {
+    SyntaxNode base;
+
     Variable* var; // it may be enough
-    int flags;
+    // int flags;
 
 
     // only for custom data types as they will be linked at the end
     QualifiedName* dtype;
     // char* dtypeName;
     //int dtypeNameLen;
-    
+
     // if we have Pointer like definition as for example Foo****
     // then lastPtr points to the Foo*
     Pointer* lastPtr;
     // DataTypeEnum dtypeEnum;
     // TypeDefinition* dtype;
-
-    VariableDefinition();
-    VariableDefinition(Span* span);
-    VariableDefinition(Variable* var, int flags);
-
 };
 
-struct VariableAssignment : SyntaxNode {
-    
+struct VariableAssignment {
+    SyntaxNode base;
+
     Variable* lvar;
     Variable* rvar;
-    // Operand* offsetVar; // for arrays and maybe something else
+    // Variable* offsetVar; // for arrays and maybe something else
 
     VariableAssignment();
     VariableAssignment(Span* span);
-
 };
 
-extern Variable* zero;
-struct Variable : QualifiedName, Operand {
+struct Variable {
+    SyntaxNode base;
 
-    // Variable* parentStruct;
-    // Variable* attribute;
-    // Variable* allocSize; // LOOK AT : dunno about this
+    VariableDefinition* def;
 
-    // std::vector<INamed*> scopeNames;
+    Value cvalue; // c as compiler
+    Value ivalue; // i as interpreter
 
-    uint64_t flags = 0; // TODO : get rid of, didn't helped to solve the problem
+    DArrayValue istack;
 
-    Variable();
-    Variable(Span* span);
-    Variable(Scope* scope);
-    Variable(Scope* const sc, DataTypeEnum dtype);
-    Variable(Scope* const sc, DataTypeEnum dtype, Span* span);
-    Variable(Scope* const sc, DataTypeEnum dtype, char* name, int nameLen);
-    Variable(Scope* const sc, Value value, char* name, int nameLen);
-    Variable(Variable* var);
+    int unrollExpression; // DEPRECATED: should be removed so code should rly fully on Value interface!!!!! LOOk AT : maybe get rid of Variable itself and use Variable instead as before? or have two types of operand constant and dynamic?
+    Expression* expression;
 
+    QualifiedName name;
 };
 
 struct FunctionPrototype {
-    int inArgsCnt; // number of arguments form prespective of the language
-    std::vector<VariableDefinition*> inArgs;
+    // TODO : is it realy needed
+    int inArgsCnt; // number of arguments form perspective of the language
+    DArrayVariableDefinition inArgs;
     VariableDefinition* outArg;
 };
 
-struct Function : SyntaxNode, FunctionPrototype, INamedEx {
-    
-    //std::vector<VariableDefinition*> inArgs;
-    //Value outArg;
-    //std::vector<DataTypeEnum> outArgs; // TODO : !!!!
-    std::vector<ReturnStatement*> returns;
+struct Function {
+    SyntaxNode base;
+    FunctionPrototype prototype;
+    INamedEx name;
+
+    DArrayReturnStatement returns;
 
     Scope* bodyScope;
-    
-    int internalIdx; // if it is > 0, then its internal function, and value represents unique id, otherwise should be ignored ***** TODO : for now value: -1 is used as identifer to not render function, fix it later ***** 
-    
+
+    int internalIdx; // if it is > 0, then its internal function, and value represents unique id, otherwise should be ignored ***** TODO : for now value: -1 is used as identifer to not render function, fix it later *****
+
     int icnt = 0; // counter of function usage by interpreter
     int istackIdx = 0; // 0 is neutral value, no additional stack is used, so indexing is from 1
-    
+
     QualifiedName* errorSetName;
     ErrorSet* errorSet;
-    /*
-    char* tagStr;
-    int tagLen;
-
-    char* codeStr;
-    int codeLen;
-    */
-
-    Function();
-    Function(Scope* sc, char* name, int nameLen, std::vector<VariableDefinition*> inArgs, VariableDefinition* outArg, int internalIdx);
-
 };
 
-struct ForeignFunction : Function, IForeignCode {
-
+struct ForeignFunction {
+    Function fcn;
+    IForeignCode code;
 };
 
-struct FunctionCall : Expression, QualifiedName {
-
-    FunctionCall() {
-        type = EXT_FUNCTION_CALL;
-        fcn = NULL;
-        fptr = NULL;
-        outArg = NULL;
-    };
+struct FunctionCall {
+    Expression base;
+    QualifiedName name;
 
     Function* fcn;
     Variable* fptr; // for function pointers, meh...
     int inArgsCnt; // same as Function::inArgsCnt
-    std::vector<Variable*> inArgs;
+    DArrayVariable inArgs;
     Variable* outArg;
-
 };
 
-struct Branch : SyntaxNode {
+struct Branch {
+    SyntaxNode base;
 
-    std::vector<Scope*> scopes;
-    std::vector<Variable*> expressions;
-    
-    Branch() : SyntaxNode(NT_BRANCH) {};
-
+    DArrayScope scopes;
+    DArrayVariable expressions;
 };
 
-struct SwitchCase : SyntaxNode {
-   
+struct SwitchCase {
+    SyntaxNode base;
+
     Variable* switchExp;
-    std::vector<Variable*> casesExp;
+    DArrayVariable casesExp;
 
-    std::vector<Scope*> cases;
+    DArrayScope cases;
     Scope* elseCase;
-
-    SwitchCase() : SyntaxNode(NT_SWITCH_CASE) {};
-
 };
 
-struct WhileLoop : SyntaxNode {
+struct WhileLoop {
+    SyntaxNode base;
 
     Scope* bodyScope;
     Variable* expression;
-
-    WhileLoop() : SyntaxNode(NT_WHILE_LOOP) {};
-    
 };
 
-struct ForLoop : SyntaxNode {
+struct ForLoop {
+    SyntaxNode base;
 
     Scope* bodyScope;
 
     Variable* initEx;
     Variable* conditionEx;
     Variable* actionEx;
-
-    ForLoop() : SyntaxNode(NT_FOR_LOOP) {};
-    
 };
 
-struct Loop : SyntaxNode {
-    
+struct Loop {
+    SyntaxNode base;
+
     Scope* bodyScope;
 
     Variable* array;
     Variable* idx;
     VariableDefinition* idxDef;
-
-    Loop() : SyntaxNode(NT_LOOP) {};
-
 };
 
-struct ReturnStatement : SyntaxNode {
+struct ReturnStatement {
+    SyntaxNode base;
 
     Function* fcn;
     Variable* var;
     Variable* err;
-    // std::vector<Variable*> vars;
 
     int idx; // indexes itself in Function.returns
-
-    ReturnStatement() : SyntaxNode(NT_RETURN_STATEMENT) {};
-    
 };
 
-struct ContinueStatement : SyntaxNode {
-
-    ContinueStatement() : SyntaxNode(NT_CONTINUE_STATEMENT) {};
-    
+struct ContinueStatement {
+    SyntaxNode base;
 };
 
-struct BreakStatement : SyntaxNode {
-
-    BreakStatement() : SyntaxNode(NT_BREAK_STATEMENT) {};
-
+struct BreakStatement {
+    SyntaxNode base;
 };
 
-struct GotoStatement : SyntaxNode, INamed {
+struct GotoStatement {
+    SyntaxNode base;
+    INamed name;
 
     Span* span;
     Label* label;
-    
-    GotoStatement() : SyntaxNode(NT_GOTO_STATEMENT) {};
-
 };
 
-struct Label : SyntaxNode, INamed {
-
+struct Label {
+    SyntaxNode base;
+    INamedEx name;
     Span* span;
-
-    Label() : SyntaxNode(NT_LABEL) {};
-
 };
 
-// LOOK AT : think about better name
-// what about ArithmeticExpression??
-struct OperatorExpression : Expression {
-    OperatorEnum operType;
-    // Operator* oper;
+struct OperationExpression {
+    Expression base;
+    OperatorEnum opType;
 };
 
-/*
-struct ExpressionWrapper : SyntaxNode {
+struct UnaryExpression {
+    OperationExpression base;
     Variable* operand;
-    ExpressionWrapper() : SyntaxNode(NT_EXPRESSION_WRAPPER) {};
-};
-*/
-
-// LOOK AT : think about better name
-struct WrapperExpression : Expression {
-    
-    WrapperExpression() {
-        type = EXT_WRAPPER;
-    };
-
-    Variable* operand;
-    
 };
 
-struct UnaryExpression : OperatorExpression {
-    
-    UnaryExpression() {
-        type = EXT_UNARY;
-    };
-
-    Variable* operand;
-
+struct BinaryExpression {
+    OperationExpression base;
+    Variable* left;
+    Variable* right;
 };
 
-struct BinaryExpression : OperatorExpression {
-
-    BinaryExpression() {
-        type = EXT_BINARY;
-    };
-
-    Variable* operandA;
-    Variable* operandB;
-
+struct TernaryExpression {
+    OperationExpression base;
+    Variable* condition;
+    Variable* trueExp;
+    Variable* falseExp;
 };
 
-struct TernaryExpression : BinaryExpression {
+struct TypeDefinition {
+    SyntaxNode base;
+    DataType dtype;
+    INamedEx name;
 
-    TernaryExpression() {
-        type = EXT_TERNARY;
-    };
-
-    Variable* operandA;
-    Variable* operandB;
-    Variable* operandC;
-
-};
-
-
-
-// ================================= //
-//  Section:
-//    DATA TYPES
-// ================================= //
-
-#define IS_INT(x) ((x) >= DT_INT && (x) <= DT_U64)
-#define IS_SIGNED_INT(x) ((x) >= DT_INT && (x) <= DT_I64)
-#define IS_UNSIGNED_INT(x) ((x) >= DT_U8 && (x) <= DT_U64)
-#define IS_FLOAT(x) ((x) >= DT_F32 && (x) <= DT_F64)
-
-struct DataType : INamedEx {
-    
-    int size; // in bytes
-    int rank;
-
-    constexpr DataType() : 
-            
-        size(0), 
-        rank(0),
-        
-        INamedEx(NULL, 0, 0)
-
-    {
-    
-    };
-
-    constexpr DataType(char* const wd, const int wdLen, const int sz, const int rk) : 
-        
-        size(sz), 
-        rank(rk),
-        
-        INamedEx(wd, wdLen, 0)
-
-    {
-
-    };
-
-    ~DataType() {};
-
-};
-
-extern DataType dataTypes[DATA_TYPES_COUNT];
-
-struct TypeDefinition : DataType, SyntaxNode {
-    
-    std::vector<Variable*> vars;
+    DArrayVariable vars;
 
     Function* unaryPlus;
     Function* unaryMinus;
@@ -933,27 +588,19 @@ struct TypeDefinition : DataType, SyntaxNode {
     Function* modulo;
     Function* address;
     Function* subscript;
-
-    TypeDefinition() : SyntaxNode(NT_TYPE_DEFINITION) {};
-
 };
 
 // TODO : unite under TypeDefinition?
-struct Union : TypeDefinition {
-
-    Union() : TypeDefinition() {
-        type = NT_UNION;
-    };
-
+struct Union {
+    TypeDefinition base;
 };
 
-struct ErrorSet : SyntaxNode, INamedEx {
+struct ErrorSet {
+    SyntaxNode base;
+    INamedEx name;
 
     uint64_t value;
-    std::vector<Variable*> vars;
-
-    ErrorSet() : SyntaxNode(NT_ERROR) {};
-
+    DArrayVariable vars;
 };
 
 struct Pointer {
@@ -962,60 +609,52 @@ struct Pointer {
     DataTypeEnum pointsToEnum;
 };
 
-struct Array : Pointer {
+struct Array {
+    Pointer base;
+
     Variable* length;
     int flags;
 };
 
-struct Slice : Expression {
-
-    Slice() {
-        type = EXT_SLICE;
-    }
+struct Slice {
+    Expression base;
 
     Variable* arr;
     Variable* bidx;
     Variable* eidx;
 
     Variable* len = NULL;
-
 };
 
-
-
-
-
-
 struct LangDef {
-
     String tag;
-    
+
     // compile command used to compile foreign language
     String cmpCommand;
 
-    // 
+    //
     String fcnFormat;
 
-    // 
+    //
     String fcnFormatInArgs;
 
-    // 
+    //
     String fcnFormatOutArgs;
 
     // for now just simple solution, type is used as length
-    KeyWord* dtypeMap;
+    Keyword* dtypeMap;
     int dtypeMapLen;
-
 };
 
-struct ImportStatement : SyntaxNode {
+struct ImportStatement {
+    SyntaxNode base;
 
     // name of the importing file
     String fname;
 
     // defines how the file file content is wrapped
     // for now only KW_NAMESPACE, -1 is used for no wrapp
-    KeyWordType keyWord;
+    KeywordType keyword;
 
     // additional parrameter for ketWord
     // for KW_NAMESPACE its the name of the namespace
@@ -1023,6 +662,7 @@ struct ImportStatement : SyntaxNode {
 
     // root scope of the imports file
     // Scope* root;
+};
 
 
 
@@ -1030,186 +670,371 @@ struct ImportStatement : SyntaxNode {
 // NODE REGISTRY
 // ===
 
-// contain references to nodes in linear way
-// so validator dont have to traverse tree that much
-namespace Reg {
+struct Foo {
 
-    constexpr size_t dataSize = 26;
-
-    // ))
-    extern "C" union {
-        // TODO : think of better name
-        DArray::Container data[dataSize];
-
-        struct {
-            DArrayLangDef              langDefs;
-            DArrayCodeBlock            codeBlocks;
-            DArrayForeignFunction      foreignFunctions;
-            DArrayVariable             variables;
-            DArrayVariable             fcnCalls;
-            DArrayFunction             fcns;
-            DArrayVariableDefinition   customDataTypesReferences;
-            DArrayVariableAssignment   variableAssignments;
-            DArrayVariable             cmpTimeVars;
-            DArrayVariable             arrays;
-            DArrayLoop                 loops;
-            DArrayLabel                labels;
-            DArrayVariable             branchExpressions;
-            DArrayStatement            statements;
-            DArrayVariableDefinition   initializations;
-            DArrayReturnStatement      returnStatements;
-            DArraySwitchCase           switchCases;
-            DArrayVariableDefinition   variableDefinitions;
-            DArrayErrorSet             customErrors;
-            DArrayUnion                unions;
-            DArraySlice                slices;
-            DArrayVariableAssignment   arraysAllocations;
-            DArrayImportStatement      imports;
-            DArrayTypeDefinition       customDataTypes;
-            DArrayEnumerator           enumerators;
-            DArrayGotoStatement        gotos;
-        };
+    static struct {
+    union {
+        int asdasd;
+        int dsadsa;
+    };
     };
 
-    void init();
+};
 
-    namespace Node {
+// declared as struct as we may need to provide possibility
+// to the 'user' to sotre the registers after compilation
+// and start the new one
+struct _RegMemory {
 
-        Scope*              initScope();
-        Namespace*          initNamespace();
-        Using*              initUsing();
-        CodeBlock*          initCodeBlock();
-        Enumerator*         initEnumerator();
-        Statement*          initStatement();
-        VariableDefinition* initVariableDefinition();
-        VariableAssignment* initVariableAssignment();
-        Variable*           initVariable();
-        Function*           initFunction();
-        ForeignFunction*    initForeignFunction();
-        Branch*             initBranch();
-        SwitchCase*         initSwitchCase();
-        WhileLoop*          initWhileLoop();
-        ForLoop*            initForLoop();
-        Loop*               initLoop();
-        ReturnStatement*    initReturnStatement();
-        ContinueStatement*  initContinueStatement();
-        BreakStatement*     initBreakStatement();
-        GotoStatement*      initGotoStatement();
-        Label*              initLabel();
-        TypeDefinition*     initTypeDefinition();
-        Union*              initUnion();
-        ErrorSet*           initErrorSet();
-        ImportStatement*    initImportStatement();
+    static void init();
 
-        FunctionCall*           initFunctionCall();
-        OperationExpression*    initOperationExpression();
-        UnaryExpression*        initUnaryExpression();
-        BinaryExpression*       initBinaryExpression();
-        TernaryExpression*      initTernaryExpression();
-        Catch*                  initCatch();
-        Slice*                  initSlice();
+    static constexpr size_t dataSize = 26;
 
-        Pointer* initPointer();
-        Array* initArray();
-        FunctionPrototype* initFunctionPrototype();
-        ArrayInitialization* initArrayInitialization();
-        StringInitialization* initStringInitialization();
-        TypeInitialization* initTypeInitialization();
-        QualifiedName* initQualifiedName();
+    // contain references to nodes in linear way
+    // so validator dont have to traverse tree that much
+    union {
 
-        Scope*              copy(Scope* node);
-        Namespace*          copy(Namespace* node);
-        Using*              copy(Using* node);
-        CodeBlock*          copy(CodeBlock* node);
-        Enumerator*         copy(Enumerator* node);
-        Statement*          copy(Statement* node);
-        VariableDefinition* copy(VariableDefinition* node);
-        VariableAssignment* copy(VariableAssignment* node);
-        Variable*           copy(Variable* node);
-        Function*           copy(Function* node);
-        ForeignFunction*    copy(ForeignFunction* node);
-        Branch*             copy(Branch* node);
-        SwitchCase*         copy(SwitchCase* node);
-        WhileLoop*          copy(WhileLoop* node);
-        ForLoop*            copy(ForLoop* node);
-        Loop*               copy(Loop* node);
-        ReturnStatement*    copy(ReturnStatement* node);
-        ContinueStatement*  copy(ContinueStatement* node);
-        BreakStatement*     copy(BreakStatement* node);
-        GotoStatement*      copy(GotoStatement* node);
-        Label*              copy(Label* node);
-        TypeDefinition*     copy(TypeDefinition* node);
-        Union*              copy(Union* node);
-        ErrorSet*           copy(ErrorSet* node);
-        ImportStatement*    copy(ImportStatement* node);
+        // TODO : think of better name
+        DArray::Container          data[dataSize];
 
-        FunctionCall*           copy(FunctionCall* node);
-        OperationExpression*    copy(OperationExpression* node);
-        UnaryExpression*        copy(UnaryExpression* node);
-        BinaryExpression*       copy(BinaryExpression* node);
-        TernaryExpression*      copy(TernaryExpression* node);
+        DArrayLangDef              langDefs;
+        DArrayCodeBlock            codeBlocks;
+        DArrayForeignFunction      foreignFunctions;
+        DArrayVariable             variables;
+        DArrayVariable             fcnCalls;
+        DArrayFunction             fcns;
+        DArrayVariableDefinition   customDataTypesReferences;
+        DArrayVariableAssignment   variableAssignments;
+        DArrayVariable             cmpTimeVars;
+        DArrayVariable             arrays;
+        DArrayLoop                 loops;
+        DArrayLabel                labels;
+        DArrayVariable             branchExpressions;
+        DArrayStatement            statements;
+        DArrayVariableDefinition   initializations;
+        DArrayReturnStatement      returnStatements;
+        DArraySwitchCase           switchCases;
+        DArrayVariableDefinition   variableDefinitions;
+        DArrayErrorSet             customErrors;
+        DArrayUnion                unions;
+        DArraySlice                slices;
+        DArrayVariableAssignment   arraysAllocations;
+        DArrayImportStatement      imports;
+        DArrayTypeDefinition       customDataTypes;
+        DArrayEnumerator           enumerators;
+        DArrayGotoStatement        gotos;
 
-        Variable* copy(Variable* dest, Variable* src);
+    };
 
-    }
+    struct Node {
 
-    namespace Find {
+        static void init(Scope* node);
+        static void init(Namespace* node);
+        static void init(Using* node);
+        static void init(CodeBlock* node);
+        static void init(Enumerator* node);
+        static void init(Statement* node);
+        static void init(VariableDefinition* node);
+        static void init(VariableAssignment* node);
+        static void init(Variable* node);
+        static void init(Function* node);
+        static void init(ForeignFunction* node);
+        static void init(Branch* node);
+        static void init(SwitchCase* node);
+        static void init(WhileLoop* node);
+        static void init(ForLoop* node);
+        static void init(Loop* node);
+        static void init(ReturnStatement* node);
+        static void init(ContinueStatement* node);
+        static void init(BreakStatement* node);
+        static void init(GotoStatement* node);
+        static void init(Label* node);
+        static void init(TypeDefinition* node);
+        static void init(Union* node);
+        static void init(ErrorSet* node);
+        static void init(ImportStatement* node);
 
-        void* generic(DArray::Container* arr, String* name, MemberOffset mName);
-        void* generic(Scope* scope, String* name, MemberOffset mName, MemberOffset mArray);
+        static void init(FunctionCall* node);
+        static void init(OperationExpression* node);
+        static void init(UnaryExpression* node);
+        static void init(BinaryExpression* node);
+        static void init(TernaryExpression* node);
+        static void init(Catch* node);
+        static void init(Slice* node);
+
+        static void init(Pointer* node);
+        static void init(Array* node);
+        static void init(FunctionPrototype* node);
+        static void init(ArrayInitialization* node);
+        static void init(StringInitialization* node);
+        static void init(TypeInitialization* node);
+        static void init(QualifiedName* node);
+
+        static Scope*              initScope();
+        static Namespace*          initNamespace();
+        static Using*              initUsing();
+        static CodeBlock*          initCodeBlock();
+        static Enumerator*         initEnumerator();
+        static Statement*          initStatement();
+        static VariableDefinition* initVariableDefinition();
+        static VariableAssignment* initVariableAssignment();
+        static Variable*           initVariable();
+        static Function*           initFunction();
+        static ForeignFunction*    initForeignFunction();
+        static Branch*             initBranch();
+        static SwitchCase*         initSwitchCase();
+        static WhileLoop*          initWhileLoop();
+        static ForLoop*            initForLoop();
+        static Loop*               initLoop();
+        static ReturnStatement*    initReturnStatement();
+        static ContinueStatement*  initContinueStatement();
+        static BreakStatement*     initBreakStatement();
+        static GotoStatement*      initGotoStatement();
+        static Label*              initLabel();
+        static TypeDefinition*     initTypeDefinition();
+        static Union*              initUnion();
+        static ErrorSet*           initErrorSet();
+        static ImportStatement*    initImportStatement();
+
+        static FunctionCall*        initFunctionCall();
+        static OperationExpression* initOperationExpression();
+        static UnaryExpression*     initUnaryExpression();
+        static BinaryExpression*    initBinaryExpression();
+        static TernaryExpression*   initTernaryExpression();
+        static Catch*               initCatch();
+        static Slice*               initSlice();
+
+        static Pointer*              initPointer();
+        static Array*                initArray();
+        static FunctionPrototype*    initFunctionPrototype();
+        static ArrayInitialization*  initArrayInitialization();
+        static StringInitialization* initStringInitialization();
+        static TypeInitialization*   initTypeInitialization();
+        static QualifiedName*        initQualifiedName();
+
+        static Scope*              copy(Scope* node);
+        static Namespace*          copy(Namespace* node);
+        static Using*              copy(Using* node);
+        static CodeBlock*          copy(CodeBlock* node);
+        static Enumerator*         copy(Enumerator* node);
+        static Statement*          copy(Statement* node);
+        static VariableDefinition* copy(VariableDefinition* node);
+        static VariableAssignment* copy(VariableAssignment* node);
+        static Variable*           copy(Variable* node);
+        static Function*           copy(Function* node);
+        static ForeignFunction*    copy(ForeignFunction* node);
+        static Branch*             copy(Branch* node);
+        static SwitchCase*         copy(SwitchCase* node);
+        static WhileLoop*          copy(WhileLoop* node);
+        static ForLoop*            copy(ForLoop* node);
+        static Loop*               copy(Loop* node);
+        static ReturnStatement*    copy(ReturnStatement* node);
+        static ContinueStatement*  copy(ContinueStatement* node);
+        static BreakStatement*     copy(BreakStatement* node);
+        static GotoStatement*      copy(GotoStatement* node);
+        static Label*              copy(Label* node);
+        static TypeDefinition*     copy(TypeDefinition* node);
+        static Union*              copy(Union* node);
+        static ErrorSet*           copy(ErrorSet* node);
+        static ImportStatement*    copy(ImportStatement* node);
+
+        static FunctionCall*           copy(FunctionCall* node);
+        static OperationExpression*    copy(OperationExpression* node);
+        static UnaryExpression*        copy(UnaryExpression* node);
+        static BinaryExpression*       copy(BinaryExpression* node);
+        static TernaryExpression*      copy(TernaryExpression* node);
+
+        static Variable* copy(Variable* dest, Variable* src);
+
+    };
+    Node Node;
+
+    struct Find {
+
+        static void* generic(DArray::Container* arr, String* name, MemberOffset mName);
+        static void* generic(Scope* scope, String* name, MemberOffset mName, MemberOffset mArray);
 
 
         // Non-dynamic arrays usually don't occur, as the tree has to be ready
         // to be modified at any moment, so I won't predefine them.
-        Variable* inArray(Variable* arr, int arrLen, String* name);
+        static Variable* inArray(Variable* arr, int arrLen, String* name);
 
         // Explicitly declared DArray find functions to reduce a bit of verbosity
         // and add some type safety
-        Variable*           inArray(DArrayVariable* arr, String* name);
-        Function*           inArray(DArrayFunction* arr, String* name);
-        Enumerator*         inArray(DArrayEnumerator* arr, String* name);
-        Namespace*          inArray(DArrayNamespace* arr, String* name);
-        Union*              inArray(DArrayUnion* arr, String* name);
-        ErrorSet*           inArray(DArrayErrorSet* arr, String* name);
-        TypeDefinition*     inArray(DArrayTypeDefinition* arr, String* name);
-        Label*              inArray(DArrayLabel* arr, String* name);
-        GotoStatement*      inArray(DArrayGotoStatement* arr, String* name);
-        Using*              inArray(DArrayUsing* arr, String* name);
-        ImportStatement*    inArray(DArrayImportStatement* arr, String* name);
-        CodeBlock*          inArray(DArrayCodeBlock* arr, String* name);
-        ForeignFunction*    inArray(DArrayForeignFunction* arr, String* name);
-        VariableDefinition* inArray(DArrayVariableDefinition* arr, String* name);
+        static Variable*           inArray(DArrayVariable* arr, String* name);
+        static Function*           inArray(DArrayFunction* arr, String* name);
+        static Enumerator*         inArray(DArrayEnumerator* arr, String* name);
+        static Namespace*          inArray(DArrayNamespace* arr, String* name);
+        static Union*              inArray(DArrayUnion* arr, String* name);
+        static ErrorSet*           inArray(DArrayErrorSet* arr, String* name);
+        static TypeDefinition*     inArray(DArrayTypeDefinition* arr, String* name);
+        static Label*              inArray(DArrayLabel* arr, String* name);
+        static GotoStatement*      inArray(DArrayGotoStatement* arr, String* name);
+        static Using*              inArray(DArrayUsing* arr, String* name);
+        static ImportStatement*    inArray(DArrayImportStatement* arr, String* name);
+        static CodeBlock*          inArray(DArrayCodeBlock* arr, String* name);
+        static ForeignFunction*    inArray(DArrayForeignFunction* arr, String* name);
+        static VariableDefinition* inArray(DArrayVariableDefinition* arr, String* name);
 
         // And 'full' functions that can be used to get the index. In fact, these alone
         // are sufficient, but I feel having both versions is more convenient.
         // There's something about going down the rabbit hole...
-        int inArray(DArrayVariable* arr, String* name, Variable** out);
-        int inArray(DArrayFunction* arr, String* name, Function** out);
-        int inArray(DArrayEnumerator* arr, String* name, Enumerator** out);
-        int inArray(DArrayNamespace* arr, String* name, Namespace** out);
-        int inArray(DArrayUnion* arr, String* name, Union** out);
-        int inArray(DArrayErrorSet* arr, String* name, ErrorSet** out);
-        int inArray(DArrayTypeDefinition* arr, String* name, TypeDefinition** out);
-        int inArray(DArrayLabel* arr, String* name, Label** out);
-        int inArray(DArrayGotoStatement* arr, String* name, GotoStatement** out);
-        int inArray(DArrayUsing* arr, String* name, Using** out);
-        int inArray(DArrayImportStatement* arr, String* name, ImportStatement** out);
-        int inArray(DArrayCodeBlock* arr, String* name, CodeBlock** out);
-        int inArray(DArrayForeignFunction* arr, String* name, ForeignFunction** out);
-        int inArray(DArrayVariableDefinition* arr, String* name, VariableDefinition** out);
+        static int inArray(DArrayVariable* arr, String* name, Variable** out);
+        static int inArray(DArrayFunction* arr, String* name, Function** out);
+        static int inArray(DArrayEnumerator* arr, String* name, Enumerator** out);
+        static int inArray(DArrayNamespace* arr, String* name, Namespace** out);
+        static int inArray(DArrayUnion* arr, String* name, Union** out);
+        static int inArray(DArrayErrorSet* arr, String* name, ErrorSet** out);
+        static int inArray(DArrayTypeDefinition* arr, String* name, TypeDefinition** out);
+        static int inArray(DArrayLabel* arr, String* name, Label** out);
+        static int inArray(DArrayGotoStatement* arr, String* name, GotoStatement** out);
+        static int inArray(DArrayUsing* arr, String* name, Using** out);
+        static int inArray(DArrayImportStatement* arr, String* name, ImportStatement** out);
+        static int inArray(DArrayCodeBlock* arr, String* name, CodeBlock** out);
+        static int inArray(DArrayForeignFunction* arr, String* name, ForeignFunction** out);
+        static int inArray(DArrayVariableDefinition* arr, String* name, VariableDefinition** out);
 
-        Variable*       inScopeVariable(Scope* scope, String* name);
-        Function*       inScopeFunction(Scope* scope, String* name);
-        Union*          inScopeUnion(Scope* scope, String* name);
-        Label*          inScopeLabel(Scope* scope, String* name);
-        ErrorSet*       inScopeErrorSet(Scope* scope, String* name);
-        TypeDefinition* inScopeTypeDefinition(Scope* scope, String* name);
-        Enumerator*     inScopeEnumerator(Scope* scope, String* name);
-        Namespace*      inScopeNamespace(Scope* scope, String* name);
-        GotoStatement*  inScopeGotoStatement(Scope* scope, String* name);
+        static Variable*       inScopeVariable(Scope* scope, String* name);
+        static Function*       inScopeFunction(Scope* scope, String* name);
+        static Union*          inScopeUnion(Scope* scope, String* name);
+        static Label*          inScopeLabel(Scope* scope, String* name);
+        static ErrorSet*       inScopeErrorSet(Scope* scope, String* name);
+        static TypeDefinition* inScopeTypeDefinition(Scope* scope, String* name);
+        static Enumerator*     inScopeEnumerator(Scope* scope, String* name);
+        static Namespace*      inScopeNamespace(Scope* scope, String* name);
+        static GotoStatement*  inScopeGotoStatement(Scope* scope, String* name);
 
-    }
+    };
+    Find Find;
 
 };
 
-void freeNodeRecursively(SyntaxNode* node);
+extern _RegMemory Reg;
+
+
+
+// ======================================
+// INTERNAL PRE-DEFINED NODES
+// ===
+
+namespace Internal {
+
+    const char IFS_PRINTF[] = "printf";
+    const char IFS_ALLOC[]  = "malloc";
+    const char IFS_FREE[]   = "free";
+
+    const char IVS_NULL[]    = "null";
+    const char IVS_TRUE[]    = "true";
+    const char IVS_FALSE[]   = "false";
+
+    enum VariableType {
+      IV_NULL,
+      IV_TRUE,
+      IV_FALSE,
+      IV_COUNT
+    };
+
+    enum FunctionType : uint32_t {
+        IF_PRINTF = 1,
+        IF_ALLOC  = 2,
+        IF_FREE   = 3,
+        IF_COUNT  = 4,
+    };
+
+    static Variable variables[IV_COUNT];
+    static Function functions[IF_COUNT];
+
+    extern Variable* zero;
+
+    // each bit corresponds with the InternaFunction enum
+    // indicates if function was used at least once in code
+    static uint64_t functionUsed = 0;
+
+    void init();
+
+};
+
+
+
+// ======================================
+// NODE ALLOCATOR
+// ===
+
+constexpr int nodeTypeSize[AT_COUNT] = {
+    sizeof(Scope),
+    sizeof(VariableDefinition),
+    sizeof(VariableAssignment),
+    sizeof(TypeDefinition),
+    sizeof(TypeInitialization),
+    sizeof(Enumerator),
+    sizeof(Variable),
+    sizeof(Function),
+    sizeof(Branch),
+    sizeof(SwitchCase),
+    sizeof(WhileLoop),
+    sizeof(ForLoop),
+    sizeof(Loop),
+    sizeof(ReturnStatement),
+    sizeof(ContinueStatement),
+    sizeof(BreakStatement),
+    sizeof(GotoStatement),
+    sizeof(Label),
+    sizeof(Namespace),
+    sizeof(Statement),
+    sizeof(CodeBlock),
+    sizeof(ErrorSet),
+    sizeof(Union),
+    sizeof(Using),
+    sizeof(ImportStatement),
+
+    sizeof(uint8_t),
+
+    sizeof(FunctionCall),
+    sizeof(OperationExpression),
+    sizeof(UnaryExpression),
+    sizeof(BinaryExpression),
+    sizeof(TernaryExpression),
+    sizeof(TypeInitialization),
+    sizeof(StringInitialization),
+    sizeof(ArrayInitialization),
+    sizeof(Slice),
+    sizeof(Catch),
+    sizeof(GetLength),
+    sizeof(GetSize),
+
+    sizeof(INamed),
+    sizeof(Pointer),
+    sizeof(Array),
+    sizeof(QualifiedName),
+    sizeof(FunctionPrototype),
+    sizeof(ForeignFunction),
+};
+
+// This is more specific version of the allocator to handle allocations
+// of nodes defined here, so there is an abstraction how each node type
+// is handled.
+// Look at allocator.h to for the 'actual' allocator that this is based on
+#if !defined(_CUSTOM_ALLOCATOR_)
+
+    inline Arena::Container* nalc;
+
+    inline void initNAlloc(Arena::Container* allocator) {
+        nalc = alc;
+    }
+
+    inline void releaseNAlloc(Arena::Container* allocator) {
+    }
+
+    inline void* nalloc(Arena::Container* allocator, AllocType type) {
+        return alloc(allocator, nodeTypeSize[type]);
+    }
+
+    inline void* nalloc(Arena::Container* allocator, AllocType type, size_t count) {
+        return alloc(allocator, nodeTypeSize[type] * count);
+    }
+
+    inline void ndealloc(Arena::Container* allocator, void* ptr) {
+
+    }
+
+#endif

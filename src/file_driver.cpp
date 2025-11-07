@@ -1,10 +1,9 @@
-// #pragma once
+#include "file_driver.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "file_driver.h"
+#include <filesystem>
 
 namespace FileDriver {
 
@@ -24,7 +23,7 @@ namespace FileDriver {
             return 0;
         }
     #else
-        #include <sys/stat.h> 
+        #include <sys/stat.h>
         int newDir(char* const path) {
             return mkdir(path, 0777);
         }
@@ -37,9 +36,9 @@ namespace FileDriver {
             buffer[i] = name[i];
         }
         buffer[nameLen] = '\0';
-        
+
         FILE* file = fopen(buffer, mode);
-        
+
         return file;
 
     }
@@ -49,7 +48,7 @@ namespace FileDriver {
         newDir(dirName);
 
         char buffer[MAX_FILE_NAME_LENGTH];
-        
+
         int i = 0;
         for (; i < MAX_FILE_NAME_LENGTH; i++) {
             const char ch = dirName[i];
@@ -78,7 +77,7 @@ namespace FileDriver {
         // TODO: NULL CHECK
 
         FILE* file = fopen(name, "rb");
-        if (!file) return 1;
+        if (!file) return -1;
 
         fseek(file, 0, SEEK_END);
 		const int fileSize = ftell(file);
@@ -86,12 +85,16 @@ namespace FileDriver {
 
         *buffer = (char*) malloc(fileSize + 1);
         fread(*buffer, 1, fileSize + 1, file);
-        
+
         (*buffer)[fileSize] = '\0';
 
         fclose(file);
-        return 0;
+        return fileSize;
 
     }
-    
+
+    int createDirectory(char* const path) {
+        return !std::filesystem::create_directory(path);
+    }
+
 }

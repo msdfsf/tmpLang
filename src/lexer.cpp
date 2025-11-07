@@ -1,11 +1,25 @@
 #include "lexer.h"
+#include "strlib.h"
 #include "error.h"
 #include "syntax.h"
 #include "logger.h"
-#include "utils.h"
+#include "array_list.h"
+
+
 
 // Expects null terminated buffer
 namespace Lex {
+
+    Logger::Type logErr = { .level = Logger::ERROR, .tag = "lexer" };
+
+    // We will push the offsets of each qualified name part here while parsing,
+    // so we can pack the offsets more tightly in the result object,
+    // as we will know their total size in advance.
+    DArray::Container qnameStack;
+
+    void init() {
+        DArray::init(&qnameStack, 32 * 2, sizeof(int));
+    }
 
     const char* toStr(TokenKind token) {
 
@@ -72,7 +86,7 @@ namespace Lex {
 
             default: return "unknown";
         }
-    
+
     }
 
     unsigned int hash(const char* str, int len) {
@@ -88,19 +102,19 @@ namespace Lex {
 
         const unsigned int h = hash(str, len);
         if (h >= KW_TABLE_SIZE) return KW_VOID;
-        
+
         Keyword keyword = (Keyword) keywordTable[h];
-        
+
         const int ans = cstrcmp(keywordStringTable[keyword], String { (char*) str, (uint64_t) len });
         return ans ? keyword : KW_VOID;
 
     }
-    
+
     inline Directive directiveLookup(const char* str, const int len) {
 
         const unsigned int h = hash(str, len) + 1;
         if (h >= KW_TABLE_SIZE) return CD_NONE;
-        
+
         Directive directive = (Directive) directivesTable[h];
 
         const int ans = cstrcmp(directivesStringTable[directive], String { (char*) str, (uint64_t) len });
@@ -134,12 +148,12 @@ namespace Lex {
         return pos;
     }
 
-    // if unterminated comment found returns its start position and marks *err as 1 
+    // if unterminated comment found returns its start position and marks *err as 1
     // (should be premarked to other value), NULL err ignores and just skips to EOF
     static inline Pos skipWhitespacesAndComments(const char* str, Pos pos, int* err) {
 
         while (1) {
-        
+
             const char ch = str[pos.idx];
 
             if (ch == '\n') {
@@ -147,12 +161,12 @@ namespace Lex {
                 pos.idx++;
                 continue;
             }
-            
+
             if (isWhitespaceButNewLine(ch)) {
                 pos.idx++;
                 continue;
             }
-            
+
             if (ch == '/' && str[pos.idx + 1] == '/') {
 
                 pos.idx += 2;
@@ -172,9 +186,9 @@ namespace Lex {
                 }
 
                 continue;
-                
+
             }
-            
+
             if (ch == '/' && str[pos.idx + 1] == '{') {
 
                 pos.idx += 2;
@@ -198,7 +212,7 @@ namespace Lex {
                     } else {
                         pos.idx++;
                     }
-                    
+
                 }
 
                 continue;
@@ -206,7 +220,7 @@ namespace Lex {
             }
 
             return pos;
-        
+
         }
 
     }
@@ -227,8 +241,7 @@ namespace Lex {
         return (ch >= '0' && ch <= '9') || ch == '.' || ch == '-';
     }
 
-    inline int parseIdentifier(char* const str) {
-        
+    inline int parseIdentifier(const char* const str) {
 
         if (!isIdentifierStart(str[0])) return 0;
 
@@ -241,7 +254,7 @@ namespace Lex {
 
     }
 
-    inline TokenDetail parseNumber(char* const str, int* len, uint64_t* out) {
+    inline TokenDetail parseNumber(const char* const str, int* len, uint64_t* out) {
 
         int idx = 0;
 
@@ -264,9 +277,9 @@ namespace Lex {
                     *out = num;
                     return TD_DT_I64;
                 }
-            
+
             }
-        
+
         } else if (tmp == (('b' << 8) + '0')) {
             // int-bin
 
@@ -282,9 +295,9 @@ namespace Lex {
                     *out = num;
                     return TD_DT_I64;
                 }
-            
+
             }
-        
+
         } else {
 
             uint64_t integer = 0;
@@ -302,7 +315,7 @@ namespace Lex {
                     double scale = 0.1;
 
                     while (1) {
-                        
+
                         i++;
 
                         const char ch = str[i];
@@ -332,28 +345,28 @@ namespace Lex {
                     *len = i + 1;
                     *((float_t *) out) = (float_t) integer;
                     return TD_DT_F32;
-                    
+
                 } else if (ch == '_') {
-                    
+
                     if (str[i + 1] == '_') return TD_DT_VOID;
-                    
+
                 } else {
 
                     *len = i;
                     *out = integer;
                     return TD_DT_I64;
-                
+
                 }
-            
+
             }
-        
+
         }
 
         return TD_DT_VOID;
 
     }
 
-    int parseEscapeChar(char* str, int* idx) {
+    int parseEscapeChar(const char* str, int* idx) {
 
         const char ch = str[*idx];
         switch(ch) {
@@ -389,7 +402,7 @@ namespace Lex {
 
     };
 
-    uint64_t parseHexInt(char* const str, int* idx) {
+    uint64_t parseHexInt(const char* const str, int* idx) {
 
         uint64_t num = 0;
         for (int i = 0;; i++) {
@@ -408,12 +421,12 @@ namespace Lex {
 
     }
 
-    inline int parseChar(char* str, int* idx) {
+    inline int parseChar(const char* str, int* idx) {
 
         char ch = str[*idx];
-            
+
         if (ch == ESCAPE_CHAR) {
-            
+
             if (str[*idx + 1] == 'x') {
 
                 int hexLen;
@@ -423,26 +436,26 @@ namespace Lex {
                     return Err::UNEXPECTED_SYMBOL;
                 }
                 idx += hexLen;
-            
+
             } else {
-                
+
                 ch = parseEscapeChar(str, idx);
                 if (ch == -1) {
                     // parseHexInt(str, &idx);
                     // Logger::log(Logger::ERROR, ERR_STR(Err::UNSUPPORTED_ESCAPE_SEQUENCE), span, 1);
                     return Err::UNSUPPORTED_ESCAPE_SEQUENCE;
                 }
-            
+
             }
-        
+
         }
 
         return ch;
 
     }
 
-    int parseCharLiteral(char* const str, int* len, uint64_t* out) {
-        
+    int parseCharLiteral(const char* const str, int* len, uint64_t* out) {
+
         int idx = 0;
         uint64_t tmpOut = 0;
 
@@ -450,7 +463,7 @@ namespace Lex {
         while (1) {
 
             char ch = parseChar(str, &idx);
-            
+
             if (ch == CHAR_LITERAL) break;
             if (ch == EOS) {
                 // Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_END_OF_FILE));
@@ -483,7 +496,7 @@ namespace Lex {
 
     }
 
-    int findStringEnd(char* const str) {
+    int findStringEnd(const char* const str) {
 
         int idx = 0;
 
@@ -499,9 +512,11 @@ namespace Lex {
 
         idx += (str[idx + 1] == RAW_POSTFIX);
 
+        return idx;
+
     }
 
-    int parseStringLiteral(char* const str, int* len, StringInitialization** initOut) {
+    int parseStringLiteral(const char* const str, int* len, StringInitialization** initOut) {
 
         int idx = 0;
 
@@ -512,15 +527,15 @@ namespace Lex {
             if (ch == EOS) return Err::UNEXPECTED_END_OF_FILE;
 
             idx++;
-        
+
         }
 
         const int strLen = idx;
         const int rawStringRequired = (str[idx + 1] == RAW_POSTFIX) ? 1 : 0;
 
-        StringInitialization* init = new StringInitialization;
+        StringInitialization* init = (StringInitialization*) alloc(alc, AT_EXT_STRING_INITIALIZATION);
         init->rawStr = std::string(str, strLen);
-        init->rawPtr = str;
+        init->rawPtr = (char*) str;
         init->rawPtrLen = strLen;
 
         // meh but whatever
@@ -532,8 +547,8 @@ namespace Lex {
 
             int utf8Len;
             int utf8BytesPerChar;
-            char* utf8Str = Utils::encodeUtf8(init->rawStr.c_str(), strLen, &utf8Len, &utf8BytesPerChar);
-            
+            char* utf8Str = Strings::encodeUtf8(init->rawStr.c_str(), strLen, &utf8Len, &utf8BytesPerChar, 1);
+
             if (utf8BytesPerChar != 1) {
                 init->wideStr = utf8Str;
                 init->wideDtype = (DataTypeEnum) (DT_U8 + utf8BytesPerChar - 1);
@@ -542,7 +557,7 @@ namespace Lex {
                 init->wideStr = NULL;
                 init->wideDtype = DT_U8;
             }
-        
+
         }
 
         *len = idx;
@@ -553,17 +568,18 @@ namespace Lex {
     }
 
     // first char already consumed
-    Token parseQualifiedName(Span* const span, char* const str, QualifiedName* const qname, int* outLen) {
+    Token parseQualifiedName(Span* const span, const char* const str, QualifiedName* const qname, int* outLen) {
 
         int idx = 0;
         int len = 1;
         int accLen = 0;
         Token token = { .kind = TK_IDENTIFIER, .detail = 0 };
 
-        qname->name = NULL;
+        qname->buff = NULL;
+        DArray::clear(&qnameStack);
 
         while (1) {
-            
+
             while (isIdentifierChar(str[idx + 1])) {
                 idx++;
                 len++;
@@ -576,16 +592,9 @@ namespace Lex {
                 token.detail = keyword;
             }
 
-            if (qname->name) {
-                INamedLoc* name = new INamedLoc;
-                name->span = NULL;
-                name->name = qname->name;
-                name->nameLen = qname->nameLen;
-                qname->path.push_back(name);
-            }
-
-            qname->name = str + idx - len + 1;
-            qname->nameLen = len;
+            int tmp = idx - len + 1;
+            DArray::push(&qnameStack, &tmp);
+            DArray::push(&qnameStack, &len);
 
             if (!cmpTwoChars(SCOPE_RESOLUTION, str + idx + 1)) {
                 break;
@@ -603,6 +612,29 @@ namespace Lex {
 
         }
 
+        int* data = (int*) qnameStack.buffer;
+
+        if (qnameStack.size - 2 > 0) {
+
+            qname->pathSize = (qnameStack.size - 2) / 2;
+            qname->path = (INamed*) alloc(alc, qname->pathSize);
+
+            for (int i = 0; i < qname->pathSize; i++) {
+                qname->path[i].buff = (char*) str + data[i];
+                qname->path[i].len = data[i + 1];
+            }
+
+        } else {
+
+            qname->pathSize = 0;
+
+        }
+
+        qname->buff = (char*) str + data[qname->pathSize];
+        qname->len = data[qname->pathSize + 1];
+
+        DArray::clear(&qnameStack);
+
         *outLen = accLen + len;
         return token;
 
@@ -611,7 +643,7 @@ namespace Lex {
 
 
     Token tryToken(Span* const span, Token inToken, TokenValue* outVal) {
-        
+
         Pos posStart = span->start;
         Pos posEnd = span->end;
 
@@ -622,7 +654,7 @@ namespace Lex {
         span->end = posEnd;
 
         return { .kind = TK_NONE };
-    
+
     }
 
     Token tryKeyword(Span* const span, Keyword keyword) {
@@ -658,7 +690,7 @@ namespace Lex {
 
     // n should be >0, calling with 1 is equivalent of calling peekToken
     Token peekNthToken(Span* const span, TokenValue* val, unsigned int n) {
-    
+
         Token token;
 
         Pos posStart = span->start;
@@ -669,7 +701,7 @@ namespace Lex {
             token = nextToken(span, val);
             i++;
         }
-    
+
         span->start = posStart;
         span->end = posEnd;
 
@@ -680,13 +712,13 @@ namespace Lex {
 
 
     // span start and end will be set to token boundaries
-    // uses span->end as current position, so span->end.idx + 1 is the 
+    // uses span->end as current position, so span->end.idx + 1 is the
     // functions first char to parse
     Token nextToken(Span* const span, TokenValue* val) {
 
         Token token;
-        
-        char* const str = span->str;
+
+        const char* const str = span->str;
 
         int err = 0;
         span->end.idx++;
@@ -694,7 +726,7 @@ namespace Lex {
         if (err) {
             span->start = startPos;
             span->end = startPos;
-            Logger::log(Logger::ERROR, "Unterminated comment!", span, 1);
+            Logger::log(logErr, "Unterminated comment!", span, 1);
             return toToken(Err::UNTERMINATED_COMMENT);
         }
 
@@ -709,7 +741,7 @@ namespace Lex {
                 uint64_t ch = 0;
                 const int size = parseCharLiteral(str + startPos.idx + 1, &len, &ch);
                 if (size < 0) {
-                    Logger::log(Logger::ERROR, "Wrong char literal format!", span, 1);
+                    Logger::log(logErr, "Wrong char literal format!", span, 1);
                     return toToken(size);
                 }
 
@@ -719,9 +751,9 @@ namespace Lex {
 
                 len += 2;
                 break;
-                
+
             }
-            
+
             case STRING_LITERAL: {
 
                 if (val) {
@@ -733,19 +765,19 @@ namespace Lex {
                 }
 
                 if (err < 0) {
-                    Logger::log(Logger::ERROR, "Wrong string literal format!", span, 1);
+                    Logger::log(logErr, "Wrong string literal format!", span, 1);
                     return toToken(err);
                 }
 
                 token.kind = TK_STRING;
-                
+
                 len += 2;
                 break;
-                
+
             }
 
             case '+': {
-                    
+
                 if (str[startPos.idx + 1] == '+') {
                     len = 2;
                     token = { .kind = TK_OP_INCREMENT };
@@ -754,11 +786,11 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
 
             case '-': {
-                    
+
                 if (str[startPos.idx + 1] == '-') {
                     len = 2;
                     token = { .kind = TK_OP_DECREMENT };
@@ -770,18 +802,18 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
 
             case '*': {
-                    
+
                 token = { .kind = TK_OP_MULTIPLICATION };
                 break;
-                
+
             }
-                
+
             case '!': {
-                    
+
                 if (str[startPos.idx + 1] == '=') {
                     len = 2;
                     token = { .kind = TK_OP_BOOL_NOT_EQUAL };
@@ -790,25 +822,25 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
 
             case '/': {
 
                 token = { .kind = TK_OP_DIVISION };
                 break;
-                
+
             }
 
             case '%': {
-                    
+
                 token = { .kind = TK_OP_MODULO };
                 break;
-                
+
             }
-                
+
             case '<': {
-                    
+
                 if (str[startPos.idx + 1] == '=') {
                     len = 2;
                     token = { .kind = TK_OP_LESS_THAN_OR_EQUAL };
@@ -820,11 +852,11 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
-                
+
             case '>': {
-                    
+
                 if (str[startPos.idx + 1] == '=') {
                     len = 2;
                     token = { .kind = TK_OP_GREATER_THAN_OR_EQUAL };
@@ -836,11 +868,11 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
 
             case '=': {
-                    
+
                 if (str[startPos.idx + 1] == '=') {
                     len = 2;
                     token = { .kind = TK_OP_BOOL_EQUAL };
@@ -849,11 +881,11 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
 
             case '&': {
-                    
+
                 if (str[startPos.idx + 1] == '&') {
                     len = 2;
                     token = { .kind = TK_OP_BOOL_AND };
@@ -862,11 +894,11 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
-                
+
             case '|': {
-                    
+
                 if (str[startPos.idx + 1] == '|') {
                     len = 2;
                     token = { .kind = TK_OP_BOOL_OR };
@@ -875,28 +907,28 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
 
             case '^': {
-                    
+
                 token = { .kind = TK_OP_XOR };
                 break;
-                
+
             }
 
             case '~': {
-                    
+
                 token = { .kind = TK_OP_NEGATION };
                 break;
-                
+
             }
-                
+
             case '#': {
-                    
+
                 const int len = parseIdentifier(str + startPos.idx + 1);
                 Directive directive = directiveLookup(str, len);
-                    
+
                 if (directive > 0) {
                     token.detail = TD_CD_BEGIN + directive + 1;
                 } else {
@@ -908,7 +940,7 @@ namespace Lex {
                 break;
 
             }
-                
+
             case '.': {
 
                 if (str[startPos.idx + 1] == '.') {
@@ -919,11 +951,11 @@ namespace Lex {
                 }
 
                 break;
-                
+
             }
-                
+
             case ':': {
-                    
+
                 if (str[startPos.idx + 1] == ':') {
                     len = 2;
                     token = { .kind = TK_SCOPE_RESOLUTION };
@@ -934,89 +966,89 @@ namespace Lex {
                 break;
 
             }
-                
+
             case ';': {
-                    
+
                 token = { .kind = TK_STATEMENT_END };
                 break;
-                
+
             }
-                
+
             case '{': {
-                    
+
                 token = { .kind = TK_SCOPE_BEGIN };
                 break;
-                
+
             }
-                
+
             case '}': {
-                    
+
                 token = { .kind = TK_SCOPE_END };
                 break;
-                
+
             }
-                
+
             case '[': {
-                    
+
                 token = { .kind = TK_ARRAY_BEGIN };
                 break;
-                
+
             }
-                
+
             case ']': {
-                    
+
                 token = { .kind = TK_ARRAY_END };
                 break;
-                
+
             }
-                
+
             case '_': {
-                    
+
                 token = { .kind = TK_SKIP };
                 break;
-                
+
             }
-                
+
             case ',': {
-                    
+
                 token = { .kind = TK_LIST_SEPARATOR };
                 break;
-                
+
             }
 
             case '(': {
-                    
+
                 token = { .kind = TK_PARENTHESIS_BEGIN };
                 break;
-                
+
             }
 
             case ')': {
-                    
+
                 token = { .kind = TK_PARENTHESIS_END };
                 break;
-                
+
             }
 
             case EOS: {
-                    
+
                 token = { .kind = TK_END };
                 break;
-                
+
             }
-                
-            default: { 
-                    
+
+            default: {
+
                 if (isIdentifierStart(ch)) {
 
                     QualifiedName stackName;
-                    QualifiedName* name = val ? new QualifiedName() : &stackName;
+                    QualifiedName* name = val ? ((QualifiedName*) nalloc(nalc, AT_QUALIFIED_NAME)) : &stackName;
                     token = parseQualifiedName(span, str + startPos.idx, name, &len);
 
                     if (val) val->any = (void*) name;
 
                 } else if (isNumberStart(ch)) {
-                    
+
                     len = 0;
                     uint64_t num = 0;
                     TokenDetail dtype = parseNumber(str + startPos.idx, &len, &num);
@@ -1030,7 +1062,7 @@ namespace Lex {
                 break;
 
             }
-            
+
         }
 
         span->start = startPos;
@@ -1043,19 +1075,19 @@ namespace Lex {
 
     Token nextFileName(Span* const span, TokenValue* val) {
 
-        char* const str = span->str;
+        const char* const str = span->str;
 
         int err = 0;
         span->end.idx++;
         Pos startPos = skipWhitespacesAndComments(str, span->end, &err);
         if (err) {
             span->start = startPos;
-            Logger::log(Logger::ERROR, "Unterminated comment!", span, 1);
+            Logger::log(logErr, "Unterminated comment!", span, 1);
             return toToken(Err::UNTERMINATED_COMMENT);
         }
 
-        int idx = span->end.idx;
-        
+        int idx = startPos.idx;
+
         while (1) {
 
             const char ch = str[idx];
@@ -1068,11 +1100,12 @@ namespace Lex {
 
         }
 
-        val->str = new String(str, idx - span->end.idx);
-        
+        val->str = (String*) nalloc(nalc, AT_INAMED);
+        *(val->str) = String((char*) str + startPos.idx, idx - startPos.idx);
+
         span->start = startPos;
         span->end.ln = startPos.ln;
-        span->end.idx = startPos.idx + idx - 1;
+        span->end.idx = idx - 1;
 
         return { .kind = TK_FILE };
 
@@ -1080,7 +1113,7 @@ namespace Lex {
 
     Token peekTokenSkipDecorators(Span* const span, TokenValue* val) {
 
-        char* const str = span->str;
+        const char* const str = span->str;
         int idx = span->end.idx + 1;
 
         Token token;
@@ -1101,7 +1134,7 @@ namespace Lex {
 
                     if (ch == ARRAY_END && cnt <= 1) break;
                     if (ch == ARRAY_BEGIN) cnt++;
-                
+
                 }
 
                 continue;
@@ -1121,12 +1154,36 @@ namespace Lex {
 
     }
 
+    // TODO
+    int findClosureEnd(char* const str, const int endCh) {
+
+        int i = 1;
+        int toClose = 1;
+        const int bgCh = str[endCh];
+        while (1) {
+
+            const int ch = str[i];
+            if (ch == bgCh) {
+                toClose++;
+            } else if (ch == endCh) {
+                if (toClose == 1) return i;
+                toClose--;
+            } else if (ch == EOF) {
+                return 0;
+            }
+
+            i++;
+
+        }
+
+    }
+
     int findBlockEnd(Span* const span, const char bCh, const char eCh) {
-        
+
         int ln = 0;
         int idx = span->end.idx + 1;
         Pos startPos = { .idx = idx, .ln = span->start.ln };
-        char* const str = span->str;
+        const char* const str = span->str;
 
         int toClose = 1;
 
@@ -1140,7 +1197,7 @@ namespace Lex {
                 toClose++;
             } else if (ch == eCh) {
                 toClose--;
-                if (toClose <= 0) break;            
+                if (toClose <= 0) break;
             } else if (ch == '\0') {
                 span->end.ln += ln;
                 span->end.idx = idx;
@@ -1148,7 +1205,7 @@ namespace Lex {
             }
 
             idx++;
-        
+
         }
 
         const int len = idx - span->end.idx - 1;

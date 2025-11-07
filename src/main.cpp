@@ -9,6 +9,10 @@
 
 #define OPTION_SYMBOL '-'
 
+Logger::Type logErr = { .level = Logger::ERROR, .tag = "main" };
+Logger::Type logInf = { .level = Logger::INFO, .tag = NULL };
+Logger::Type logPln = { .level = Logger::PLAIN, .tag = NULL };
+
 int calledFromBat = 0;
 
 int run ();
@@ -22,7 +26,7 @@ int parseArgs(char* argv[], int argc) {
 
 		if (argv[i][0] != OPTION_SYMBOL) {
 			if (wasImplicitOption) {
-				Logger::log(Logger::ERROR, "Implicit option was already set!\n");
+				Logger::log(logErr, "Implicit option was already set!\n");
 				return -1;
 			}
 			wasImplicitOption = 1;
@@ -37,7 +41,7 @@ int parseArgs(char* argv[], int argc) {
 			// output lang
 
 			if (i + 1 > argc) {
-				Logger::log(Logger::ERROR, "Argument requaried for option -ol!\nFollowing options are avaliable: c, asm, itself_console\n");
+				Logger::log(logErr, "Argument requaried for option -ol!\nFollowing options are avaliable: c, asm, itself_console\n");
 				return -1;
 			}
 
@@ -56,7 +60,7 @@ int parseArgs(char* argv[], int argc) {
 				continue;
 			}
 
-			Logger::log(Logger::ERROR, "Unknown language!\nFollowing options are avaliable: c, asm, itself_console\n");
+			Logger::log(logErr, "Unknown language!\nFollowing options are avaliable: c, asm, itself_console\n");
 
 			return -1; // TODO : add error
 
@@ -64,7 +68,7 @@ int parseArgs(char* argv[], int argc) {
 			// output file
 
 			if (i + 1 > argc) {
-				Logger::log(Logger::ERROR, "Argument requaried for option -of!\nFile has to be without the extension!\n");
+				Logger::log(logErr, "Argument requaried for option -of!\nFile has to be without the extension!\n");
 				return -1;
 			}
 
@@ -77,7 +81,7 @@ int parseArgs(char* argv[], int argc) {
 			// output file
 
 			if (i + 1 > argc) {
-				Logger::log(Logger::ERROR, "Argument requaried for option -od!\n");
+				Logger::log(logErr, "Argument requaried for option -od!\n");
 				return -1;
 			}
 
@@ -93,16 +97,16 @@ int parseArgs(char* argv[], int argc) {
 		} else if (!strcmp(option, "h")) {
 			// help
 
-			Logger::log(Logger::INFO, "Compiler options:\n");
-			Logger::log(Logger::INFO, "-ol (output lang):\n");
-			Logger::log(Logger::INFO, "\toptions: c\n");
-			Logger::log(Logger::INFO, "\tdefault: c\n");
-			Logger::log(Logger::INFO, "-of (output file):\n");
-			Logger::log(Logger::INFO, "\tfilename without the extension the executable will be saved to\n");
-			Logger::log(Logger::INFO, "-od (output directory):\n");
-			Logger::log(Logger::INFO, "\tdirname translated files of the language specified in -ol will be saved to\n");
-			Logger::log(Logger::INFO, "-h (help):\n");
-			Logger::log(Logger::INFO, "\tprints help\n");
+			Logger::log(logInf, "Compiler options:\n");
+			Logger::log(logInf, "-ol (output lang):\n");
+			Logger::log(logInf, "\toptions: c\n");
+			Logger::log(logInf, "\tdefault: c\n");
+			Logger::log(logInf, "-of (output file):\n");
+			Logger::log(logInf, "\tfilename without the extension the executable will be saved to\n");
+			Logger::log(logInf, "-od (output directory):\n");
+			Logger::log(logInf, "\tdirname translated files of the language specified in -ol will be saved to\n");
+			Logger::log(logInf, "-h (help):\n");
+			Logger::log(logInf, "\tprints help\n");
 
 			return -1;
 
@@ -112,7 +116,7 @@ int parseArgs(char* argv[], int argc) {
 
 		} else {
 
-			Logger::log(Logger::ERROR, "Unknown option!\n");
+			Logger::log(logErr, "Unknown option!\n");
 			return -1;
 		
 		}
@@ -130,10 +134,10 @@ int main(int argc, char* argv[]) {
 	int atLeastOneLangSet = 0;
 	
 	if (argc < 2) {
-		Logger::log(Logger::PLAIN, "You need to specify command!\n");
-		Logger::log(Logger::PLAIN, "There are following commands available: run, build.\n");
-		Logger::log(Logger::PLAIN, "To get more information about each command use -h option as follows:\t run -h\n");
-		Logger::log(Logger::PLAIN, "To just compile and run the file 'file_name' use:\t run file_name\n");
+		Logger::log(logPln, "You need to specify command!\n");
+		Logger::log(logPln, "There are following commands available: run, build.\n");
+		Logger::log(logPln, "To get more information about each command use -h option as follows:\t run -h\n");
+		Logger::log(logPln, "To just compile and run the file 'file_name' use:\t run file_name\n");
 		return -1;
 	}
 
@@ -145,7 +149,7 @@ int main(int argc, char* argv[]) {
 	} else if (!strcmp(command, "translate")) {
 		Compiler::command = Compiler::TRANSLATE;
 	} else {
-		Logger::log(Logger::ERROR, "Unknown command!\n");
+		Logger::log(logErr, "Unknown command!\n");
 		return -1;
 	}
 
@@ -197,14 +201,14 @@ int main(int argc, char* argv[]) {
 
 	if (Compiler::command == Compiler::RUN) {
 		
-		Logger::log(Logger::INFO, "Running the executable...\n");
+		Logger::log(logInf, "Running the executable...\n");
 		
 		if (calledFromBat) {
 			return 14;			
 		}
 
 		if(run() < 0) {
-			Logger::log(Logger::ERROR, "Creation of new process failed!\n");
+			Logger::log(logErr, "Creation of new process failed!\n");
 			return -1;	
 		}
 		

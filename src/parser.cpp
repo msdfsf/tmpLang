@@ -1,190 +1,86 @@
-﻿
 // Each 'parse' function should return the last token it encountered, or an error.
 // Each 'parse' function processes the input stream starting with the first token
-// already consumed. 
-//      (We read one or more tokens first, then decide what to do. In most cases, 
-//       a single token is enough to decide, so we simply skip it and pass along 
-//       extra information about it, instead of rollback. This keeps the stack 
+// already consumed.
+//      (We read one or more tokens first, then decide what to do. In most cases,
+//       a single token is enough to decide, so we simply skip it and pass along
+//       extra information about it, instead of rollback. This keeps the stack
 //       smaller and prevents processing the same token twice. In case of multiple
 //       tokens, we just roll back after the first one.)
 //
 // Each 'parse' function takes the parent Span as the first argument and the Scope
 // as the second argument.
-//      - The parent span's end position should be updated to match the local span 
+//      - The parent span's end position should be updated to match the local span
 //        when the function exits.
 //      - The start position of a span that the function does not own must not be modified.
-//      - If previous token information is needed, it should be passed as the third 
+//      - If previous token information is needed, it should be passed as the third
 //        argument. (The type for this is not fixed and should be chosen based on needs.)
-//      - If information about ending tokens is needed, it should be passed as the 
-//        fourth argument. If previous-token info is not required, the third argument 
+//      - If information about ending tokens is needed, it should be passed as the
+//        fourth argument. If previous-token info is not required, the third argument
 //        is used instead.
 //      - All other arguments can be case-specific and do not need to follow any rules.
-//      - To simplify function calls and signatures, it is recommended to use a 
+//      - To simplify function calls and signatures, it is recommended to use a
 //        'flag argument' parameter to carry any additional info via flags if possible.
 
 
 
-
-
-
-// TODO : redo ASSIGN ID
-// TODO : utilize String more
-// TODO : make all bools and stuff as flags or something so it is known frmo the call whats even passing
-// TODO : redo comments
-
-// TODO : unexpected symbol/EOF show the last relevant (parsed) section
-// TODO : 'auto res' to a function
-
-#include <vector>
-
-#include <stdlib.h>
-#include <locale.h>
-#include <stdio.h>
-#include <string.h>
-
-#include <string>
-#include <wchar.h>
-
-#include "globals.h"
-#include "lexer.h"
 #include "parser.h"
+#include "data_types.h"
+#include "globals.h"
+#include "keywords.h"
+#include "lexer.h"
+#include "string.h"
+#include "strlib.h"
 #include "syntax.h"
-#include "file_driver.h"
-#include "utils.h"
+#include "dynamic_arena.h"
+#include "file_system.h"
 #include "logger.h"
 #include "error.h"
-#include <map>
 
-#define ASSIGN_ID(var) {varId++; (var)->id = varId;}
+
 
 namespace Parser {
 
-    enum {
-        USE_KEYWORD_AS_END = 0x1,
-        EMPTY_EXPRESSION_ALLOWED = 0x2,
-        ALLOW_QUALIFIER = 0x4,
-        INCLUDE_TO_TREE = 0x8,
-        ALLOW_UNEXPECTED_END = 0x10,
-    };
+    Arena::Container errBuff;
 
-    struct FullToken {
-        Lex::Token token;
-        Lex::TokenValue value;
-    };
-
-    struct End {
-        Lex::TokenKind a;
-        Lex::TokenKind b;
-    };
-
-    typedef uint64_t Flags;
-
-    // Lex::Token parseScope(Span* const span, Scope* scope, const ScopeType global = SC_COMMON, const char endWithStatement = 0);
-    Lex::Token parseForeignScope(Span* const span, Scope* scope);
-    Lex::Token parseLabel(Span* const span, Scope* scope); // ✓
-    Lex::Token parseKeywordStatement(Span* const span, Scope* scope, const Lex::Keyword keyword, Flags flags);
-    Lex::Token parseDirective(Span* const span, Scope* scope, const Lex::Directive directive, Flags flags);
-    Lex::Token parsePrintLiteral(Span* const span, Scope* const scope, Lex::TokenValue* const startTokenValue); // ✓
-    Lex::Token parseVariableAssignment(Span* const span, Scope* scope, const Pos startPos, const End endToken); // ✓
-
-    Lex::Token parseVariableDefinition(Span* const span, Scope* scope, FullToken prevToken, const End endToken, Flags flags, VariableDefinition** out);
-    
-    // TODO : maybe just remove 'known' version to simplify things
-    Lex::Token parseDataType(Span* const span, Scope* scope, FullToken prevToken, Flags flags, VariableDefinition* def, Lex::TokenValue* outLastValue); // ✓
-    Lex::Token parseKnownDataType(Span* const span, Scope* scope, DataTypeEnum dtype, String dtypeName, VariableDefinition* def, Lex::TokenValue* outLastValue); // ✓
-    
-    Lex::Token parseDataTypeDecorators(Span* const span, Scope* scope, Variable* var, Flags flags, Lex::TokenValue* outLastValue, Pointer** outLastPointer); // ✓
-
-    Lex::Token parseBareStatement(Span* span, Scope* scope, const Pos startPos, const End endToken); // ✓
-
-    Lex::Token parseLanguageTag(Span* span, String* tag);
-    Lex::Token parseFunctionPointer(Span* const span, Scope* scope, FunctionPrototype** fcnOut); // ✓
-    Lex::Token parseImport(Span* const span, Scope* sc);
-    Lex::Token parseDefinitionAssignment(Span* const span, Scope* scope, FullToken prevToken, VariableDefinition* const def, const End endToken, int includeToScope);
-    Lex::Token parseTypeInitialization(Span* const span, Scope* scope, TypeInitialization** outTypeInit);
-    Lex::Token parseRValue(Span* const span, Scope* scope, Variable* outVar, const End endToken);
-    Lex::Token parseIfStatement(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseSwitchStatement(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseForLoop(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseFunction(Span* const span, Scope* const scope, uint64_t param); // ✓
-    Lex::Token parseWhileLoop(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseGotoStatement(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseReturnStatement(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseContinueStatement(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseBreakStatement(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseForEachLoop(Span* const span, Scope* const scope);
-    Lex::Token parseNamespace(Span* const span, Scope* const scope);
-    Lex::Token parseEnumDefinition(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseError(Span* const span, Scope* const scope);
-    Lex::Token parseFreeStatement(Span* const span, Scope* const scope);
-    Lex::Token parseTypeDefinition(Span* const span, Scope* const scope); // ✓
-    Lex::Token parseArrayInitialization(Span* span, Scope* scope, ArrayInitialization** initOut);
-    Lex::Token parseExpression(Span* const span, Variable* var, const Pos startPos, const End endToken, const int param = 0, const int defIdx = -1);
-    Lex::Token parseAllocStatement(Span* const span, Scope* const scope);
-    Lex::Token parseCatch(Span* const span, Variable* var);
-    Lex::Token parseList(Span* const span, Lex::TokenKind separator, Lex::TokenKind end, std::vector<Variable*>& args);
-
-
-
-    void copy(Variable* dest, Variable* src);
-    void copy(Variable* dest, Variable* src);
-    void copy(Scope* scA, Scope* scB);
-
-    void appendScope(Scope* scA, Scope* scB);
-    void appendPrefixScope(Scope* scA, Scope* scB);
-
-    void stripWrapperExpressions(Variable** op);
-
-    inline void offsetParentIdx(std::vector<SyntaxNode*> vec, const int offset);
-    
-    int isArrayLHS(char* const str, Span* span);
-
-    inline int isEndToken(Lex::Token token, const End& end) {
-        return token.kind == end.a || token.kind == end.b;
+    inline void errorBuffInit() {
+        Arena::init(&errBuff, 128);
     }
 
-    inline void insertVariableDefinition(Scope* scope, VariableDefinition* def) {
-        scope->children.push_back(def);
-        scope->defs.push_back(def->var);
+    inline void errorBuffClear() {
+        Arena::clear(&errBuff);
     }
 
-    inline void copyValue(Variable* dest, Variable* src) {
-        dest->cvalue = src->cvalue;
-        dest->expression = src->expression;
+    inline void errorBuffPush(const char* const str) {
+        const size_t strSize = cstrlen(str);
+        char* buff = (char*) Arena::push(&errBuff, strSize);
+        memcpy(buff + 1, str, strSize);
     }
-
-    inline void nullValue(Variable* var) {
-        var->cvalue = {};
-        var->expression = NULL;
-    }
-
-    inline void assignQualifiedName(QualifiedName* dest, QualifiedName* src) {
-        dest->name = src->name;
-        dest->nameLen = src->nameLen;
-        dest->path = src->path;
-        dest->id = src->id;
-    }
-
-
-
-    std::string errBuff;
 
     inline void tokenToErrorBuff(Lex::TokenKind token) {
-        errBuff += '\'';
-        errBuff += Lex::toStr(token);
-        errBuff += '\'';
+
+        const char* const str = Lex::toStr(token);
+        const size_t strSize = cstrlen(str);
+
+        char* buff = (char*) Arena::push(&errBuff, 2 + strSize);
+
+        buff[0] = '\'';
+        memcpy(buff + 1, str, strSize);
+        buff[strSize + 1] = '\'';
+
     }
 
     // returns 1 if any token was added to the buffer
     inline int endTokenToErrorBuff(End end) {
-        
+
         if (end.a != Lex::TK_NONE) {
             tokenToErrorBuff(end.a);
         }
 
         if (end.b != Lex::TK_NONE) {
             if (end.a != Lex::TK_NONE) {
-                errBuff += ", ";
+                char* buff = (char*) Arena::push(&errBuff, 2);
+                buff[0] = ',';
+                buff[1] = ' ';
             }
             tokenToErrorBuff(end.b);
         }
@@ -193,21 +89,66 @@ namespace Parser {
 
     }
 
+    inline int isEndToken(Lex::Token token, const End& end) {
+        return token.kind == end.a || token.kind == end.b;
+    }
+
+    inline void insertVariableDefinition(Scope* scope, VariableDefinition* def) {
+        DArray::push(&scope->children.base, &def);
+        DArray::push(&scope->defs.base, &def->var);
+    }
+
+    inline void nullValue(Variable* var) {
+        var->cvalue = {};
+        var->expression = NULL;
+    }
+
+    inline void offsetParentIdx(DArraySyntaxNode* vec, const int offset);
+    int isArrayLHS(char* const str, Span* span);
+
+
+
+    const char* const logTag = "parser";
+    const Logger::Type logErr = { .level = Logger::ERROR, .tag = logTag };
+    const Logger::Type logWrn = { .level = Logger::WARNING, .tag = logTag };
+    const Logger::Type logHnt = { .level = Logger::HINT, .tag = logTag };
+
 
 
     // TODO : change when multi thread support will be added!!!
-    //      used in ASSIGN_ID macro
     uint32_t varId = 0;
     // to assign each array/string initialization an id, so
-    // render can easily create separate variable for them 
+    // render can easily create separate variable for them
     uint32_t arrId = 0;
 
     uint64_t errId = 1;
 
     uint64_t defId = 0;
-    
+
+    inline void assignId(Variable* var) {
+        varId++;
+        var->name.id = varId;
+    }
 
 
+
+    inline void setParentIdx(SyntaxNode* node) {
+        node->parentIdx = node->scope->children.base.size;
+    }
+
+
+
+    inline Err::Err insertDefSearch(INamed* name, SyntaxNode* node, Span* span) {
+
+        String str = String(name->buff, name->len);
+        if (!OrderedDict::set(&node->scope->defSearch, str, node)) {
+            Logger::log(logErr, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), span);
+            return Err::SYMBOL_ALREADY_DEFINED;
+        }
+
+        return Err::OK;
+
+    }
 
     // huh
     Function* currentFunction = NULL;
@@ -218,197 +159,159 @@ namespace Parser {
 
 
 
-
-    // TODO : make it 'static' if its even possible
-    // LOOK AT: move to the syntax.h/.c ?
-    Function internalFunctions[] = {
-        
-        Function(
-            SyntaxNode::root,
-            (char *) IFS_PRINTF,
-            sizeof(IFS_PRINTF) - 1,
-            std::vector<VariableDefinition*>({
-                new VariableDefinition(new Variable(SyntaxNode::root, DT_STRING), 0),
-                new VariableDefinition(new Variable(SyntaxNode::root, DT_MULTIPLE_TYPES), 0)
-            }),
-            new VariableDefinition(new Variable(SyntaxNode::root, DT_VOID), 0),
-            IF_PRINTF
-        ),
-
-        Function(
-            SyntaxNode::root,
-            (char *) IFS_ALLOC,
-            sizeof(IFS_ALLOC) - 1,
-            std::vector<VariableDefinition*>({
-                new VariableDefinition(new Variable(SyntaxNode::root, DT_MULTIPLE_TYPES), 0)
-            }),
-            new VariableDefinition(new Variable(SyntaxNode::root, DT_POINTER), 0),
-            IF_ALLOC
-        ),
-
-        Function(
-            SyntaxNode::root,
-            (char *) IFS_FREE,
-            sizeof(IFS_FREE) - 1,
-            std::vector<VariableDefinition*>({
-                new VariableDefinition(new Variable(SyntaxNode::root, DT_POINTER), 0)
-            }),
-            new VariableDefinition(new Variable(SyntaxNode::root, DT_VOID), 0),
-            IF_FREE
-        ),
-    
-    };
-
     // import related stuff
+
 
     // to represent tree of imports
     // so we can check for circular imports and log user full path
+    struct ImportNodeChunk;
     struct ImportNode {
-        FileId* fileId;
-        Scope* fileScope;
+        FileSystem::Handle file;
+        Namespace* fileScope;
         ImportStatement* import;
         ImportNode* parent;
-        std::vector<ImportNode*> children;
+        ImportNodeChunk* children;
+        ImportNodeChunk* childrenLast;
     };
 
-    ImportNode* importRoot = new ImportNode;
-    ImportNode* importCurrent = new ImportNode;
-    std::map<FileId, Namespace*> parsedFiles;
+    struct ImportNodeChunk {
+        ImportNodeChunk* link;
+        ImportNode node;
+    };
 
-    int areFileIdEqual(FileId* a, FileId* b) {
-        return a->size == b->size && a->time == b->time;
+    ImportNode importRoot;
+    ImportNode* importCurrent = NULL;
+
+    ImportNode* initImportNode() {
+
+        ImportNode* import = (ImportNode*) alloc(alc, sizeof(ImportNode));
+        import->file = FileSystem::null;
+        import->fileScope = NULL;
+        import->import = NULL;
+        import->parent = NULL;
+        import->children = NULL;
+        import->childrenLast = NULL;
+
+        return import;
+
     }
 
     int doesImportExistInPath(ImportNode* pathNode, ImportNode* checkNode) {
-        
+
         ImportNode* node = pathNode;
         while (node) {
-            if (areFileIdEqual(node->fileId, checkNode->fileId)) {
+            if (node->file == checkNode->file) {
                 return 1;
             }
             node = node->parent;
         }
 
         return 0;
-    
+
     }
 
     void logImportPath(ImportNode* node) {
-        
+
         if (node->parent) {
             logImportPath(node->parent);
         }
 
         if (node->import) {
-            Logger::log(Logger::PLAIN, " -> %.*s", NULL, node->import->fname.len, node->import->fname.buff);
+            Logger::log({ .level = Logger::PLAIN }, " -> %.*s", NULL, node->import->fname.len, node->import->fname.buff);
         } else {
-            Logger::log(Logger::PLAIN, " import path: MAIN FILE");
+            Logger::log({ .level = Logger::PLAIN }, " import path: <MAIN_FILE>");
         }
 
     }
 
-    // meh
-    std::filesystem::path* getPath(String fpath, String fname) {
-        std::string strA(fpath.buff, fpath.len);
-        std::string strB(fname.buff, fname.len);
-        return new std::filesystem::path(std::filesystem::path(strA) / std::filesystem::path(strB));
-    }
+    void pushImportChunk(ImportNode* node, ImportNode* children) {
 
-    // meh
-    FileId* genFileId(std::filesystem::path* const path) {
-        
-        if (!std::filesystem::exists(*path)) return NULL;
+        ImportNodeChunk* newChunk = (ImportNodeChunk*) nalloc(nalc, AT_BYTE, sizeof(ImportNodeChunk));
+        newChunk->node = *children;
+        newChunk->link = NULL;
 
-        FileId* id = new FileId;
-            
-        id->size = std::filesystem::file_size(*path);
-        id->time = std::filesystem::last_write_time(*path);
-        
-        return id;
-    
-    }
-
-
-
-    inline void setParentIdx(SyntaxNode* node) {
-        node->parentIdx = node->scope->children.size();
-    }
-
-
-
-
-    int parseFile(char* const flname, ImportNode* import) {
-        
-        char* buffer;
-        if (FileDriver::readFile(flname, &buffer)) {
-            Logger::log(Logger::ERROR, "Failed to read file %s", NULL, flname);
-            return Err::SYSTEM_COMMAND_EXECUTION_FAILED; // TODO : better error
+        if (node->children) {
+            node->childrenLast->link = newChunk;
+        } else {
+            node->children = newChunk;
         }
 
-        std::filesystem::path absPath = std::filesystem::absolute({flname});
-        
+        node->childrenLast = newChunk;
+
+    }
+
+
+
+    void init() {
+        Lex::init();
+        errorBuffInit();
+    }
+
+    Err::Err parseFile(const FileSystem::Handle flhnd, ImportNode* import) {
+
+        FileSystem::Path* path = FileSystem::computeRelativePath(flhnd, SyntaxNode::dir);
+        if (!path) {
+            Logger::log(logWrn, "Maximum file path size excided while computing relative path!");
+        }
+
         Span span;
-        span.file = new File { absPath, NULL, flname, buffer };
-        span.str = buffer;
+        span.fileInfo = FileSystem::getFileInfo(flhnd);
+        span.str = FileSystem::getBuffer(flhnd);
         span.start = { 0, 1 };
-        span.end = { -1, 1 }; // TODO : i guess its better to add 'empty' character at the beginning of buffer, so non signed type can be used in the future
-        
+        span.end = { -1, 1 }; // in overflow we trust
+
         importCurrent = import;
 
-        // fileRootScope = fileScope ? fileScope : scope;
-        return parseScope(&span, import->fileScope, SC_GLOBAL, 0).encoded;
+        Lex::Token token = parseScope(&span, (Scope*) import->fileScope, SC_GLOBAL, SE_DEFAULT);
+        return (Err::Err) token.encoded;
 
     }
 
-    int processImport(ImportNode* currentNode, String fpath) {
+    Err::Err processImport(ImportNode* currentNode, String fpath) {
 
         // 1) process all children imports in current file
-        for (int i = 0; i < currentNode->children.size(); i++) {
-            
-            ImportNode* const importNode = currentNode->children[i];
+        ImportNodeChunk* chunk = currentNode->children;
+        while (chunk) {
+
+            ImportNode* const importNode = &chunk->node;
             ImportStatement* import = importNode->import;
 
-            // maybe store also file path in ImportNode
-            std::filesystem::path* filePath = getPath(fpath, import->fname);
-            importNode->fileId = genFileId(filePath);
-            if (!importNode->fileId) {
-                Logger::log(Logger::ERROR, "File %.*s does not exists!", import->span, import->fname.len, import->fname.buff);
+            FileSystem::Handle flhnd = FileSystem::load(fpath, import->fname);
+            if (importRoot.file == FileSystem::null) {
+                Logger::log(logErr, "File %.*s not found in path %.*s!", NULL, fpath.len, fpath.buff, import->fname.len, import->fname.buff);
                 return Err::FILE_DOES_NOT_EXISTS;
             }
 
-            if (parsedFiles.find(*(importNode->fileId)) != parsedFiles.end()) {
+            Namespace* fscope = (Namespace*) FileSystem::getUserData(flhnd);
 
-                // LOOK AT: reusing already parsed stuff, for now as reference
-                // may be copy will be needed
-                importNode->fileScope = parsedFiles[*(importNode->fileId)];
-            
+            if (!fscope) {
+
+                importNode->fileScope = Reg.Node.initNamespace();
+                FileSystem::setUserData(flhnd, importNode->fileScope);
+
+                const Err::Err err = parseFile(flhnd, importNode);
+                if (err != Err::OK) return err;
+
             } else {
-                
-                // as namespace, so we can easier switch in the future
-                importNode->fileScope = new Namespace;
-                importNode->fileScope->type = NT_SCOPE;
-                
-                const int err = parseFile((char*) strdup(filePath->string().c_str()), importNode);
-                if (err != Err::OK) {
-                    printf("return err;\n");
-                    return err;
-                }
 
-                // parsedFiles.insert(std::make_pair(*(importNode->fileId), (Namespace*) importNode->fileScope));
-                parsedFiles.emplace(*(importNode->fileId), (Namespace*) importNode->fileScope);
-            
+                importNode->fileScope = fscope;
+
             }
 
+            importNode->file = flhnd;
+            ((SyntaxNode*) importNode->fileScope)->type = NT_SCOPE;
+
             if (doesImportExistInPath(currentNode, importNode)) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::CIRCULAR_IMPORT), import->span);
+                Logger::log(logErr, ERR_STR(Err::CIRCULAR_IMPORT), import->base.span);
                 logImportPath(importNode);
                 return Err::CIRCULAR_IMPORT;
-            }            
-            
-            Scope* root = importNode->parent->fileScope ? importNode->parent->fileScope : SyntaxNode::root;
-            switch (import->keyWord) {
-                
-                case -1 : {
+            }
+
+            Namespace* root = importNode->parent->fileScope ?
+                importNode->parent->fileScope : (Namespace*) SyntaxNode::root;
+            switch (import->keyword) {
+
+                case KW_VOID : {
 
                     // import foo from file
 
@@ -416,24 +319,24 @@ namespace Parser {
                     SyntaxNode* symbol = NULL;
 
                     Namespace* nsc = (Namespace*) (importNode->fileScope);
-                    for (int i = 0; i < nsc->children.size(); i++) {
-                        
-                        SyntaxNode* node = nsc->children[i];
+                    for (int i = 0; i < nsc->scope.children.base.size; i++) {
+
+                        SyntaxNode* node = ((SyntaxNode*) nsc->scope.children.base.buffer) + i;
                         if (node->type == NT_NAMESPACE) {
-                            
+
                             Namespace* nspace = (Namespace*) node;
-                            if (nspace->nameLen == import->param.len && strncmp(nspace->name, import->param.buff, import->param.len) == 0) {
+                            if (nspace->name.len == import->param.len && strncmp(nspace->name.buff, import->param.buff, import->param.len) == 0) {
                                 symbolType = NT_NAMESPACE;
-                                symbol = nspace;
+                                symbol = (SyntaxNode*) nspace;
                                 break;
                             }
 
                         } else if (node->type == NT_FUNCTION) {
-                            
+
                             Function* fcn = (Function*) node;
-                            if (fcn->nameLen == import->param.len && strncmp(fcn->name, import->param.buff, import->param.len) == 0) {
+                            if (fcn->name.len == import->param.len && strncmp(fcn->name.buff, import->param.buff, import->param.len) == 0) {
                                 symbolType = NT_FUNCTION;
-                                symbol = fcn;
+                                symbol = (SyntaxNode*) fcn;
                                 break;
                             }
 
@@ -442,83 +345,84 @@ namespace Parser {
                     }
 
                     if (symbolType < 0) {
-                        Logger::log(Logger::ERROR, "Aprepritee symbol not found! Note, only namespaces and functions can be exported.", import->span);
+                        Logger::log(logErr, "Aprepritee symbol not found! Note, only namespaces and functions can be exported.", import->base.span);
                         return Err::UNEXPECTED_SYMBOL;
                     }
 
                     switch (symbolType) {
-                        
+
                         case NT_NAMESPACE : {
 
-                            Namespace* sc = Utils::getCopy((Namespace*) symbol);
+                            Namespace* sc = Reg.Node.copy((Namespace*) symbol);
 
-                            sc->scope = root;
-                            sc->parentIdx = 0;
-        
-                            Utils::pushFornt<SyntaxNode*>(root->children, sc);
-                            Utils::pushFornt<Namespace*>(root->namespaces, sc);
-                            
+                            sc->scope = root->scope;
+                            sc->scope.base.parentIdx = 0;
+
+                            DArray::pushFront(&root->scope.children.base, &sc);
+                            DArray::pushFront(&root->scope.namespaces.base, &sc);
+
                             break;
 
                         }
 
                         case NT_FUNCTION : {
-                            
-                            Function* fcn = Utils::getCopy((Function*) symbol);
 
-                            fcn->scope = root;
-                            fcn->parentIdx = 0;
+                            Function* fcn = Reg.Node.copy((Function*) symbol);
 
-                            Utils::pushFornt<SyntaxNode*>(root->children, fcn);
-                            Utils::pushFornt<Function*>(root->fcns, fcn); 
-                            
+                            fcn->base.scope = (Scope*) root;
+                            fcn->base.parentIdx = 0;
+
+                            DArray::pushFront(&root->scope.children.base, &fcn);
+                            DArray::pushFront(&root->scope.fcns.base, &fcn);
+
                             break;
 
                         }
-                    
+
                         default:
-                            Logger::log(Logger::ERROR, "Aprepritee symbol not found! Note, only namespaces and functions can be exported.", import->span);
+                            Logger::log(logErr, "Aprepritee symbol not found! Note, only namespaces and functions can be exported.", import->base.span);
                             return Err::UNEXPECTED_SYMBOL;
-                    
+
                     }
 
                     break;
-                
+
                 }
 
                 case KW_SCOPE : {
 
-                    Scope* sc = (Namespace*) (importNode->fileScope);
+                    Scope* sc = (Scope*) (importNode->fileScope);
 
-                    sc->scope = root;
-                    sc->type = NT_SCOPE;
-                    sc->parentIdx = 0;
+                    sc->base.scope = (Scope*) root;
+                    sc->base.type = NT_SCOPE;
+                    sc->base.parentIdx = 0;
 
-                    Utils::pushFornt<SyntaxNode*>(root->children, sc);
+                    DArray::pushFront(&root->scope.children.base, &sc);
 
                     break;
 
                 }
 
-                case KW_FUNCTION : {
+                case KW_FCN : {
 
-                    Function* fcn = new Function();
-                    
-                    fcn->bodyScope = (Namespace*) (importNode->fileScope);
-                    fcn->name = import->param;
-                    fcn->nameLen = import->param.len;
-                    fcn->scope = root;
-                    fcn->type = NT_FUNCTION;
-                    fcn->outArg = Utils::createEmptyVariableDefinition();
-                    fcn->outArg->var->cvalue.dtypeEnum = DT_VOID;
-                    fcn->parentIdx = 0;
-                    fcn->snFlags = 0;
+                    Function* fcn = Reg.Node.initFunction();
 
-                    ASSIGN_ID(fcn);
+                    fcn->bodyScope = (Scope*) (importNode->fileScope);
+                    fcn->name.buff = import->param;
+                    fcn->name.len = import->param.len;
+                    fcn->base.scope = (Scope*) root;
+                    fcn->base.type = NT_FUNCTION;
+                    fcn->prototype.outArg = Reg.Node.initVariableDefinition();
+                    fcn->prototype.outArg->var->cvalue.dtypeEnum = DT_VOID;
+                    fcn->base.parentIdx = 0;
+                    fcn->base.flags = 0;
+
+                    fcn->name.id = varId;
+                    varId++;
 
                     // as we importing function, order doesn't matter, so we can push it back
-                    root->children.push_back(fcn);
-                    root->fcns.push_back(fcn);
+                    DArray::push(&root->scope.children.base, &fcn);
+                    DArray::push(&root->scope.fcns.base, &fcn);
 
                     break;
 
@@ -528,16 +432,16 @@ namespace Parser {
 
                     Namespace* sc = (Namespace*) (importNode->fileScope);
 
-                    sc->name = import->param;
-                    sc->nameLen = import->param.len;
-                    sc->scope = root;
-                    sc->type = NT_NAMESPACE;
-                    sc->parentIdx = 0;
-                    sc->snFlags = 0;
+                    sc->name.buff = import->param;
+                    sc->name.len = import->param.len;
+                    sc->scope = root->scope;
+                    sc->scope.base.type = NT_NAMESPACE;
+                    sc->scope.base.parentIdx = 0;
+                    sc->scope.base.flags = 0;
 
-                    Utils::pushFornt<SyntaxNode*>(root->children, sc);
-                    Utils::pushFornt<Namespace*>(root->namespaces, sc);
-                    
+                    DArray::pushFront(&root->scope.children.base, &sc);
+                    DArray::pushFront(&root->scope.namespaces.base, &sc);
+
                     // in case of namespace we dont need to update parentIdx for searchDefs
                     // but may be wrong..
 
@@ -545,59 +449,62 @@ namespace Parser {
 
                 }
 
+                default : {
+
+                    Logger::log(logErr, "Unsupported import keyword!", import->base.span);
+                    return Err::UNEXPECTED_SYMBOL;
+
+                }
+
             }
+
+            chunk = chunk->link;
 
         }
 
         // 2) process new imports of each children
-        for (int i = 0; i < currentNode->children.size(); i++) {
-            ImportNode* node = currentNode->children[i];
-            const int err = processImport(node, fpath);
+        chunk = currentNode->children;
+        while (chunk) {
+            const Err::Err err = processImport(&chunk->node, fpath);
             if (err != Err::OK) return err;
+            chunk = chunk->link;
         }
 
         return Err::OK;
 
     }
 
-    int parse(char* const flname) {
+    Err::Err parse(char* const flname) {
 
-        // NOTE : future parallelism in mind
+        Err::Err err;
 
-        int err;
-
-        char* dirStr = flname;
-        uint64_t dirLen = Utils::stripDir(flname);
-
-        Logger::log(Logger::INFO, "Parsing...\n");
-
-        SyntaxNode::root = new Scope;
+        SyntaxNode::root = Reg.Node.initScope();
         SyntaxNode::root->fcn = NULL;
-        SyntaxNode::root->scope = NULL;
-        SyntaxNode::root->parentIdx = 0;
-        SyntaxNode::dir = new INamed(dirStr, dirLen);
+        SyntaxNode::root->base.scope = NULL;
+        SyntaxNode::root->base.parentIdx = 0;
 
-        std::filesystem::path flpath(flname);
-        importRoot->fileId = genFileId(&flpath);
-        if (!importRoot->fileId) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::FILE_DOES_NOT_EXISTS), NULL, flname);
+        importRoot.file = FileSystem::load(String(flname));
+        if (importRoot.file == FileSystem::null) {
+            Logger::log(logErr, "File %s not found!", NULL, flname);
             return Err::FILE_DOES_NOT_EXISTS;
         }
 
-        importRoot->fileScope = SyntaxNode::root;
-        importRoot->import = NULL;
-        importRoot->parent = NULL;
+        SyntaxNode::dir = FileSystem::getDirectory(importRoot.file);
 
-        internalFunctionUsed = 0;
+        importRoot.fileScope = (Namespace*) SyntaxNode::root;
+        importRoot.import = NULL;
+        importRoot.parent = NULL;
 
-        err = parseFile(flname, importRoot);
+        Internal::functionUsed = 0;
+
+        err = parseFile(importRoot.file, &importRoot);
         if (err != Err::OK) return err;
 
-        err = processImport(importRoot, { dirStr, dirLen });
+        err = processImport(&importRoot, SyntaxNode::dir);
         if (err != Err::OK) return err;
 
-        return 0;
-    
+        return Err::OK;
+
     }
 
 
@@ -627,7 +534,7 @@ namespace Parser {
 
 
 
-    Lex::Token parseScope(Span* const span, Scope* scope, const ScopeType scopeType, const char endAsStatement) {
+    Lex::Token parseScope(Span* const span, Scope* scope, const ScopeType scopeType, const ScopeEnd endType) {
 
         SpanEx lspan = markSpanStart(span);
 
@@ -637,9 +544,9 @@ namespace Parser {
         Scope* node;
 
         if (scopeType == SC_COMMON) {
-            node = new Scope;
-            node->scope = scope;
-            setParentIdx(node);
+            node = Reg.Node.initScope();
+            node->base.scope = scope;
+            // setParentIdx(node);
         } else {
             node = scope;
             scope = NULL;
@@ -658,39 +565,39 @@ namespace Parser {
             switch (token.kind) {
 
                 case Lex::TK_STATEMENT_END : continue;
-                
+
                 case Lex::TK_END : {
 
                     if (scopeType == SC_GLOBAL) {
-                        node->span = finalizeSpan(&lspan, span);
+                        node->base.span = finalizeSpan(&lspan, span);
                         return Lex::toToken(Err::OK);
                     }
-                    
+
                     span->end = prevPos;
-                    
-                    Logger::log(Logger::ERROR, "Unexpected end of file! Showing the start of the relevant section.", &lspan);
+
+                    Logger::log(logErr, "Unexpected end of file! Showing the start of the relevant section.", &lspan);
                     return Lex::toToken(Err::UNEXPECTED_END_OF_FILE);
-                
+
                 }
 
                 case Lex::TK_SCOPE_BEGIN : {
 
-                    const Lex::Token err = parseScope(&lspan, node, SC_COMMON, 0);
+                    const Lex::Token err = parseScope(&lspan, node, SC_COMMON, SE_DEFAULT);
                     if (err.encoded < 0) return err;
                     break;
 
                 }
-                
+
                 case Lex::TK_SCOPE_END : {
 
                     if (scopeType != SC_GLOBAL) {
-                        node->span = finalizeSpan(&lspan, span);
-                        scope->children.push_back(node);
+                        node->base.span = finalizeSpan(&lspan, span);
+                        DArray::push(&scope->children.base, &node);
                         return token;
                     }
 
                     // ERROR
-                    Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "");
+                    Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "");
                     return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
                 }
@@ -739,7 +646,7 @@ namespace Parser {
                     // bare statement or custom data type definition
 
                     // TODO: would be nice that prevPos starts after whitespaces
-                    
+
                     // TODO: better naming as it can be ambiguous?
                     FullToken startToken = { token, tokenVal };
                     Pos startPos = { lspan.start.idx - 1, lspan.start.ln };
@@ -767,12 +674,12 @@ namespace Parser {
 
             }
 
-            if (endAsStatement) {
+            if (endType == SE_STATEMENT) {
                 if (token.kind == Lex::TK_STATEMENT_END) {
                     finalizeSpan(&lspan, span);
                     return token;
                 }
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
@@ -780,7 +687,7 @@ namespace Parser {
             prevToken = token;
 
         }
-    
+
     }
 
     Lex::Token parsePrintLiteral(Span* const span, Scope* const scope, Lex::TokenValue* const startTokenValue) {
@@ -790,33 +697,35 @@ namespace Parser {
         Lex::Token token;
         Lex::TokenValue tokenVal;
 
-        internalFunctionUsed = internalFunctionUsed | (1 << (IF_PRINTF - 1));
+        Internal::functionUsed = Internal::functionUsed | (1 << (Internal::IF_PRINTF - 1));
 
-        Function* const fcn = internalFunctions + (IF_PRINTF - 1);
+        Function* const fcn = Internal::functions + (Internal::IF_PRINTF - 1);
 
-        FunctionCall* fcnCall = new FunctionCall();
+        FunctionCall* fcnCall = Reg.Node.initFunctionCall();
         fcnCall->fcn = fcn;
-        fcnCall->name = fcn->name;
-        fcnCall->nameLen = fcn->nameLen;
+        fcnCall->name.buff = fcn->name.buff;
+        fcnCall->name.len = fcn->name.len;
 
-        Variable* format = new Variable(scope, DT_STRING, &lspan);
+        Variable* format = Reg.Node.initVariable();
+        format->base.scope = scope;
+        format->cvalue.dtypeEnum = DT_STRING;
+        format->base.span = getSpanStamp(&lspan);
         format->cvalue.any = startTokenValue->any;
 
-        fcnCall->inArgs.push_back(format);
+        DArray::push(&fcnCall->inArgs.base, &format);
 
-        Variable* callWrapper = new Variable();
-        callWrapper->scope = scope;
-        callWrapper->expression = fcnCall;
+        Variable* callWrapper = Reg.Node.initVariable();
+        callWrapper->base.scope = scope;
+        callWrapper->expression = (Expression*) fcnCall;
         callWrapper->cvalue.str = NULL;
 
-        scope->children.push_back(callWrapper);
+        DArray::push(&scope->children.base, &callWrapper);
+        DArray::push(&Reg.fcnCalls.base, &callWrapper);
 
-        NodeRegistry::fcnCalls.push_back(callWrapper);
-
-        token = parseList(&lspan, Lex::TK_LIST_SEPARATOR, Lex::TK_STATEMENT_END, fcnCall->inArgs);
+        token = parseList(&lspan, Lex::TK_LIST_SEPARATOR, Lex::TK_STATEMENT_END, &fcnCall->inArgs.base);
         if (token.encoded < 0) return token;
 
-        callWrapper->span = finalizeSpan(&lspan, span);
+        callWrapper->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -830,24 +739,24 @@ namespace Parser {
         QualifiedName* qname = (QualifiedName*) tokenVal.any;
 
         if (token.kind != Lex::TK_IDENTIFIER) {
-            delete qname;
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            ndealloc(nalc, qname);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        if (qname->path.size() != 0) {
-            Logger::log(Logger::ERROR, "Language tag cannot be a qualified name!", span);
+        if (qname->pathSize != 0) {
+            Logger::log(logErr, "Language tag cannot be a qualified name!", span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        tag->buff = qname->name;
-        tag->len = qname->nameLen;
+        tag->buff = qname->buff;
+        tag->len = qname->len;
 
-        delete qname;
+        ndealloc(nalc, qname);
 
         token = Lex::nextToken(span, &tokenVal);
         if (token.kind != Lex::TK_ARRAY_END) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
@@ -861,33 +770,31 @@ namespace Parser {
 
         String tag;
         Lex::Token token;
-        
+
         token = parseLanguageTag(&lspan, &tag);
         if (token.encoded < 0) return token;
 
         token = Lex::nextToken(&lspan, NULL);
         if (token.kind != Lex::TK_SCOPE_BEGIN) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        char* const codeStr = span->str + span->end.idx;
+        const char* const codeStr = span->str + span->end.idx;
         const int codeLen = Lex::findBlockEnd(&lspan, Lex::SCOPE_BEGIN, Lex::SCOPE_END);
         if (codeLen < 0) {
             // ERROR
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_END_OF_FILE), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_END_OF_FILE), span);
             return Lex::toToken(Err::UNEXPECTED_END_OF_FILE);
         }
 
-        CodeBlock* codeBlock = new CodeBlock();
-        codeBlock->tagStr = tag.buff;
-        codeBlock->tagLen = tag.len;
-        codeBlock->codeStr = codeStr;
-        codeBlock->codeLen = codeLen;
+        CodeBlock* codeBlock = Reg.Node.initCodeBlock();
+        codeBlock->code.tagStr = String(tag.buff, tag.len);
+        codeBlock->code.codeStr = String((char*) codeStr, codeLen);
 
-        NodeRegistry::codeBlocks.push_back(codeBlock);
+        DArray::push(&Reg.codeBlocks.base, &codeBlock);
 
-        codeBlock->span = finalizeSpan(&lspan, span);
+        codeBlock->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -900,30 +807,27 @@ namespace Parser {
         Lex::Token token = Lex::nextToken(&lspan, &tokenVal);
 
         if (token.kind != Lex::TK_IDENTIFIER) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "Identifier");
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "Identifier");
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        Label* label = new Label();
-        label->scope = scope;
-        label->name = tokenVal.str->buff;
-        label->nameLen = tokenVal.str->len;
-        setParentIdx(label);
+        Label* label = Reg.Node.initLabel();
+        label->base.scope = scope;
+        label->name.buff = tokenVal.str->buff;
+        label->name.len = tokenVal.str->len;
+        setParentIdx(&label->base);
 
-        scope->children.push_back(label);
-        scope->labels.push_back(label);
-        NodeRegistry::labels.push_back(label);
+        DArray::push(&scope->children.base, &label);
+        DArray::push(&scope->labels.base, &label);
+        DArray::push(&Reg.labels.base, &label);
 
-        auto res = scope->defSearch.insert({std::string_view(label->name, label->nameLen), label});
-        if (!res.second) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), &lspan);
-            return Lex::toToken(Err::SYMBOL_ALREADY_DEFINED);
-        }
+        const int ierr = insertDefSearch((INamed*) &label->name, &label->base, span);
+        if (ierr != Err::OK) return Lex::toToken(ierr);
 
         token = Lex::nextToken(&lspan, NULL);
         if (token.kind != Lex::TK_LABEL_END) {
             uint64_t val = Lex::toIntStr(Lex::LABEL_END);
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, &val);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, &val);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
@@ -934,52 +838,53 @@ namespace Parser {
 
     // assignment or expression
     Lex::Token parseBareStatement(Span* span, Scope* scope, const Pos startPos, const End endToken) {
-        
+
         SpanEx lspan = markSpanStart(span);
 
         Lex::Token token;
-        
-        Variable* lvar = new Variable();
+
+        Variable* lvar = Reg.Node.initVariable();
         token = parseExpression(&lspan, lvar, startPos, endToken, ALLOW_UNEXPECTED_END);
         if (token.encoded < 0) return token;
-        
-        if (isEndToken(token, endToken)) {
-            
-            Statement* stmt = new Statement();
-            stmt->scope = scope;
-            stmt->op = lvar;
 
-            scope->children.push_back(stmt);
-            NodeRegistry::statements.push_back(stmt);
-            
-            stmt->span = finalizeSpan(&lspan, span);
+        if (isEndToken(token, endToken)) {
+
+            Statement* stmt = Reg.Node.initStatement();
+            stmt->base.scope = scope;
+            stmt->operand = lvar;
+
+            DArray::push(&scope->children.base, &stmt);
+            DArray::push(&Reg.statements.base, &stmt);
+
+            stmt->base.span = finalizeSpan(&lspan, span);
             return token;
-        
+
         }
 
         if (token.kind != Lex::TK_EQUAL) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "'='");
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "'='");
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         };
 
-        Variable* rvar = new Variable();
+        Variable* rvar = Reg.Node.initVariable();
         token = parseRValue(&lspan, scope, rvar, endToken);
         if (token.encoded < 0) return token;
 
-        VariableAssignment* varAssignment = new VariableAssignment(span);
-        varAssignment->scope = scope;
+        VariableAssignment* varAssignment = Reg.Node.initVariableAssignment();
+        varAssignment->base.span = span;
+        varAssignment->base.scope = scope;
         varAssignment->lvar = lvar;
         varAssignment->rvar = rvar;
 
         // TODO : move to parseRValue?
         if (lvar->cvalue.dtypeEnum == DT_ARRAY) {
-            NodeRegistry::arraysAllocations.push_back(varAssignment);
+            DArray::push(&Reg.arraysAllocations.base, &varAssignment);
         }
 
-        NodeRegistry::variableAssignments.push_back(varAssignment);
-        scope->children.push_back(varAssignment);
+        DArray::push(&Reg.variableAssignments.base, &varAssignment);
+        DArray::push(&scope->children.base, &varAssignment);
 
-        varAssignment->span = finalizeSpan(&lspan, span);
+        varAssignment->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -990,17 +895,20 @@ namespace Parser {
 
         Lex::Token token;
 
-        VariableAssignment* const varAssignment = new VariableAssignment(span);
-        varAssignment->scope = scope;
-        varAssignment->lvar = new Variable(scope);
-        varAssignment->rvar = new Variable(scope);
+        VariableAssignment* const varAssignment = Reg.Node.initVariableAssignment();
+        varAssignment->base.span = span;
+        varAssignment->base.scope = scope;
+        varAssignment->lvar = Reg.Node.initVariable();
+        varAssignment->lvar->base.scope = scope;
+        varAssignment->rvar = Reg.Node.initVariable();
+        varAssignment->rvar->base.scope = scope;
 
         token = parseExpression(&lspan, varAssignment->lvar, startPos, End { Lex::TK_EQUAL });
         if (token.encoded < 0) return token;
 
         if (token.kind != Lex::TK_EQUAL) {
             uint64_t val = Lex::toIntStr(Lex::EQUAL);
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, &val);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, &val);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
@@ -1009,34 +917,17 @@ namespace Parser {
 
         // TODO : move to parseRValue?
         if (varAssignment->lvar->cvalue.dtypeEnum == DT_ARRAY) {
-            NodeRegistry::arraysAllocations.push_back(varAssignment);
+            DArray::push(&Reg.arraysAllocations.base, (void*) &varAssignment);
         }
 
-        NodeRegistry::variableAssignments.push_back(varAssignment);
-        scope->children.push_back(varAssignment);
+        DArray::push(&Reg.variableAssignments.base, (void*) &varAssignment);
+        DArray::push(&scope->children.base, (void*) &varAssignment);
 
-        varAssignment->span = finalizeSpan(&lspan, span);
+        varAssignment->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
 
-    /*
-    int parseVariableDefinition(Span* const span, Span* const startLoc) {
-
-        VariableDefinition* varDef = new VariableDefinition(startLoc);
-
-        varDef->dtype = new QualifiedName();
-        parseScopeNames(varDef->dtype, str, startLoc);
-        varDef->span->idx -= varDef->dtype->nameLen + 1;
-
-        err = processDataType(DT_CUSTOM, scope, str, span, 0, STATEMENT_END, &varDef, 1, 0);
-        if (err < 0) return err;
-
-        NodeRegistry::customDataTypesReferences.push_back(varDef);
-
-    }
-    */
-    
     Lex::Token parseKnownDataType(Span* const span, Scope* scope, DataTypeEnum dtype, String dtypeName, VariableDefinition* def, Lex::TokenValue* outLastValue) {
 
         Lex::Token token;
@@ -1046,14 +937,14 @@ namespace Parser {
 
             def->var->cvalue.dtypeEnum = DT_CUSTOM;
             def->var->cvalue.any = NULL;
-            def->dtype = new QualifiedName();
-            def->dtype->name = dtypeName.buff;
-            def->dtype->nameLen = dtypeName.len;
+            def->dtype = Reg.Node.initQualifiedName();
+            def->dtype->buff = dtypeName.buff;
+            def->dtype->len = dtypeName.len;
 
-            NodeRegistry::customDataTypesReferences.push_back(def);
-        
+            DArray::push(&Reg.customDataTypesReferences.base, &def);
+
         } else if (dtype == DT_FUNCTION) {
-        
+
             FunctionPrototype* fptr;
             token = parseFunctionPointer(span, scope, &fptr);
             if (token.encoded < 0) return token;
@@ -1065,7 +956,7 @@ namespace Parser {
 
             def->var->cvalue.dtypeEnum = dtype;
             def->var->cvalue.any = (dtype == DT_CUSTOM) ? NULL : dataTypes + dtype;
-        
+
         }
 
         Pointer* lastPtr = NULL;
@@ -1073,7 +964,7 @@ namespace Parser {
         if (token.encoded < 0) return token;
 
         def->lastPtr = lastPtr;
-        def->var->span = getSpanStamp(span);
+        def->var->base.span = getSpanStamp(span);
 
         return token;
 
@@ -1085,36 +976,37 @@ namespace Parser {
         Lex::Token token = prevToken.token;
         Lex::TokenValue tokenVal = prevToken.value;
 
-        def->span = getSpanStamp(span);
+        def->base.span = getSpanStamp(span);
 
         if (token.kind == Lex::TK_KEYWORD && (token.detail == Lex::KW_CONST || token.detail == Lex::KW_EMBED)) {
-            
+
             if (!(flags & ALLOW_QUALIFIER)) {
-                Logger::log(Logger::ERROR, "Qualifier not expected here!", span);
+                Logger::log(logErr, "Qualifier not expected here!", span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
-            def->flags = ((token.kind == KW_CONST) ? KW_CONST : KW_CMP_TIME);
+            def->base.flags = ((token.kind == KW_CONST) ? KW_CONST : KW_EMBED); // TODO
             token = Lex::nextToken(span, &tokenVal);
 
         } else {
-            def->flags = 0;
+            def->base.flags = 0;
         }
 
-        def->var = new Variable(scope);
+        def->var = Reg.Node.initVariable();
+        def->var->base.scope = scope;
         def->var->def = def;
         def->var->unrollExpression = 0;
         def->var->expression = NULL;
-        def->scope = scope;
+        def->base.scope = scope;
 
         if (token.kind == Lex::TK_IDENTIFIER) {
-            
+
             token = parseKnownDataType(span, scope, DT_CUSTOM, *tokenVal.str, def, outLastValue);
 
         } else {
-            
+
             if (!Lex::isDtype(token)) {
-                Logger::log(Logger::ERROR, "Data type expected!", span);
+                Logger::log(logErr, "Data type expected!", span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
@@ -1135,14 +1027,14 @@ namespace Parser {
         Lex::TokenValue tokenVal;
 
         VariableDefinition* def;
-        FunctionPrototype* fcn = new FunctionPrototype;
+        FunctionPrototype* fcn = Reg.Node.initFunctionPrototype();
 
         token = Lex::nextToken(&lspan, NULL);
         if (token.kind != Lex::TK_PARENTHESIS_BEGIN) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);            
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
-        
+
         token = Lex::nextToken(&lspan, NULL);
         if (token.kind == Lex::TK_ARROW) {
             goto fOutArgs;
@@ -1150,19 +1042,19 @@ namespace Parser {
 
         while (1) {
 
-            def = new VariableDefinition();
-            fcn->inArgs.push_back(def);
+            def = Reg.Node.initVariableDefinition();
+            DArray::push(&fcn->inArgs.base, &def);
 
             token = parseDataType(&lspan, scope, { token, tokenVal }, ALLOW_QUALIFIER, def, &tokenVal);
             if (token.encoded < 0) return token;
-            
+
             if (token.kind == Lex::TK_LIST_SEPARATOR) {
                 token = Lex::nextToken(&lspan, NULL);
                 continue;
             } else if (token.kind == Lex::TK_ARROW) {
                 break;
             } else {
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
@@ -1172,26 +1064,26 @@ namespace Parser {
 
         token = Lex::nextToken(&lspan, NULL);
         if (token.kind != Lex::TK_PARENTHESIS_END) {
-            
-            def = new VariableDefinition();
+
+            def = Reg.Node.initVariableDefinition();
             token = parseDataType(&lspan, scope, { token, tokenVal }, NULL_FLAG, def, &tokenVal);
             if (token.encoded < 0) return token;
 
             if (token.kind != Lex::TK_PARENTHESIS_END) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
         } else {
 
-            def = Utils::createEmptyVariableDefinition();
-        
+            def = Reg.Node.initVariableDefinition();
+
         }
 
         fcn->outArg = def;
         *fcnOut = fcn;
 
-        def->span = finalizeSpan(&lspan, span);
+        def->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -1204,11 +1096,9 @@ namespace Parser {
         Lex::TokenValue tokenVal;
 
         QualifiedName* qname = (QualifiedName*) prevToken.value.any;
-        def->var->name = qname->name;
-        def->var->nameLen = qname->nameLen;
-        def->var->path = qname->path;
-        
-        ASSIGN_ID(def->var);
+        def->var->name = *qname;
+
+        assignId(def->var);
 
         token = Lex::nextToken(span, &tokenVal);
         if (token.kind == Lex::TK_EQUAL) {
@@ -1216,63 +1106,65 @@ namespace Parser {
             token = parseRValue(span, scope, def->var, endToken);
             if (token.encoded < 0) return token;
 
-            if (def->flags & IS_CMP_TIME) NodeRegistry::cmpTimeVars.push_back(def->var);
-            else NodeRegistry::initializations.push_back(def);
+            if (def->base.flags & IS_CMP_TIME) {
+                DArray::push(&Reg.cmpTimeVars.base, &def->var);
+            } else {
+                DArray::push(&Reg.initializations.base, (void*) &def);
+            }
 
         } else if (token.kind == endToken.a || token.kind == endToken.b) {
 
             def->var->expression = NULL;
-        
+
         } else {
-            
-            errBuff.clear();
+
+            errorBuffClear();
             if (endTokenToErrorBuff(endToken)) {
-                errBuff += ", ";
+                errorBuffPush(", ");
             }
             tokenToErrorBuff(Lex::TK_EQUAL);
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span, errBuff.c_str());
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span, errBuff);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
-        
+
         }
 
         if (includeToScope) {
             //scope->children.push_back(def);
             // pushDefLike(scope->defSearch, def->var);
-            
-            setParentIdx(def->var);
 
-            auto res = scope->defSearch.insert({std::string_view(def->var->name, def->var->nameLen), def->var});
-            if (!res.second) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), def->var->span);
-                return Lex::toToken(Err::SYMBOL_ALREADY_DEFINED);
-            }
+            setParentIdx((SyntaxNode*) def->var);
 
-            scope->children.push_back(def);
-            NodeRegistry::variableDefinitions.push_back(def);
-            scope->defs.push_back(def->var);
+            const int ierr = insertDefSearch((INamed*) &def->var->name, (SyntaxNode*) def->var, span);
+            if (ierr != Err::OK) return Lex::toToken(ierr);
+
+            DArray::push(&scope->children.base, (void*) &def);
+            DArray::push(&Reg.variableDefinitions.base, (void*) &def);
+            DArray::push(&scope->defs.base, &def->var);
+
         }
 
         return token;
 
     }
-    
-    Lex::Token parseVariableDefinition(Span* const span, Scope* scope, FullToken prevToken, const End endToken, Flags param, VariableDefinition** outVarDef) {       
+
+    Lex::Token parseVariableDefinition(Span* const span, Scope* scope, FullToken prevToken, const End endToken, Flags param, VariableDefinition** outVarDef) {
 
         SpanEx lspan = markSpanStart(span);
 
         Lex::Token token;
         Lex::TokenValue tokenVal;
 
-        VariableDefinition* def = new VariableDefinition();
-        
+        VariableDefinition* def = Reg.Node.initVariableDefinition();
+        def->var->base.scope = scope;
+
         if (Lex::isDtype(prevToken.token)) {
             DataTypeEnum dtype = Lex::toDtype((Lex::Keyword) prevToken.token.detail);
             token = parseKnownDataType(&lspan, scope, dtype, { NULL, 0 }, def, &tokenVal);
         } else {
             token = parseDataType(&lspan, scope, prevToken, ALLOW_QUALIFIER, def, &tokenVal);
         }
-        
+
         if (token.encoded < 0) return token;
 
         token = parseDefinitionAssignment(&lspan, scope, { token, tokenVal }, def, endToken, 0);
@@ -1280,8 +1172,8 @@ namespace Parser {
 
         if (outVarDef) *outVarDef = def;
         else insertVariableDefinition(scope, def);
-        
-        def->span = finalizeSpan(&lspan, span);
+
+        def->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -1291,7 +1183,7 @@ namespace Parser {
         Lex::Token token = Lex::nextToken(span, NULL);
         const int rawStringRequired = token.kind == Lex::TK_RAW ? 1 : 0;
 
-        StringInitialization* init = new StringInitialization;
+        StringInitialization* init = Reg.Node.initStringInitialization();
         init->rawStr = std::string(str->buff, str->len);
         init->rawPtr = str->buff;
         init->rawPtrLen = str->len;
@@ -1301,13 +1193,13 @@ namespace Parser {
 
             init->wideStr = NULL;
             init->wideDtype = DT_U8;
-        
+
         } else {
 
             int utf8Len;
             int utf8BytesPerChar;
-            char* utf8Str = Utils::encodeUtf8(init->rawPtr, init->rawPtrLen, &utf8Len, &utf8BytesPerChar);
-            
+            char* utf8Str = Strings::encodeUtf8(init->rawPtr, init->rawPtrLen, &utf8Len, &utf8BytesPerChar, 0);
+
             if (utf8BytesPerChar != 1) {
                 init->wideStr = utf8Str;
                 init->wideDtype = (DataTypeEnum) (DT_U8 + utf8BytesPerChar - 1);
@@ -1316,7 +1208,7 @@ namespace Parser {
                 init->wideStr = NULL;
                 init->wideDtype = DT_U8;
             }
-        
+
         }
 
         *initOut = init;
@@ -1328,31 +1220,31 @@ namespace Parser {
     Lex::Token parseArrayInitialization(Span* span, Scope* scope, ArrayInitialization** initOut) {
 
         Lex::Token token;
-        *initOut = new ArrayInitialization();
+        *initOut = Reg.Node.initArrayInitialization();
 
         token = Lex::nextToken(span);
 
         while (1) {
 
-            Variable* var = new Variable();
-            var->scope = scope;
+            Variable* var = Reg.Node.initVariable();
+            var->base.scope = scope;
 
             token = parseExpression(span, var, INVALID_POS, End { Lex::TK_LIST_SEPARATOR, Lex::TK_ARRAY_END });
             if (token.kind < 0) return token;
 
-            (*initOut)->attributes.push_back(var);
+            DArray::push(&(*initOut)->attributes.base, &var);
 
             if (token.kind == Lex::TK_ARRAY_END) break;
             if (token.kind != Lex::TK_LIST_SEPARATOR) {
                 uint64_t tmp = Lex::toIntStr(Lex::LIST_SEPARATOR);
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span, &tmp);
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span, &tmp);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
         }
 
         return token;
-    
+
     }
 
     Lex::Token parseTypeInitialization(Span* const span, Scope* scope, TypeInitialization** outTypeInit) {
@@ -1362,7 +1254,7 @@ namespace Parser {
         Lex::Token token;
         Lex::TokenValue tokenVal;
 
-        TypeInitialization* dtypeInit = new TypeInitialization();
+        TypeInitialization* dtypeInit = Reg.Node.initTypeInitialization();
 
         token = Lex::nextToken(&lspan, &tokenVal);
         Lex::Token nextToken = Lex::peekToken(&lspan);
@@ -1375,13 +1267,14 @@ namespace Parser {
 
             while (1) {
 
-                Variable* var = new Variable(scope);
-                var->span = getSpanStamp(&lspan);
+                Variable* var = Reg.Node.initVariable();
+                var->base.scope = scope;
+                var->base.span = getSpanStamp(&lspan);
 
                 if (token.kind == Lex::TK_THE_REST) {
-                    
+
                     if (hasFillVar) {
-                        Logger::log(Logger::ERROR, "Fill the rest symbol can be used only once per initialization!", span);
+                        Logger::log(logErr, "Fill the rest symbol can be used only once per initialization!", span);
                         return Lex::toToken(Err::UNEXPECTED_SYMBOL);
                     }
 
@@ -1390,21 +1283,21 @@ namespace Parser {
 
                 } else if (token.kind == Lex::TK_IDENTIFIER) {
 
-                    var->name = tokenVal.str->buff;
-                    var->nameLen = tokenVal.str->len;
-                    dtypeInit->attributes.push_back(var);
-                
+                    var->name.buff = tokenVal.str->buff;
+                    var->name.len = tokenVal.str->len;
+                    DArray::push(&dtypeInit->attributes.base, &var);
+
                 } else {
-                    
+
                     // ERROR
-                    Logger::log(Logger::ERROR, "Attribute name expected!", span);
+                    Logger::log(logErr, "Attribute name expected!", span);
                     return Lex::toToken(Err::UNEXPECTED_SYMBOL);
-                
+
                 }
 
                 token = Lex::nextToken(&lspan, NULL);
                 if (token.kind != Lex::TK_STATEMENT_BEGIN) {
-                    Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, Lex::toStr(Lex::TK_STATEMENT_BEGIN));
+                    Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, Lex::toStr(Lex::TK_STATEMENT_BEGIN));
                     return Lex::toToken(Err::UNEXPECTED_SYMBOL);
                 }
 
@@ -1419,23 +1312,23 @@ namespace Parser {
         } else {
 
             while (1) {
-                
-                Variable* var = new Variable();
+
+                Variable* var = Reg.Node.initVariable();
 
                 token = parseExpression(&lspan, var, INVALID_POS, End { Lex::TK_LIST_SEPARATOR, Lex::TK_SCOPE_END });
                 if (token.encoded < 0) return token;
 
-                dtypeInit->attributes.push_back(var);
+                DArray::push(&dtypeInit->attributes.base, &var);
 
                 if (token.kind == Lex::TK_SCOPE_END) break;
-                
+
             }
 
         }
 
-        dtypeInit->idxs = (int*) malloc(dtypeInit->attributes.size() * sizeof(int));
+        dtypeInit->idxs = (int*) nalloc(nalc, AT_BYTE, dtypeInit->attributes.base.size * sizeof(int));
         if (!dtypeInit->idxs) {
-            Logger::log(Logger::ERROR, Err::str[-Err::MALLOC]);
+            Logger::log(logErr, Err::str[-Err::MALLOC]);
             return Lex::toToken(Err::MALLOC);
         }
 
@@ -1445,7 +1338,7 @@ namespace Parser {
         span->end = lspan.end;
 
         return token;
-    
+
     }
 
     // either alloc or expression
@@ -1459,41 +1352,41 @@ namespace Parser {
         if (mainDtype == DT_POINTER) {
             mainDtype = outVar->cvalue.ptr->pointsToEnum;
         } else if (mainDtype == DT_ARRAY) {
-            mainDtype = outVar->cvalue.arr->pointsToEnum;
+            mainDtype = outVar->cvalue.arr->base.pointsToEnum;
         }
 
         Pos startPos = span->start;
 
         token = Lex::nextToken(span, NULL);
         if (Lex::isKeyword(token, Lex::KW_ALLOC)) {
-        
+
             Pos startPos = span->end;
 
             Pointer* lastPtr = NULL;
 
-            VariableDefinition* varDef = new VariableDefinition();
-            varDef->scope = scope;
-            varDef->span = getSpanStamp(span);
+            VariableDefinition* varDef = Reg.Node.initVariableDefinition();
+            varDef->base.scope = scope;
+            varDef->base.span = getSpanStamp(span);
 
-            Variable* var = new Variable();
+            Variable* var = Reg.Node.initVariable();
             var->def = varDef;
 
             varDef->var = var;
 
             token = Lex::nextToken(span, &tokenVal);
             if (token.kind == Lex::TK_IDENTIFIER) {
-                
+
                 var->cvalue.dtypeEnum = DT_CUSTOM;
                 var->cvalue.any = NULL;
 
-                varDef->dtype = new QualifiedName();
-                varDef->dtype->name = tokenVal.str->buff;
-                varDef->dtype->nameLen = tokenVal.str->len;
-            
+                varDef->dtype = Reg.Node.initQualifiedName();
+                varDef->dtype->buff = tokenVal.str->buff;
+                varDef->dtype->len = tokenVal.str->len;
+
             } else if (token.kind == Lex::TK_KEYWORD) {
-                
+
                 if (!Lex::isDtype(token)) {
-                    Logger::log(Logger::ERROR, "TODO : data type expected, no place for generic keyword!");
+                    Logger::log(logErr, "TODO : data type expected, no place for generic keyword!");
                     return Lex::toToken(Err::INVALID_DATA_TYPE);
                 }
 
@@ -1502,31 +1395,31 @@ namespace Parser {
 
             } else if (mainDtype <= 0) {
 
-                Logger::log(Logger::ERROR, "TODO : error parseRValue alloc requires dtype name! Can be omitted only in definition!");
+                Logger::log(logErr, "TODO : error parseRValue alloc requires dtype name! Can be omitted only in definition!");
                 return Lex::toToken(Err::INVALID_DATA_TYPE);
-            
+
             } else {
-                
+
                 var->cvalue.dtypeEnum = mainDtype;
                 var->cvalue.any = mainDtype == DT_CUSTOM ? NULL : dataTypes + mainDtype;
 
                 if (outVar->def) {
-                    varDef->dtype = new QualifiedName();
+                    varDef->dtype = Reg.Node.initQualifiedName();
                     varDef->dtype = outVar->def->dtype;
                 }
 
                 span->end = startPos;
-            
+
             }
 
-            Function* const fcn = internalFunctions + (IF_ALLOC - 1);
+            Function* const fcn = Internal::functions + (Internal::IF_ALLOC - 1);
 
-            FunctionCall* fcnCall = new FunctionCall();
+            FunctionCall* fcnCall = Reg.Node.initFunctionCall();
             fcnCall->fptr = NULL;
             fcnCall->fcn = fcn;
-            fcnCall->name = fcn->name;
-            fcnCall->nameLen = fcn->nameLen;
-            fcnCall->outArg = new Variable();
+            fcnCall->name.buff = fcn->name.buff;
+            fcnCall->name.len = fcn->name.len;
+            fcnCall->outArg = Reg.Node.initVariable();
             fcnCall->outArg->cvalue.dtypeEnum = DT_POINTER;
 
             token = parseDataTypeDecorators(span, scope, var, ALLOW_QUALIFIER, &tokenVal, &lastPtr);
@@ -1536,20 +1429,20 @@ namespace Parser {
                 token = parseExpression(span, var, INVALID_POS, endToken);
                 if (token.encoded < 0) return token;
             } else if (token.kind != Lex::TK_STATEMENT_END) {
-                Logger::log(Logger::ERROR, "TODO error: parseRValue unexpected symbol!", span);
+                Logger::log(logErr, "TODO error: parseRValue unexpected symbol!", span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
-            
-            fcnCall->inArgs.push_back(var);
 
-            outVar->expression = fcnCall;
-            NodeRegistry::fcnCalls.push_back(outVar);
+            DArray::push(&fcnCall->inArgs.base, &var);
+
+            outVar->expression = (Expression*) fcnCall;
+            DArray::push(&Reg.fcnCalls.base, &outVar);
             // initializations.push_back(varDef);
-            
-            // ...
-            NodeRegistry::customDataTypesReferences.push_back(varDef);
 
-            outVar->snFlags |= IS_ALLOCATION;
+            // ...
+            DArray::push(&Reg.customDataTypesReferences.base, &varDef);
+
+            outVar->base.flags |= IS_ALLOCATION;
 
         } else {
 
@@ -1561,7 +1454,7 @@ namespace Parser {
         return token;
 
     }
-    
+
 
     // pointers can ocur only before arrays
     // for now only one array
@@ -1579,11 +1472,11 @@ namespace Parser {
             if (token.kind == Lex::TK_POINTER) {
 
                 if (wasArray) {
-                    Logger::log(Logger::ERROR, "Pointer can't be used after array declaration!", span);
+                    Logger::log(logErr, "Pointer can't be used after array declaration!", span);
                     return Lex::toToken(Err::UNEXPECTED_SYMBOL);
                 }
-            
-                Pointer* ptr = new Pointer();
+
+                Pointer* ptr = Reg.Node.initPointer();
                 if (!mainPtr) *outLastPointer = ptr;
                 else mainPtr->parentPointer = ptr;
 
@@ -1600,25 +1493,26 @@ namespace Parser {
                 // either const / embed or expression
 
                 Pos arrStart = span->end;
-                
+
                 if (wasArray) {
-                    Logger::log(Logger::ERROR, "Multidimensional arrays not allowed!", span);
+                    Logger::log(logErr, "Multidimensional arrays not allowed!", span);
                     return Lex::toToken(Err::UNEXPECTED_SYMBOL);
                 }
 
                 wasArray = 1;
 
-                Array* arr = new Array;
-                if (!mainPtr) *outLastPointer = arr;
-                else mainPtr->parentPointer = arr;
+                Array* arr = Reg.Node.initArray();
+                if (!mainPtr) *outLastPointer = (Pointer*) arr;
+                else mainPtr->parentPointer = (Pointer*) arr;
 
-                arr->pointsTo = var->cvalue.any;
-                arr->pointsToEnum = var->cvalue.dtypeEnum;
+                arr->base.pointsTo = var->cvalue.any;
+                arr->base.pointsToEnum = var->cvalue.dtypeEnum;
 
-                Variable* lenVar = new Variable(span);
-                lenVar->scope = scope;
-                lenVar->nameLen = 0;
-                
+                Variable* lenVar = Reg.Node.initVariable();
+                lenVar->base.span = getSpanStamp(span);
+                lenVar->base.scope = scope;
+                lenVar->name.len = 0;
+
                 token = Lex::nextToken(span, &tokenVal);
                 if (token.kind == Lex::TK_KEYWORD) {
 
@@ -1626,7 +1520,7 @@ namespace Parser {
 
                     token = Lex::nextToken(span, NULL);
                     if (token.kind != Lex::TK_ARRAY_END) {
-                        Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+                        Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
                         return Lex::toToken(Err::UNEXPECTED_SYMBOL);
                     }
 
@@ -1641,7 +1535,7 @@ namespace Parser {
                     }
 
                     arr->length = NULL; // var->allocSize = NULL;
-                
+
                 } else {
 
                     token = parseExpression(span, lenVar, arrStart, End { Lex::TK_ARRAY_END }, EMPTY_EXPRESSION_ALLOWED);
@@ -1651,21 +1545,23 @@ namespace Parser {
 
                     arr->flags = IS_CMP_TIME;
                     arr->length = lenVar; // var->allocSize = lenVar;
-                
+
                 }
-                
+
                 // var->flags = varDef->flags ^ IS_ARRAY;
                 var->cvalue.dtypeEnum = DT_ARRAY;
                 var->cvalue.arr = arr;
                 // var->dtype = (void*) arr;
-                var->flags = 0;
+                var->base.flags = 0;
 
-                if (flags & INCLUDE_TO_TREE) NodeRegistry::arrays.push_back(var);
+                if (flags & INCLUDE_TO_TREE) {
+                    DArray::push(&Reg.arrays.base, &var);
+                }
 
             } else {
 
                 break;
-            
+
             }
 
         }
@@ -1736,150 +1632,107 @@ namespace Parser {
                 return parseImport(span, scope);
             case Lex::KW_ERROR:
                 return parseError(span, scope);
-
+            default:
+                Logger::log(logErr, "Unsupported keyword processing code encountered!", span);
+                return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
     }
 
-    // basic data types only
-    /*
-    int parseBasicVariableDefinition(Span* const span, Scope* const scope, const DataTypeEnum dtype, 
-        const uint64_t param, 
-        const uint16_t endChar,
-        VariableDefinition** outVarDef,
-        const int include,
-        const int alloc
-    ) {
-
-        Lex::Token token;
-
-        VariableDefinition* def;
-        if (alloc) {
-            def = new VariableDefinition(span);
-        } else {
-            def = *outVarDef;
-        }
-        
-        def->var = new Variable(scope);
-        def->var->def = def;
-        def->var->cvalue.dtypeEnum = dtype;
-        def->var->cvalue.any = (dtype == DT_CUSTOM) ? NULL : dataTypes + dtype;
-        def->var->unrollExpression = 0;
-        def->var->expression = NULL;
-        def->flags = param;
-        def->scope = scope;
-
-        Pointer* lastPtr = NULL;
-        token = parseDataTypeDecorators(span, scope, def->var, &lastPtr, 1);
-        if (token.encoded < 0) return token;
-
-        def->lastPtr = lastPtr;
-        def->var->span = getSpanStamp(span);
-
-        token = parseDefinitionAssignment(span, scope, def, endChar, include);
-        if (token.encoded < 0) return token;
-
-        if (outVarDef) *outVarDef = def;
-        return Err::OK;
-
-    }
-    */
-
     Lex::Token parseFunction(Span* const span, Scope* const scope, uint64_t param) {
 
         SpanEx lspan = markSpanStart(span);
 
-        Lex::TokenValue tokenVal;       
+        Lex::TokenValue tokenVal;
         Lex::Token token;
 
         // first test if it could bee fcn pointer
         token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind == Lex::TK_PARENTHESIS_BEGIN) {
-            
+
             lspan.end.idx = lspan.start.idx - 1;
             token = { .kind = Lex::TK_KEYWORD, .detail = Lex::TD_KW_FCN };
-            
+
             VariableDefinition* def;
             token = parseVariableDefinition(&lspan, scope, { token, tokenVal }, End { Lex::TK_STATEMENT_END }, param, &def);
             if (token.encoded < 0) return token;
-            
+
             // pushDefLike(scope->defSearch, def->var);
-            auto res = scope->defSearch.insert({std::string_view(def->var->name, def->var->nameLen), def->var});
-            if (!res.second) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), def->var->span);
-                return Lex::toToken(Err::SYMBOL_ALREADY_DEFINED);
-            }
 
-            setParentIdx(def->var);
+            const int ierr = insertDefSearch((INamed*) &def->var->name, (SyntaxNode*) def->var, span);
+            if (ierr != Err::OK) return Lex::toToken(ierr);
 
-            scope->children.push_back(def);
-            NodeRegistry::variableDefinitions.push_back(def);
-            scope->defs.push_back(def->var);
+            setParentIdx((SyntaxNode*) def->var);
+
+            DArray::push(&scope->children.base, &def);
+            DArray::push(&Reg.variableDefinitions.base, &def);
+            DArray::push(&scope->defs.base, &def->var);
 
             span->end = lspan.end;
             return token;
-        
+
         }
 
         Function* fcn;
 
-        Scope* newScope = new Scope();
+        Scope* newScope = Reg.Node.initScope();
         newScope->fcn = currentFunction;
-        newScope->scope = scope;
-        setParentIdx(newScope);
+        newScope->base.scope = scope;
+        // setParentIdx(newScope);
 
         int foreignLang = 0;
         if (token.kind == Lex::TK_ARRAY_BEGIN) {
-                
+
             foreignLang = 1;
-            fcn = new ForeignFunction();
+            fcn = (Function*) Reg.Node.initForeignFunction();
 
             Span* tagLoc = getSpanStamp(&lspan);
-            
+
             String tag;
             token = parseLanguageTag(&lspan, &tag);
             if (token.encoded < 0) return token;
 
-            ((ForeignFunction*) fcn)->tagLen = tag.len;
-            ((ForeignFunction*) fcn)->tagStr = tag.buff;
-            ((ForeignFunction*) fcn)->tagLoc = tagLoc;
-            
-            ASSIGN_ID(fcn);
+            ((ForeignFunction*) fcn)->code.tagStr = { tag.buff, tag.len };
+            ((ForeignFunction*) fcn)->code.tagLoc = tagLoc;
+
+            fcn->name.id = varId;
+            varId++;
 
             token = nextToken(&lspan, &tokenVal);
 
         } else {
-            
-            fcn = new Function();
-        
+
+            fcn = Reg.Node.initFunction();
+
         }
 
-        fcn->inArgsCnt = 0;
-        fcn->scope = scope;
+        // fcn->inArgsCnt = 0;
+        fcn->base.scope = scope;
         fcn->errorSetName = NULL;
-        fcn->outArg = Utils::createEmptyVariableDefinition();
+        fcn->prototype.outArg = Reg.Node.initVariableDefinition();
 
         if (token.kind != Lex::TK_IDENTIFIER) {
             // ERROR
-            Logger::log(Logger::ERROR, "Function name expected!", &lspan);
+            Logger::log(logErr, "Function name expected!", &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        fcn->name = tokenVal.str->buff;
-        fcn->nameLen = tokenVal.str->len;
+        fcn->name.buff = tokenVal.str->buff;
+        fcn->name.len = tokenVal.str->len;
 
-        ASSIGN_ID(fcn);
+        fcn->name.id = varId;
+        varId++;
 
         token = Lex::nextToken(&lspan);
         if (token.kind != Lex::TK_PARENTHESIS_BEGIN) {
 
             if (token.kind == Lex::TK_SCOPE_BEGIN) goto fcnParseScope;
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
-        
+
         }
 
         // parse input
@@ -1888,43 +1741,40 @@ namespace Parser {
             token = Lex::nextToken(&lspan, &tokenVal);
             if (token.kind == Lex::TK_PARENTHESIS_END) break;
 
-            fcn->inArgsCnt++;
+            fcn->prototype.inArgsCnt++;
 
             VariableDefinition* varDef;
-            token = parseVariableDefinition(&lspan, scope, { token, tokenVal }, End { Lex::TK_PARENTHESIS_END, Lex::TK_LIST_SEPARATOR }, param, &varDef);
+            token = parseVariableDefinition(&lspan, newScope, { token, tokenVal }, End { Lex::TK_PARENTHESIS_END, Lex::TK_LIST_SEPARATOR }, param, &varDef);
             if (token.encoded < 0) return token;
 
             // :)
-            varDef->var->parentIdx = -1;
-            varDef->parentIdx = -1;
+            varDef->base.parentIdx = -1;
+            varDef->base.parentIdx = -1;
 
-            auto res = newScope->defSearch.insert({std::string_view(varDef->var->name, varDef->var->nameLen), varDef->var});
-            if (!res.second) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), varDef->var->span);
-                return Lex::toToken(Err::SYMBOL_ALREADY_DEFINED);
-            }
-            
-            NodeRegistry::variableDefinitions.push_back(varDef);
-            newScope->defs.push_back(varDef->var);
+            const int ierr = insertDefSearch((INamed*) &varDef->var->name, (SyntaxNode*) varDef->var, span);
+            if (ierr != Err::OK) return Lex::toToken(ierr);
 
-            fcn->inArgs.push_back(varDef);
+            DArray::push(&Reg.variableDefinitions.base, &varDef);
+            DArray::push(&newScope->defs.base, &varDef->var);
+
+            DArray::push(&fcn->prototype.inArgs.base, &varDef);
 
             if (token.kind == Lex::TK_PARENTHESIS_END) break;
-        
+
         }
 
         // [using 'Error Set']
         token = Lex::nextToken(&lspan, &tokenVal);
         if (Lex::isKeyword(token, Lex::KW_USING)) {
 
-            fcn->errorSetName = new QualifiedName();
+            fcn->errorSetName = Reg.Node.initQualifiedName();
             token = Lex::nextToken(&lspan, &tokenVal);
             if (token.encoded < 0) return token;
 
-            Using* tmp = new Using();
-            tmp->var = fcn;
-            
-            newScope->usings.push_back(tmp);
+            Using* tmp = Reg.Node.initUsing();
+            tmp->var = (SyntaxNode*) fcn;
+
+            DArray::push(&newScope->usings.base, &tmp);
 
             token = Lex::nextToken(&lspan, &tokenVal);
 
@@ -1932,66 +1782,65 @@ namespace Parser {
 
         // ->
         if (token.kind != Lex::TK_ARROW) {
-            
+
             if (token.kind == Lex::TK_SCOPE_BEGIN) goto fcnParseScope;
 
             // LOOK AT : maybe better name for this situation, something like "unexpected char sequence"
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
-            Logger::log(Logger::HINT, "'->' expected\n");
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+            Logger::log(logHnt, "'->' expected\n");
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
         }
 
         // parse output
         token = Lex::nextToken(&lspan, &tokenVal);
-        token = parseDataType(&lspan, scope, { token, tokenVal }, NULL_FLAG, fcn->outArg, &tokenVal);
+        token = parseDataType(&lspan, scope, { token, tokenVal }, NULL_FLAG, fcn->prototype.outArg, &tokenVal);
         if (token.encoded < 0) return token;
 
         // scope
         if (token.kind != Lex::TK_SCOPE_BEGIN && token.kind != Lex::TK_STATEMENT_BEGIN) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         fcnParseScope:
-        
+
         if (foreignLang) {
-            
+
             ForeignFunction* ffcn = (ForeignFunction*) fcn;
-            
-            ffcn->codeStr = lspan.str + lspan.start.idx;
-            ffcn->codeLen = Lex::findBlockEnd(&lspan, Lex::SCOPE_BEGIN, Lex::SCOPE_END);
-            if (ffcn->codeLen < 0) {
+
+            ffcn->code.codeStr = (char*) (lspan.str + lspan.start.idx);
+            ffcn->code.codeStr.len = Lex::findBlockEnd(&lspan, Lex::SCOPE_BEGIN, Lex::SCOPE_END);
+            if (ffcn->code.codeStr.len < 0) {
                 return Lex::toToken(Err::UNEXPECTED_END_OF_FILE);
             }
 
-            ffcn->internalIdx = -3443431;
-            scope->fcns.push_back(ffcn);
-            NodeRegistry::foreignFunctions.push_back(ffcn);
+            ffcn->fcn.internalIdx = -3443431;
+            DArray::push(&scope->fcns.base, &ffcn);
+            DArray::push(&Reg.foreignFunctions.base, &ffcn);
 
-            ffcn->span = finalizeSpan(&lspan, span);
+            ffcn->fcn.base.span = finalizeSpan(&lspan, span);
             return token;
-        
+
         }
 
         fcn->internalIdx = 0;
 
-        //Scope* newScope = new Scope;
-        //newScope->fcn = currentFunction;
-        //newScope->scope = outerScope;
-
         currentFunction = fcn;
-        token = parseScope(&lspan, newScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+
+        const ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+        token = parseScope(&lspan, newScope, SC_COMMON, scopeEnd);
         if (token.kind < 0) return token;
+
         currentFunction = NULL;
 
         fcn->bodyScope = newScope;
 
-        scope->children.push_back(fcn);
-        scope->fcns.push_back(fcn);
-        NodeRegistry::fcns.push_back(fcn);
+        DArray::push(&scope->children.base, &fcn);
+        DArray::push(&scope->fcns.base, &fcn);
+        DArray::push(&Reg.fcns.base, &fcn);
 
-        fcn->span = finalizeSpan(&lspan, span);
+        fcn->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -2002,80 +1851,87 @@ namespace Parser {
 
         Lex::TokenValue tokenVal;
         Lex::Token token;
-        const int parentIdx = scope->children.size();
+        const int parentIdx = scope->children.base.size;
 
-        Scope* newScope = new Scope();
+        Scope* newScope = Reg.Node.initScope();
         newScope->fcn = currentFunction;
-        newScope->scope = scope;
-        newScope->parentIdx = parentIdx;
+        newScope->base.scope = scope;
+        newScope->base.parentIdx = parentIdx;
 
-        Variable* newOperand = new Variable(scope);
+        Variable* newOperand = Reg.Node.initVariable();
+        newOperand->base.scope = scope;
+
         token = parseExpression(&lspan, newOperand, INVALID_POS, End { Lex::TK_STATEMENT_BEGIN, Lex::TK_SCOPE_BEGIN });
         if (token.encoded < 0) return token;
-        
-        token = parseScope(&lspan, newScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+
+        const ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+        token = parseScope(&lspan, newScope, SC_COMMON, scopeEnd);
         if (token.encoded < 0) return token;
 
-        Branch* branch = new Branch();
-        branch->scope = scope;
-        branch->scopes.push_back(newScope);
-        branch->expressions.push_back(newOperand);
+        Branch* branch = Reg.Node.initBranch();
+        branch->base.scope = scope;
 
-        scope->children.push_back(branch);
-        NodeRegistry::branchExpressions.push_back(newOperand);
+        DArray::push(&branch->scopes.base, &newScope);
+        DArray::push(&branch->expressions.base, &newOperand);
+
+        DArray::push(&scope->children.base, &branch);
+        DArray::push(&Reg.branchExpressions.base, &newOperand);
 
         while (1) {
 
             token = Lex::tryKeyword(&lspan, Lex::KW_ELSE);
             if (token.kind != Lex::TK_KEYWORD) {
-                branch->span = finalizeSpan(&lspan, span);
+                branch->base.span = finalizeSpan(&lspan, span);
                 return token;
             }
-            
+
             token = Lex::nextToken(&lspan, &tokenVal);
             if (token.kind == Lex::TK_SCOPE_BEGIN || token.kind == Lex::TK_STATEMENT_BEGIN) {
                 // else case
 
-                Scope* newScope = new Scope();
+                Scope* newScope = Reg.Node.initScope();
                 newScope->fcn = currentFunction;
-                newScope->scope = scope;
-                newScope->parentIdx = parentIdx;
+                newScope->base.scope = scope;
+                newScope->base.parentIdx = parentIdx;
 
-                token = parseScope(&lspan, newScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+                ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+                token = parseScope(&lspan, newScope, SC_COMMON, scopeEnd);
                 if (token.encoded < 0) return token;
 
-                branch->scopes.push_back(newScope);
+                DArray::push(&branch->scopes.base, &newScope);
 
-                branch->span = finalizeSpan(&lspan, span);
+                branch->base.span = finalizeSpan(&lspan, span);
                 return token;
 
             }
 
             // else if case
-            
+
             if (!Lex::isKeyword(token, Lex::KW_IF)) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "if, ':' or '{'");
-                return Lex::toToken(Err::UNEXPECTED_SYMBOL);                
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "if, ':' or '{'");
+                return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
-            Variable* newOperand = new Variable(scope);
-            newOperand->span = getSpanStamp(&lspan);
+            Variable* newOperand = Reg.Node.initVariable();
+            newOperand->base.scope = scope;
+            newOperand->base.span = getSpanStamp(&lspan);
 
             token = parseExpression(&lspan, newOperand, INVALID_POS, End { Lex::TK_STATEMENT_BEGIN, Lex::TK_SCOPE_BEGIN });
             if (token.encoded < 0) return token;
 
-            Scope *newScope = new Scope();
+            Scope *newScope = Reg.Node.initScope();
             newScope->fcn = currentFunction;
-            newScope->scope = scope;
-            newScope->parentIdx = parentIdx;
+            newScope->base.scope = scope;
+            newScope->base.parentIdx = parentIdx;
 
-            token = parseScope(&lspan, newScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+            ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+            token = parseScope(&lspan, newScope, SC_COMMON, scopeEnd);
             if (token.encoded < 0) return token;
 
-            branch->scopes.push_back(newScope);
-            branch->expressions.push_back(newOperand);
-            NodeRegistry::branchExpressions.push_back(newOperand);
-        
+            DArray::push(&branch->scopes.base, &newScope);
+            DArray::push(&branch->expressions.base, &newOperand);
+            DArray::push(&Reg.branchExpressions.base, &newOperand);
+
         }
 
     }
@@ -2083,16 +1939,16 @@ namespace Parser {
     Lex::Token parseSwitchStatement(Span* const span, Scope* const scope) {
 
         SpanEx lspan = markSpanStart(span);
-    
+
         Lex::TokenValue tokenVal;
         Lex::Token token;
 
-        SwitchCase* switchCase = new SwitchCase;
-        switchCase->scope = scope;
+        SwitchCase* switchCase = Reg.Node.initSwitchCase();
+        switchCase->base.scope = scope;
         switchCase->elseCase = NULL;
 
-        Variable* var = new Variable;
-        var->scope = scope;
+        Variable* var = Reg.Node.initVariable();
+        var->base.scope = scope;
 
         token = parseExpression(&lspan, var, INVALID_POS, End { Lex::TK_STATEMENT_BEGIN, Lex::TK_SCOPE_BEGIN });
         if (token.encoded < 0) return token;
@@ -2120,29 +1976,29 @@ namespace Parser {
 
             Variable* cmpExp;
             if (!elseCase) {
-                cmpExp = new Variable();
-                cmpExp->scope = scope;
+                cmpExp = Reg.Node.initVariable();
+                cmpExp->base.scope = scope;
                 token = parseExpression(&lspan, cmpExp, INVALID_POS, End { Lex::TK_STATEMENT_BEGIN, Lex::TK_SCOPE_BEGIN });
                 if (token.encoded < 0) return token;
             } else {
                 if (!atLeastOneCase) {
-                    Logger::log(Logger::ERROR, "Else case can't be the first case!", &lspan);
+                    Logger::log(logErr, "Else case can't be the first case!", &lspan);
                     return Lex::toToken(Err::UNEXPECTED_SYMBOL);
                 }
                 token = Lex::nextToken(&lspan);
             }
 
-            Scope* sc = new Scope;
+            Scope* sc = Reg.Node.initScope();
             sc->fcn = currentFunction;
-            sc->scope = scope;
-            setParentIdx(sc);
+            sc->base.scope = scope;
+            // setParentIdx(sc);
 
             if (token.kind == Lex::TK_STATEMENT_BEGIN) {
-                parseScope(&lspan, sc, SC_COMMON, 1); 
+                token = parseScope(&lspan, sc, SC_COMMON, SE_STATEMENT);
             } else if (token.kind == Lex::TK_SCOPE_BEGIN) {
-                parseScope(&lspan, sc);
+                token = parseScope(&lspan, sc, SC_COMMON, SE_DEFAULT);
             } else {
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
@@ -2151,35 +2007,36 @@ namespace Parser {
                 break;
             }
 
-            switchCase->casesExp.push_back(cmpExp);
-            switchCase->cases.push_back(sc);
+            DArray::push(&switchCase->casesExp.base, &cmpExp);
+            DArray::push(&switchCase->cases.base, &sc);
 
         }
 
-        NodeRegistry::switchCases.push_back(switchCase);
-        scope->children.push_back(switchCase);
+        DArray::push(&Reg.switchCases.base, &switchCase);
+        DArray::push(&scope->children.base, &switchCase);
 
-        switchCase->span = finalizeSpan(&lspan, span);
+        switchCase->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
 
     Lex::Token parseForLoop(Span* const span, Scope* const scope) {
-        
+
         SpanEx lspan = markSpanStart(span);
 
         // TODO : something about empty expressions, maybe make them null or something...
         Lex::Token token;
         Lex::TokenValue tokenVal;
 
-        ForLoop* loop = new ForLoop();
+        ForLoop* loop = Reg.Node.initForLoop();
 
-        Scope* outerScope = new Scope();
+        Scope* outerScope = Reg.Node.initScope();
         outerScope->fcn = currentFunction;
-        outerScope->scope = scope;
-        setParentIdx(outerScope);
+        outerScope->base.scope = scope;
+        // setParentIdx(outerScope);
 
-        Variable* initEx = new Variable(outerScope);
+        Variable* initEx = Reg.Node.initVariable();
+        initEx->base.scope = outerScope;
 
         // can be either variable initialization or expression
         Pos startPos = lspan.end;
@@ -2191,53 +2048,58 @@ namespace Parser {
         }
         if (token.encoded < 0) return token;
 
-        Scope* bodyScope = new Scope();
+        Scope* bodyScope = Reg.Node.initScope();
         bodyScope->fcn = currentFunction;
-        bodyScope->scope = outerScope;
-        setParentIdx(bodyScope);
+        bodyScope->base.scope = outerScope;
+        // setParentIdx(bodyScope);
 
-        Variable* conditionEx = new Variable(outerScope);
+        Variable* conditionEx = Reg.Node.initVariable();
+        conditionEx->base.scope = outerScope;
 
         token = parseExpression(&lspan, conditionEx, INVALID_POS, End { Lex::TK_STATEMENT_END }, EMPTY_EXPRESSION_ALLOWED);
         if (token.kind < 0) return token;
 
         // can be assignment
-        Variable* actionEx = new Variable(outerScope);
+        Variable* actionEx = Reg.Node.initVariable();
+        actionEx->base.scope = outerScope;
 
         token = parseExpression(&lspan, actionEx, INVALID_POS, End { Lex::TK_SCOPE_BEGIN, Lex::TK_STATEMENT_BEGIN }, EMPTY_EXPRESSION_ALLOWED);
         if (token.encoded < 0) return token;
 
         SyntaxNode* tmpLoop = currentLoop;
-        currentLoop = loop;
+        currentLoop = (SyntaxNode*) loop;
 
         if (token.kind == Lex::TK_SCOPE_BEGIN || token.kind == Lex::TK_STATEMENT_BEGIN) {
-            token = parseScope(&lspan, bodyScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+            ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+            token = parseScope(&lspan, bodyScope, SC_COMMON, scopeEnd);
             if (token.kind < 0) return token;
         } else {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         currentLoop = tmpLoop;
 
-        loop->scope = scope;
+        loop->base.scope = scope;
         loop->bodyScope = bodyScope;
         loop->initEx = initEx;
         loop->conditionEx = conditionEx;
         loop->actionEx = actionEx;
 
-        outerScope->children.push_back(loop);
-        scope->children.push_back(outerScope);
+        DArray::push(&outerScope->children.base, &loop);
+        DArray::push(&scope->children.base, &outerScope);
 
         if (conditionEx->expression) {
-            NodeRegistry::branchExpressions.push_back(conditionEx);
+            DArray::push(&Reg.branchExpressions.base, &conditionEx);
         } else {
+            /* TODO: may lead to something...
             loop->conditionEx = NULL;
-            freeSpanStamp(conditionEx->span);
+            freeSpanStamp(conditionEx->base.span);
             delete conditionEx;
+            */
         }
 
-        loop->span = finalizeSpan(&lspan, span);
+        loop->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -2248,59 +2110,64 @@ namespace Parser {
 
         Lex::Token token;
 
-        WhileLoop* loop = new WhileLoop();
+        WhileLoop* loop = Reg.Node.initWhileLoop();
 
-        Scope* newScope = new Scope();
+        Scope* newScope = Reg.Node.initScope();
         newScope->fcn = currentFunction;
-        newScope->scope = scope;
-        setParentIdx(newScope);
+        newScope->base.scope = scope;
+        // setParentIdx(newScope);
 
-        Variable* newOperand = new Variable(newScope);
+        Variable* newOperand = Reg.Node.initVariable();
+        newOperand->base.scope = newScope;
 
         token = parseExpression(&lspan, newOperand, INVALID_POS, End { Lex::TK_SCOPE_BEGIN, Lex::TK_STATEMENT_BEGIN });
         if (token.kind < 0) return token;
 
         SyntaxNode* tmpLoop = currentLoop;
-        currentLoop = loop;
-        
-        token = parseScope(&lspan, newScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+        currentLoop = (SyntaxNode*) loop;
+
+        ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+        token = parseScope(&lspan, newScope, SC_COMMON, scopeEnd);
         if (token.kind < 0) return token;
-        
+
         currentLoop = tmpLoop;
 
-        loop->scope = scope;
+        loop->base.scope = scope;
         loop->bodyScope = newScope;
         loop->expression = newOperand;
 
-        scope->children.push_back(loop);
+        DArray::push(&scope->children.base, &loop);
 
-        loop->span = finalizeSpan(&lspan, span);
+        loop->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
 
     Lex::Token parseForEachLoop(Span* const span, Scope* const scope) {
-        
+
         SpanEx lspan = markSpanStart(span);
 
         Lex::TokenValue tokenVal;
         Lex::Token token = Lex::nextToken(span, &tokenVal);
 
-        Loop* const loop = new Loop();
+        Loop* const loop = Reg.Node.initLoop();
 
-        Scope* outerScope = new Scope();
+        Scope* outerScope = Reg.Node.initScope();
         outerScope->fcn = currentFunction;
-        outerScope->scope = scope;
-        setParentIdx(outerScope);
+        outerScope->base.scope = scope;
+        // setParentIdx(outerScope);
 
-        loop->scope = outerScope;
+        loop->base.scope = outerScope;
 
-        Variable* newVar = new Variable(loop->scope, DT_UNDEFINED, span);
+        Variable* newVar = Reg.Node.initVariable();
+        newVar->base.scope = loop->base.scope;
+        newVar->base.span = getSpanStamp(span);
+
         token = parseExpression(&lspan, newVar, INVALID_POS, End { Lex::TK_STATEMENT_END }, USE_KEYWORD_AS_END);
         if (token.kind < 0) return token;
 
         if (token.kind != Lex::TK_KEYWORD && token.detail != KW_USING) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::INVALID_VARIABLE_NAME), span, "Variable name is matching key word name!");
+            Logger::log(logErr, ERR_STR(Err::INVALID_VARIABLE_NAME), span, "Variable name is matching key word name!");
             return Lex::toToken(Err::INVALID_VARIABLE_NAME);
         }
 
@@ -2310,16 +2177,16 @@ namespace Parser {
         token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind == Lex::TK_KEYWORD) {
             // var def
-            
+
             if (!Lex::isInt((Lex::Keyword) token.detail)) {
-                Logger::log(Logger::ERROR, "Only integral datatypes allowed!", span);
+                Logger::log(logErr, "Only integral datatypes allowed!", span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
             loop->idx = NULL;
-            loop->idxDef = Utils::createEmptyVariableDefinition();
+            loop->idxDef = Reg.Node.initVariableDefinition();
             loop->idxDef->var->cvalue.dtypeEnum = Lex::toDtype(token);
-            
+
             token = parseVariableDefinition(&lspan, outerScope, { token, tokenVal }, End { Lex::TK_STATEMENT_BEGIN, Lex::TK_SCOPE_BEGIN }, NULL_FLAG, &(loop->idxDef));
             if (token.encoded < 0) return token;
 
@@ -2333,31 +2200,33 @@ namespace Parser {
             // var
 
             loop->idxDef = NULL;
-            loop->idx = new Variable(outerScope);
-            loop->idx->name = tokenVal.str->buff;
-            loop->idx->nameLen = tokenVal.str->len;
+            loop->idx = Reg.Node.initVariable();
+            loop->idx->base.scope = outerScope;
+            loop->idx->name.buff = tokenVal.str->buff;
+            loop->idx->name.len = tokenVal.str->len;
 
             token = Lex::nextToken(&lspan);
-        
+
         }
 
-        loop->bodyScope = new Scope();
+        loop->bodyScope = Reg.Node.initScope();
         loop->bodyScope->fcn = currentFunction;
-        loop->bodyScope->scope = loop->scope;
-        setParentIdx(loop->bodyScope);
+        loop->bodyScope->base.scope = loop->base.scope;
+        // setParentIdx(loop->bodyScope);
 
         SyntaxNode* tmpLoop = currentLoop;
-        currentLoop = loop;
-        
-        token = parseScope(&lspan, loop->bodyScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+        currentLoop = (SyntaxNode*) loop;
+
+        ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+        token = parseScope(&lspan, loop->bodyScope, SC_COMMON, scopeEnd);
         if (token.encoded < 0) return token;
-        
+
         currentLoop = tmpLoop;
 
-        NodeRegistry::loops.push_back(loop);
-        scope->children.push_back(loop);
+        DArray::push(&Reg.loops.base, (void*) &loop);
+        DArray::push(&scope->children.base, (void*) &loop);
 
-        loop->span = finalizeSpan(&lspan, span);
+        loop->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -2366,23 +2235,23 @@ namespace Parser {
 
         Lex::TokenValue tokenVal;
         Lex::Token token = Lex::nextToken(span, &tokenVal);
-        
+
         if (token.kind != Lex::TK_IDENTIFIER) {
             // ERROR
-            Logger::log(Logger::ERROR, "Identifier expected!", span);
+            Logger::log(logErr, "Identifier expected!", span);
             return token.encoded < 0 ? token : Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        GotoStatement* gt = new GotoStatement();
+        GotoStatement* gt = Reg.Node.initGotoStatement();
         gt->span = getSpanStamp(span);
-        gt->scope = scope;
-        gt->name = tokenVal.str->buff;
-        gt->nameLen = tokenVal.str->len;
+        gt->base.scope = scope;
+        gt->name.buff = tokenVal.str->buff;
+        gt->name.len = tokenVal.str->len;
         gt->label = NULL;
 
-        scope->children.push_back(gt);
-        scope->gotos.push_back(gt);
-        NodeRegistry::gotos.push_back(gt);
+        DArray::push(&scope->children.base, &gt);
+        DArray::push(&scope->gotos.base, &gt);
+        DArray::push(&Reg.gotos.base, &gt);
 
         return token;
 
@@ -2397,21 +2266,21 @@ namespace Parser {
 
         token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind != Lex::TK_STATEMENT_END) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         if (!currentLoop) {
-            Logger::log(Logger::ERROR, "Continue statement used outside of the loop!");
+            Logger::log(logErr, "Continue statement used outside of the loop!");
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        ContinueStatement* stmt = new ContinueStatement();
-        stmt->scope = scope;
+        ContinueStatement* stmt = Reg.Node.initContinueStatement();
+        stmt->base.scope = scope;
 
-        scope->children.push_back(stmt);
-        
-        stmt->span = finalizeSpan(&lspan, span);
+        DArray::push(&scope->children.base, &stmt);
+
+        stmt->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -2425,21 +2294,21 @@ namespace Parser {
 
         token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind != Lex::TK_STATEMENT_END) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         if (!currentLoop) {
-            Logger::log(Logger::ERROR, "Break statement used outside of the loop!");
+            Logger::log(logErr, "Break statement used outside of the loop!");
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        BreakStatement* stmt = new BreakStatement();
-        stmt->scope = scope;
+        BreakStatement* stmt = Reg.Node.initBreakStatement();
+        stmt->base.scope = scope;
 
-        scope->children.push_back(stmt);
+        DArray::push(&scope->children.base, &stmt);
 
-        stmt->span = finalizeSpan(&lspan, span);
+        stmt->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -2451,26 +2320,26 @@ namespace Parser {
         Lex::TokenValue tokenVal;
         Lex::Token token = Lex::nextToken(&lspan, &tokenVal);
 
-        Namespace* nsc = new Namespace();
-        nsc->type = NT_NAMESPACE;
-        nsc->scope = scope;
-        nsc->name = tokenVal.str->buff;
-        nsc->nameLen = tokenVal.str->len;
-        setParentIdx(nsc);
-        
+        Namespace* nsc = Reg.Node.initNamespace();
+        nsc->scope.base.scope = scope;
+        nsc->name.buff = tokenVal.str->buff;
+        nsc->name.len = tokenVal.str->len;
+        // setParentIdx(nsc);
+
         token = Lex::nextToken(&lspan);
         if (token.kind != Lex::TK_SCOPE_BEGIN && token.kind != Lex::TK_STATEMENT_BEGIN) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        token = parseScope(&lspan, nsc, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+        ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+        token = parseScope(&lspan, (Scope*) nsc, SC_COMMON, scopeEnd);
         if (token.encoded < 0) return token;
 
-        scope->children.push_back(nsc);
-        scope->namespaces.push_back(nsc);
+        DArray::push(&scope->children.base, &nsc);
+        DArray::push(&scope->namespaces.base, &nsc);
 
-        nsc->span = finalizeSpan(&lspan, span);
+        nsc->scope.base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -2487,33 +2356,34 @@ namespace Parser {
 
         Lex::Token token;
 
-        Function* const fcn = internalFunctions + (IF_FREE - 1);
+        Function* const fcn = Internal::functions + (Internal::IF_FREE - 1);
 
-        FunctionCall* fcnCall = new FunctionCall();
+        FunctionCall* fcnCall = Reg.Node.initFunctionCall();
         fcnCall->fptr = NULL;
         fcnCall->fcn = fcn;
-        fcnCall->name = fcn->name;
-        fcnCall->nameLen = fcn->nameLen;
-        fcnCall->outArg = new Variable();
+        fcnCall->name.buff = fcn->name.buff;
+        fcnCall->name.len = fcn->name.len;
+        fcnCall->outArg = Reg.Node.initVariable();
         fcnCall->outArg->cvalue.dtypeEnum = DT_VOID;
-        
-        Variable* inVar = new Variable();
+
+        Variable* inVar = Reg.Node.initVariable();
         token = parseExpression(&lspan, inVar, INVALID_POS, End { Lex::TK_STATEMENT_END });
         if (token.encoded < 0) return token;
 
         fcnCall->inArgsCnt = 1;
-        fcnCall->inArgs.push_back(inVar);
+        DArray::push(&fcnCall->inArgs.base, &inVar);
 
-        Variable* wrapper = new Variable(scope);
-        wrapper->expression = fcnCall;
-        wrapper->span = getSpanStamp(&lspan);
+        Variable* wrapper = Reg.Node.initVariable();
+        wrapper->base.scope = scope;
+        wrapper->expression = (Expression*) fcnCall;
+        wrapper->base.span = getSpanStamp(&lspan);
 
-        Statement* st = new Statement();
-        st->scope = scope;
-        st->op = wrapper;
+        Statement* st = Reg.Node.initStatement();
+        st->base.scope = scope;
+        st->operand = wrapper;
 
-        NodeRegistry::fcnCalls.push_back(wrapper);
-        scope->children.push_back(st);
+        DArray::push(&Reg.fcnCalls.base, &wrapper);
+        DArray::push(&scope->children.base, &st);
 
         token = Lex::nextToken(&lspan);
         return token;
@@ -2526,57 +2396,69 @@ namespace Parser {
 
         Lex::Token token;
 
-        ReturnStatement* ret = new ReturnStatement();
+        ReturnStatement* ret = Reg.Node.initReturnStatement();
         ret->fcn = currentFunction;
-        ret->scope = scope;
+        ret->base.scope = scope;
 
         ret->var = NULL;
         ret->err = NULL;
 
-        ret->idx = currentFunction->returns.size();
-        currentFunction->returns.push_back(ret);
+        ret->idx = currentFunction->returns.base.size;
+        DArray::push(&currentFunction->returns.base, &ret);
 
-        scope->children.push_back(ret);
-        NodeRegistry::returnStatements.push_back(ret);
+        DArray::push(&scope->children.base, &ret);
+        DArray::push(&Reg.returnStatements.base, &ret);
 
         Pos startPos = lspan.end;
 
         token = Lex::nextToken(&lspan);
-        if (token.kind == Lex::TK_STATEMENT_END) return token;
-        
+        if (token.kind == Lex::TK_STATEMENT_END) {
+            ret->base.span = finalizeSpan(&lspan, span);
+            return token;
+        }
+
         if (token.kind != Lex::TK_SKIP) {
 
-            Variable* newVar = new Variable(scope, DT_I64, &lspan);
+            Variable* newVar = Reg.Node.initVariable();
+            newVar->base.scope = scope;
+            newVar->base.span = getSpanStamp(&lspan);
+            newVar->cvalue.dtypeEnum = DT_I64;
 
             token = parseExpression(&lspan, newVar, startPos, End { Lex::TK_LIST_SEPARATOR, Lex::TK_STATEMENT_END });
             if (token.encoded < 0) return token;
 
             ret->var = newVar;
-        
+
         } else {
-            
+
             token = Lex::nextToken(&lspan);
-        
+
         }
 
-        if (token.kind == Lex::TK_STATEMENT_END) return token;
+        if (token.kind == Lex::TK_STATEMENT_END) {
+            ret->base.span = finalizeSpan(&lspan, span);
+            return token;
+        }
 
         if (token.kind != Lex::TK_LIST_SEPARATOR) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, Lex::toStr(Lex::TK_LIST_SEPARATOR));
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, Lex::toStr(Lex::TK_LIST_SEPARATOR));
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         // error case
-        Variable* newVar = new Variable(scope, DT_I64, &lspan);
+        Variable* newVar = Reg.Node.initVariable();
+        newVar->base.scope = scope;
+        newVar->base.span = getSpanStamp(&lspan);
+        newVar->cvalue.dtypeEnum = DT_I64;
 
         token = parseExpression(&lspan, newVar, INVALID_POS, End { Lex::TK_STATEMENT_END });
         if (token.kind < 0) return token;
 
         ret->err = newVar;
 
-        ret->span = finalizeSpan(&lspan, span);
+        ret->base.span = finalizeSpan(&lspan, span);
         return token;
-        
+
     }
 
     Lex::Token parseEnumDefinition(Span* const span, Scope* const scope) {
@@ -2588,29 +2470,29 @@ namespace Parser {
         Lex::TokenValue tokenVal;
         Lex::Token token;
 
-        Enumerator* enumerator = new Enumerator();
+        Enumerator* enumerator = Reg.Node.initEnumerator();
         enumerator->dtype = DT_INT;
 
         token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind != Lex::TK_IDENTIFIER) {
-            Logger::log(Logger::ERROR, "Identifier expected!", &lspan);
+            Logger::log(logErr, "Identifier expected!", &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        enumerator->name = tokenVal.str->buff;
-        enumerator->nameLen = tokenVal.str->len;
+        enumerator->name.buff = tokenVal.str->buff;
+        enumerator->name.len = tokenVal.str->len;
 
         token = Lex::nextToken(&lspan);
         if (token.kind == Lex::TK_STATEMENT_BEGIN) {
 
             token = Lex::nextToken(&lspan, &tokenVal);
             if (token.kind != Lex::TK_KEYWORD) {
-                Logger::log(Logger::ERROR, "Data type expected!", &lspan);
+                Logger::log(logErr, "Data type expected!", &lspan);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
             if (!Lex::isInt((Lex::Keyword) token.detail)) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNKNOWN_DATA_TYPE), &lspan);
+                Logger::log(logErr, ERR_STR(Err::UNKNOWN_DATA_TYPE), &lspan);
                 return Lex::toToken(Err::UNKNOWN_DATA_TYPE);
             }
 
@@ -2621,16 +2503,16 @@ namespace Parser {
         }
 
         if (token.kind != Lex::TK_SCOPE_BEGIN) {
-            Logger::log(Logger::ERROR, "'{' is expected!", &lspan);
+            Logger::log(logErr, "'{' is expected!", &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        enumerator->span = getSpanStamp(&lspan);
+        enumerator->base.span = getSpanStamp(&lspan);
 
-        enumerator->id = defId;
+        enumerator->name.id = defId;
         defId++;
 
-        ASSIGN_ID(enumerator);
+        // assignId(enumerator);
 
         uint64_t lastValue = -1; //((uint64_t) 0) - ((uint64_t) 1);
         while (1) {
@@ -2638,23 +2520,26 @@ namespace Parser {
             token = Lex::nextToken(&lspan, &tokenVal);
             if (token.kind == Lex::TK_SCOPE_END) break;
 
-            VariableDefinition* newVarDef = new VariableDefinition();
-            Variable* newVar = new Variable(scope, enumerator->dtype, &lspan);
+            VariableDefinition* newVarDef = Reg.Node.initVariableDefinition();
+            Variable* newVar = Reg.Node.initVariable();
+            newVar->base.scope = scope;
+            newVar->base.span = getSpanStamp(&lspan);
+            newVar->cvalue.dtypeEnum = enumerator->dtype;
 
             newVarDef->var = newVar;
             newVarDef->var->cvalue.hasValue = 0;
             newVarDef->var->cvalue.dtypeEnum = enumerator->dtype;
-            newVarDef->span = getSpanStamp(&lspan);
-            newVarDef->flags = IS_CMP_TIME;
+            newVarDef->base.span = getSpanStamp(&lspan);
+            newVarDef->base.flags = IS_CMP_TIME;
 
             newVar->def = newVarDef;
-            newVar->name = tokenVal.str->buff;
-            newVar->nameLen = tokenVal.str->len;
+            newVar->name.buff = tokenVal.str->buff;
+            newVar->name.len = tokenVal.str->len;
             newVar->unrollExpression = 1;
 
-            ASSIGN_ID(newVar);
+            assignId(newVar);
 
-            enumerator->vars.push_back(newVar);
+            DArray::push(&enumerator->vars.base, &newVar);
 
             token = Lex::nextToken(&lspan);
             if (token.kind == Lex::TK_EQUAL) {
@@ -2669,21 +2554,21 @@ namespace Parser {
             if (token.kind == Lex::TK_LIST_SEPARATOR) continue;
             if (token.kind == Lex::TK_SCOPE_END) break;
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "',' or '}'");
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, "',' or '}'");
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
-        
+
         }
 
-        NodeRegistry::enumerators.push_back(enumerator);
-        scope->children.push_back(enumerator);
-        scope->enums.push_back(enumerator);
+        DArray::push(&Reg.enumerators.base, &enumerator);
+        DArray::push(&scope->children.base, &enumerator);
+        DArray::push(&scope->enums.base, &enumerator);
 
-        enumerator->span = finalizeSpan(&lspan, span);
+        enumerator->base.span = finalizeSpan(&lspan, span);
 
         return token;
-    
+
     }
-    
+
     Lex::Token parseTypeDefinition(Span* const span, Scope* const scope) {
 
         SpanEx lspan = markSpanStart(span);
@@ -2692,53 +2577,53 @@ namespace Parser {
         Lex::Token token = Lex::nextToken(&lspan, &tokenVal);
 
         Lex::Keyword keyword;
-        if (token.kind == Lex::TK_KEYWORD) { 
+        if (token.kind == Lex::TK_KEYWORD) {
 
             if (token.detail == Lex::TD_KW_UNION || token.detail == Lex::TD_KW_STRUCT) {
                 keyword = (Lex::Keyword) token.detail;
             } else {
-                Logger::log(Logger::ERROR, "Unexpected symbol!", span);
+                Logger::log(logErr, "Unexpected symbol!", span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
-            
+
             token = Lex::nextToken(&lspan);
-        
+
         } else {
-            
+
             keyword = Lex::KW_STRUCT;
-        
+
         }
 
         if (token.kind != Lex::TK_IDENTIFIER) {
-            Logger::log(Logger::ERROR, "Identifier expected!", &lspan);
+            Logger::log(logErr, "Identifier expected!", &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         TypeDefinition* newTypeDefinition;
         if (keyword == Lex::KW_STRUCT) {
-            newTypeDefinition = new TypeDefinition();
+            newTypeDefinition = Reg.Node.initTypeDefinition();
         } else {
-            newTypeDefinition = new Union();
+            newTypeDefinition = (TypeDefinition*) Reg.Node.initUnion();
         }
 
-        newTypeDefinition->scope = scope;
-        newTypeDefinition->name = tokenVal.str->buff;
-        newTypeDefinition->nameLen = tokenVal.str->len;
-        newTypeDefinition->parentIdx = NodeRegistry::customDataTypes.size();
-        newTypeDefinition->span = getSpanStamp(&lspan);
+        newTypeDefinition->base.scope = scope;
+        newTypeDefinition->name.buff = tokenVal.str->buff;
+        newTypeDefinition->name.len = tokenVal.str->len;
+        newTypeDefinition->base.parentIdx = Reg.customDataTypes.base.size;
+        newTypeDefinition->base.span = getSpanStamp(&lspan);
 
-        newTypeDefinition->id = defId;
+        newTypeDefinition->name.id = defId;
         defId++;
 
         token = Lex::nextToken(&lspan);
         if (token.kind != Lex::TK_SCOPE_BEGIN) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        NodeRegistry::customDataTypes.push_back(newTypeDefinition);
-        scope->customDataTypes.push_back(newTypeDefinition);
-        scope->children.push_back(newTypeDefinition);
+        DArray::push(&Reg.customDataTypes.base, &newTypeDefinition);
+        DArray::push(&scope->customDataTypes.base, &newTypeDefinition);
+        DArray::push(&scope->children.base, &newTypeDefinition);
 
         while (1) {
 
@@ -2748,18 +2633,18 @@ namespace Parser {
             VariableDefinition* varDef;
             token = parseVariableDefinition(&lspan, scope, { token, tokenVal }, End { Lex::TK_SCOPE_END, Lex::TK_STATEMENT_END }, NULL_FLAG, &varDef);
             if (token.kind < 0) return token;
-            
-            newTypeDefinition->vars.push_back(varDef->var);
-            
+
+            DArray::push(&newTypeDefinition->vars.base, &varDef->var);
+
             if (token.kind == Lex::TK_STATEMENT_END) continue;
             if (token.kind == Lex::TK_SCOPE_END) break;
-                
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
+
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
         }
 
-        newTypeDefinition->span = finalizeSpan(&lspan, span);
+        newTypeDefinition->base.span = finalizeSpan(&lspan, span);
 
         return token;
 
@@ -2773,25 +2658,22 @@ namespace Parser {
         token = Lex::nextToken(span, &tokenVal);
         if (token.kind != Lex::TK_IDENTIFIER) {
             // ERROR
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        VariableDefinition* def = Utils::createEmptyVariableDefinition();
-        def->var->name = tokenVal.str->buff;
-        def->var->nameLen = tokenVal.str->len;
+        VariableDefinition* def = Reg.Node.initVariableDefinition();
+        def->var->name.buff = tokenVal.str->buff;
+        def->var->name.len = tokenVal.str->len;
         def->var->cvalue.dtypeEnum = DT_ERROR;
-        def->var->span = getSpanStamp(span);
-        def->scope = scope;
-        setParentIdx(def->var);
+        def->var->base.span = getSpanStamp(span);
+        def->base.scope = scope;
+        setParentIdx((SyntaxNode*) def->var);
 
-        auto res = def->scope->defSearch.insert({std::string_view(def->var->name, def->var->nameLen), def->var});
-        if (!res.second) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), span);
-            return Lex::toToken(Err::SYMBOL_ALREADY_DEFINED);
-        }
+        const int ierr = insertDefSearch((INamed*) &def->var->name, (SyntaxNode*) def->var, span);
+        if (ierr != Err::OK) return Lex::toToken(ierr);
 
-        ASSIGN_ID(def->var);
+        assignId(def->var);
 
         token = Lex::nextToken(span, NULL);
         if (token.kind == Lex::TK_EQUAL) {
@@ -2801,14 +2683,14 @@ namespace Parser {
 
         } else if (token.kind != Lex::TK_STATEMENT_END) {
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
         }
 
-        NodeRegistry::variableDefinitions.push_back(def);
-        scope->defs.push_back(def->var);
-        scope->children.push_back(def);
+        DArray::push(&Reg.variableDefinitions.base, &def);
+        DArray::push(&scope->defs.base, &def->var);
+        DArray::push(&scope->children.base, &def);
 
         return token;
 
@@ -2823,18 +2705,19 @@ namespace Parser {
 
         token = Lex::nextToken(&lspan, &tokenVal);
 
-        ErrorSet* errorSet = new ErrorSet();
-        errorSet->scope = scope;
-        errorSet->name = tokenVal.str->buff;
-        errorSet->nameLen = tokenVal.str->len;
+        ErrorSet* errorSet = Reg.Node.initErrorSet();
+        errorSet->base.scope = scope;
+        errorSet->name.buff = tokenVal.str->buff;
+        errorSet->name.len = tokenVal.str->len;
         errorSet->value = errId;
         errId++;
 
-        ASSIGN_ID(errorSet);
+        errorSet->name.id = varId;
+        varId++;
 
         token = Lex::nextToken(&lspan, NULL);
         if (token.kind != Lex::TK_SCOPE_BEGIN) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, Lex::toStr(Lex::TK_SCOPE_BEGIN));
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), &lspan, Lex::toStr(Lex::TK_SCOPE_BEGIN));
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
@@ -2843,32 +2726,32 @@ namespace Parser {
             token = Lex::nextToken(&lspan, &tokenVal);
             if (token.kind == Lex::TK_SCOPE_END) break;
 
-            Variable* var = new Variable();
-            var->scope = scope;
-            var->name = tokenVal.str->buff;
-            var->nameLen = tokenVal.str->len;
-            var->span = getSpanStamp(&lspan);
+            Variable* var = Reg.Node.initVariable();
+            var->base.scope = scope;
+            var->name.buff = tokenVal.str->buff;
+            var->name.len = tokenVal.str->len;
+            var->base.span = getSpanStamp(&lspan);
             var->cvalue.hasValue = 0;
             var->cvalue.dtypeEnum = DT_ERROR;
             var->cvalue.u64 = errId;
             errId++;
 
-            errorSet->vars.push_back(var);
+            DArray::push(&errorSet->vars.base, &var);
 
             token = Lex::nextToken(&lspan, &tokenVal);
             if (token.kind == Lex::TK_STATEMENT_END) continue;
             if (token.kind == Lex::TK_SCOPE_END) break;
 
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
         }
 
-        NodeRegistry::customErrors.push_back(errorSet);
-        scope->customErrors.push_back(errorSet);
-        scope->children.push_back(errorSet);
+        DArray::push(&Reg.customErrors.base, &errorSet);
+        DArray::push(&scope->customErrors.base, &errorSet);
+        DArray::push(&scope->children.base, &errorSet);
 
-        errorSet->span = finalizeSpan(&lspan, span);
+        errorSet->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
@@ -2877,20 +2760,20 @@ namespace Parser {
 
         Lex::TokenValue tokenVal;
         Lex::Token token;
-        
+
         token = Lex::peekNthToken(span, &tokenVal, 2);
         if (token.kind != Lex::TK_SCOPE_BEGIN) {
-            
+
             token = parseErrorDeclaration(span, scope);
             if (token.encoded < 0) return token;
-        
+
         }
 
         token = parseErrorDefinition(span, scope);
         if (token.encoded < 0) return token;
 
         return token;
-        
+
     }
 
     Lex::Token parseImport(Span* const span, Scope* const scope) {
@@ -2900,74 +2783,73 @@ namespace Parser {
         Lex::Token token;
         Lex::TokenValue tokenVal;
 
-        ImportStatement* import = new ImportStatement();
+        ImportStatement* import = Reg.Node.initImportStatement();
         // import->root = fileRootScope;
-        import->scope = scope;
+        import->base.scope = scope;
 
-        ImportNode* importNode = new ImportNode;
+        ImportNode* importNode = initImportNode();
         importNode->import = import;
         importNode->parent = importCurrent;
 
         token = Lex::tryKeyword(&lspan, Lex::KW_FROM);
-        if (token.kind == Lex::TK_KEYWORD) {
-            
-            import->fname = *tokenVal.str;
-            import->keyWord = (KeyWordType) -1;
-            importCurrent->children.push_back(importNode);
-
-        } else {
-
+        if (token.kind != Lex::TK_KEYWORD) {
             token = Lex::nextFileName(&lspan, &tokenVal);
-            
-            import->fname = *tokenVal.str;
-            import->keyWord = (KeyWordType) -1;
-            importCurrent->children.push_back(importNode);
-
         }
+
+        import->fname = *tokenVal.str;
+        import->keyword = KW_VOID;
+
+        pushImportChunk(importCurrent, importNode);
 
         token = Lex::nextToken(&lspan, &tokenVal);
         if (!Lex::isKeyword(token, Lex::KW_AS)) {
-            Logger::log(Logger::ERROR, "Keyword 'as' expected!", span);
+            Logger::log(logErr, "Keyword 'as' expected!", span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        token = Lex::nextToken(span, &tokenVal);
+        token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind != Lex::TK_KEYWORD) {
-            Logger::log(Logger::ERROR, "Unsupported value is used! Use one of the following : 'namespace', 'fcn', 'scope'\n", span);
+            Logger::log(logErr, "Unsupported value is used! Use one of the following : 'namespace', 'fcn', 'scope'\n", span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        if (token.detail != KW_NAMESPACE && token.detail != KW_SCOPE && token.detail != KW_FUNCTION) {
-            Logger::log(Logger::ERROR, "Unsupported value is used! Use one of the following : 'namespace', 'fcn', 'scope'\n", span);
+        if (token.detail != KW_NAMESPACE && token.detail != KW_SCOPE && token.detail != KW_FCN) {
+            Logger::log(logErr, "Unsupported value is used! Use one of the following : 'namespace', 'fcn', 'scope'\n", span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        import->keyWord = (KeyWordType) token.detail;
+        import->keyword = (KeywordType) token.detail;
 
-        token = Lex::nextToken(span, &tokenVal);
+        token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind != Lex::TK_IDENTIFIER) {
-            Logger::log(Logger::ERROR, "Identifier expected!", span);
+            Logger::log(logErr, "Identifier expected!", span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        token = Lex::nextToken(span, &tokenVal);
+        token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind != Lex::TK_STATEMENT_END) {
-            Logger::log(Logger::ERROR, "End of statement expected!", span);
+            Logger::log(logErr, "End of statement expected!", span);
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
-        importCurrent->children.push_back(importNode);
+        //pushImportChunk(importCurrent, importNode);
 
+        import->base.span = finalizeSpan(&lspan, span);
         return token;
 
     }
 
-    Lex::Token parseDirective(Span* const span, Scope* const scope, Lex::Directive directive, Flags param) { 
-        
+    Lex::Token parseDirective(Span* const span, Scope* const scope, Lex::Directive directive, Flags param) {
+
         switch (directive) {
 
             case Lex::CD_TEST: {
                 return Lex::toToken(Lex::TK_STATEMENT_END);
+            }
+
+            default: {
+                Logger::log(logErr, "Unsupported language directive processing code encountered!", span);
+                return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
         }
@@ -2976,7 +2858,7 @@ namespace Parser {
 
     }
 
-    Lex::Token parseList(Span* const span, Lex::TokenKind separator, Lex::TokenKind end, std::vector<Variable*>& args) {
+    Lex::Token parseList(Span* const span, Lex::TokenKind separator, Lex::TokenKind end, DArray::Container* args) {
 
         Lex::Token token;
         Lex::TokenValue tokenVal;
@@ -2984,17 +2866,17 @@ namespace Parser {
         int first = 1;
         while (1) {
 
-            Variable* newVar = new Variable();
+            Variable* newVar = (Variable*) nalloc(nalc, NT_VARIABLE);
             token = parseExpression(span, newVar, INVALID_POS, End { separator, end }, first ? EMPTY_EXPRESSION_ALLOWED : 0);
             if (token.encoded < 0) return token;
-            
+
             if (first && (token.kind == end)) return token;
 
-            args.push_back(newVar);
+            DArray::push(args, &newVar);
 
             if (token.kind == end) break;
             if (token.kind != separator) {
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
@@ -3011,41 +2893,41 @@ namespace Parser {
         Lex::Token token;
         Lex::TokenValue tokenVal;
 
-        
-        
-        Variable* errVar = new Variable();
-        errVar->scope = var->scope;
+
+
+        Variable* errVar = Reg.Node.initVariable();
+        errVar->base.scope = var->base.scope;
         errVar->cvalue.dtypeEnum = DT_ERROR;
 
-        Scope* newScope = new Scope();
-        newScope->scope = var->scope;
-        setParentIdx(newScope);
+        Scope* newScope = Reg.Node.initScope();
+        newScope->base.scope = var->base.scope;
+        // setParentIdx(newScope);
 
-        Catch* cex = new Catch();
+        Catch* cex = Reg.Node.initCatch();
         cex->call = (FunctionCall*) var->expression;
-        
-        var->expression = cex;
+
+        var->expression = (Expression*) cex;
 
 
 
         token = Lex::nextToken(span, &tokenVal);
-        
+
         if (Lex::isKeyword(token, Lex::KW_RETURN)) {
             // basically just emulates following
             // .. .. catch err { return _, err; }
-            
-            ReturnStatement* ret = new ReturnStatement();
+
+            ReturnStatement* ret = Reg.Node.initReturnStatement();
             ret->err = errVar;
             ret->var = NULL;
-            ret->scope = newScope;
+            ret->base.scope = newScope;
             ret->fcn = currentFunction;
 
-            newScope->children.push_back(ret);
-            NodeRegistry::returnStatements.push_back(ret);
+            DArray::push(&newScope->children.base, &ret);
+            DArray::push(&Reg.returnStatements.base, &ret);
 
             token = Lex::nextToken(span, &tokenVal);
             if (token.kind != Lex::TK_STATEMENT_END) {
-                Logger::log(Logger::ERROR, "'catch return' expression has to be terminated with ';'!", span);
+                Logger::log(logErr, "'catch return' expression has to be terminated with ';'!", span);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
             }
 
@@ -3053,58 +2935,57 @@ namespace Parser {
         }
 
         if (token.kind != Lex::TK_IDENTIFIER) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span, "error identifier");
+            Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span, "error identifier");
             return Lex::toToken(Err::UNEXPECTED_SYMBOL);
         }
 
         QualifiedName* errName = (QualifiedName*) (tokenVal.any);
-        
+
         token = Lex::nextToken(span, &tokenVal);
         if (
-            token.kind != Lex::TK_SCOPE_BEGIN && 
+            token.kind != Lex::TK_SCOPE_BEGIN &&
             token.kind != Lex::TK_STATEMENT_BEGIN &&
             !Lex::isKeyword(token, Lex::KW_RETURN)
         ) {
             // 'catch err' case
 
-            assignQualifiedName(errVar, errName);
-            
-            NodeRegistry::variables.push_back(var);
+            errVar->name = *errName;
+
+            DArray::push(&Reg.variables.base, &var);
 
             cex->err = errVar;
             cex->scope = NULL;
 
             return token;
-        
+
         }
 
 
 
         // 'catch err { ... }' case
-        VariableDefinition* errDef = new VariableDefinition(errVar, 0);
-        errDef->scope = newScope;
-        errDef->var->scope = newScope;
+        VariableDefinition* errDef = Reg.Node.initVariableDefinition();
+        errDef->var = errVar;
+        errDef->base.scope = newScope;
+        errDef->var->base.scope = newScope;
         errDef->var->cvalue.dtypeEnum = DT_ERROR;
-        errDef->var->span = getSpanStamp(span);
-        errDef->var->parentIdx = -1;
+        errDef->var->base.span = getSpanStamp(span);
+        errDef->var->base.parentIdx = -1;
 
-        assignQualifiedName(errDef->var, errName);
-        
-        ASSIGN_ID(errDef->var);
+        errDef->var->name = *errName;
 
-        newScope->defs.push_back(errDef->var);
-        NodeRegistry::variableDefinitions.push_back(errDef);
+        assignId(errDef->var);
 
-        auto res = newScope->defSearch.insert({std::string_view(errName->name, errName->nameLen), errDef->var});
-        if (!res.second) {
-            Logger::log(Logger::ERROR, ERR_STR(Err::SYMBOL_ALREADY_DEFINED), errDef->var->span);
-            return Lex::toToken(Err::SYMBOL_ALREADY_DEFINED);
-        }
-        
+        DArray::push(&newScope->defs.base, &errDef->var);
+        DArray::push(&Reg.variableDefinitions.base, &errDef);
+
+        const int ierr = insertDefSearch((INamed*) &errDef->var->name, (SyntaxNode*) errDef->var, span);
+        if (ierr != Err::OK) return Lex::toToken(ierr);
+
         cex->err = errDef->var;
         cex->scope = newScope;
 
-        return parseScope(span, newScope, SC_COMMON, token.kind == Lex::TK_STATEMENT_BEGIN);
+        ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
+        return parseScope(span, newScope, SC_COMMON, scopeEnd);
 
     }
 
@@ -3126,12 +3007,12 @@ namespace Parser {
                 break;
             }
 
-            UnaryExpression* uex = new UnaryExpression();
-            uex->operType = op;
-            
-            var->expression = uex;
-            var = new Variable();
-        
+            UnaryExpression* uex = Reg.Node.initUnaryExpression();
+            uex->base.opType = op;
+
+            var->expression = (Expression*) uex;
+            var = Reg.Node.initVariable();
+
         }
 
         switch (token.kind) {
@@ -3141,33 +3022,33 @@ namespace Parser {
                 token = Lex::nextToken(span, &tokenVal);
                 if (token.kind == Lex::TK_PARENTHESIS_BEGIN) {
 
-                    FunctionCall* call = new FunctionCall();
+                    FunctionCall* call = Reg.Node.initFunctionCall();
                     call->fptr = NULL;
                     call->fcn = NULL;
 
-                    token = parseList(span, Lex::TK_LIST_SEPARATOR, Lex::TK_PARENTHESIS_END, call->inArgs);
+                    token = parseList(span, Lex::TK_LIST_SEPARATOR, Lex::TK_PARENTHESIS_END, &call->inArgs.base);
                     if (token.encoded < 0) return token;
 
-                    assignQualifiedName(call, (QualifiedName*) tokenVal.any);
+                    call->name = *((QualifiedName* )tokenVal.any);
 
                     var->cvalue.hasValue = 0;
-                    var->expression = call;
-                
+                    var->expression = (Expression*) call;
+
                 } else {
 
-                    assignQualifiedName(var, (QualifiedName*) tokenVal.any);
+                    var->name = *((QualifiedName*) tokenVal.any);
                     consumeToken = 0;
 
                 }
-                
+
                 break;
 
             }
 
             case Lex::TK_NUMBER: {
 
-                var->name = NULL;
-                var->nameLen = 0;
+                var->name.buff = NULL;
+                var->name.len = 0;
                 var->expression = NULL;
                 var->cvalue.hasValue = 1;
                 var->cvalue.dtypeEnum = Lex::toDtype(token);
@@ -3190,7 +3071,7 @@ namespace Parser {
             case Lex::TK_KEYWORD: {
 
                 if (token.detail == Lex::TD_KW_TRUE) {
-                    
+
                     var->cvalue.hasValue = 1;
                     var->cvalue.dtypeEnum = DT_BOOL;
                     var->cvalue.u64 = 1;
@@ -3217,15 +3098,18 @@ namespace Parser {
 
                 token = parseExpression(span, var, INVALID_POS, End { Lex::TK_PARENTHESIS_END, Lex::TK_NONE }, 0, lastDefIdx);
                 if (token.kind < 0) return token;
-            
+
                 break;
 
             }
 
             case Lex::TK_STRING: {
 
-                StringInitialization* init = new StringInitialization(tokenVal.str);
-                var->expression = init;
+                StringInitialization* init = Reg.Node.initStringInitialization();
+                init->rawPtr = tokenVal.str->buff;
+                init->rawPtrLen = tokenVal.str->len;
+
+                var->expression = (Expression*) init;
 
                 break;
 
@@ -3235,30 +3119,30 @@ namespace Parser {
 
                 var->cvalue.dtypeEnum = DT_I64;
                 var->cvalue.i64 = tokenVal.ival;
-            
+
                 break;
 
             }
 
             case Lex::TK_ARRAY_BEGIN: {
 
-                ArrayInitialization* init = new ArrayInitialization();
+                ArrayInitialization* init = Reg.Node.initArrayInitialization();
                 token = parseArrayInitialization(span, scope, &init);
-                var->expression = init;
+                var->expression = (Expression*) init;
 
                 break;
-            
+
             }
 
             case Lex::TK_SCOPE_BEGIN: {
 
-                TypeInitialization* init = new TypeInitialization();
+                TypeInitialization* init = Reg.Node.initTypeInitialization();
                 token = parseTypeInitialization(span, scope, &init);
-                var->expression = init;
-                var->span = getSpanStamp(span);
+                var->expression = (Expression*) init;
+                var->base.span = getSpanStamp(span);
 
                 break;
-            
+
             }
 
             default: {
@@ -3266,7 +3150,7 @@ namespace Parser {
                 return token;
 
             }
-        
+
         }
 
         if (consumeToken) token = Lex::nextToken(span, &tokenVal);
@@ -3278,21 +3162,21 @@ namespace Parser {
                 break;
             }
 
-            UnaryExpression* uex = new UnaryExpression();
-            uex->operType = op;
-            
-            var->expression = uex;
-            var = new Variable();
-            
+            UnaryExpression* uex = Reg.Node.initUnaryExpression();
+            uex->base.opType = op;
+
+            var->expression = (Expression*) uex;
+            var = Reg.Node.initVariable();
+
             token = Lex::nextToken(span, &tokenVal);
-        
+
         }
 
         return token;
 
     }
 
-    
+
     // the lower the rank, the higher precedence
     Lex::Token parseExpressionRecursive(Span* const span, Variable* var, BinaryExpression* prevBex, OperatorEnum prevOp, int lastDefIdx) {
 
@@ -3303,43 +3187,43 @@ namespace Parser {
         //       basically this should work just fine while there is no binary
         //       operator with same signature as required closure
         if (prevOp == OP_SUBSCRIPT) {
-            
+
             token = parseExpressionRecursive(span, var, prevBex, OP_NONE, lastDefIdx);
-            
+
             if (token.kind == Lex::TK_ARRAY_END) {
 
                 token = nextToken(span, &tokenVal);
-            
+
             } else if (token.kind == Lex::TK_SLICE) {
 
-                Slice* slice = new Slice();
+                Slice* slice = Reg.Node.initSlice();
 
-                slice->bidx = new Variable();
+                slice->bidx = Reg.Node.initVariable();
                 slice->bidx->expression = var->expression;
 
-                slice->eidx = new Variable();
+                slice->eidx = Reg.Node.initVariable();
                 token = parseExpressionRecursive(span, slice->eidx, NULL, OP_NONE, lastDefIdx);
 
-                var->expression = slice;
+                var->expression = (Expression*) slice;
 
                 if (token.kind != Lex::TK_ARRAY_END) {
                     tokenToErrorBuff(Lex::TK_ARRAY_END);
-                    Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span, errBuff.c_str());
+                    Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span, errBuff);
                     return Lex::toToken(Err::UNEXPECTED_SYMBOL);
                 }
 
                 token = nextToken(span, &tokenVal);
 
             } else {
-                
+
                 endTokenToErrorBuff({ Lex::TK_ARRAY_END, Lex::TK_SLICE });
-                Logger::log(Logger::ERROR, ERR_STR(Err::UNEXPECTED_SYMBOL), span, errBuff.c_str());
+                Logger::log(logErr, ERR_STR(Err::UNEXPECTED_SYMBOL), span, errBuff);
                 return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
             }
 
         } else {
-            token = parseExpressionNode(span, var->scope, var, lastDefIdx);
+            token = parseExpressionNode(span, var->base.scope, var, lastDefIdx);
         }
 
         if (token.encoded < 0) return token;
@@ -3347,45 +3231,45 @@ namespace Parser {
         if (Lex::isOperator(token)) {
 
             OperatorEnum op = Lex::toBinaryOperator(token);
-            
+
             while (op != OP_NONE) {
 
                 if (prevOp == OP_NONE || operators[prevOp].rank > operators[op].rank) {
-                    
-                    BinaryExpression* bex = new BinaryExpression();
-                    bex->operandA = new Variable();
-                    bex->operandB = new Variable();
-                    bex->operType = op;
 
-                    copyValue(bex->operandA, var);
+                    BinaryExpression* bex = Reg.Node.initBinaryExpression();
+                    bex->left = Reg.Node.initVariable();
+                    bex->right = Reg.Node.initVariable();
+                    bex->base.opType = op;
+
+                    bex->left->cvalue = var->cvalue;
                     //nullValue(var);
 
-                    var->expression = bex;
+                    var->expression = (Expression*) bex;
 
                     if (prevBex) {
-                        prevBex->operandB->expression = bex;
+                        prevBex->right->expression = (Expression*) bex;
                         // prevOp = op;
                     }
 
-                    token = parseExpressionRecursive(span, bex->operandB, bex, op, lastDefIdx);
+                    token = parseExpressionRecursive(span, bex->right, bex, op, lastDefIdx);
                     if (token.encoded < 0) return token;
 
                     op = Lex::toBinaryOperator(token);
                     if (op < 0) return token;
-                
+
                 } else {
 
-                    prevBex->operandB = var;
+                    prevBex->right = var;
                     return Lex::toTokenAsBinaryOperator(op);
 
                 }
-            
+
             }
 
         } else {
 
             return token;
-            
+
         }
 
         return token;
@@ -3403,9 +3287,9 @@ namespace Parser {
         if (token.encoded < 0) return token;
 
         if (Lex::isKeyword(token, Lex::KW_CATCH)) {
-            
+
             if (operand->expression->type != EXT_FUNCTION_CALL) {
-                Logger::log(Logger::ERROR, "Yet only 'pure' function call expressions are allowed to be caught 🐱.", span);
+                Logger::log(logErr, "Yet only 'pure' function call expressions are allowed to be caught 🐱.", span);
                 return Lex::toToken(Err::UNEXPECTED_END_OF_EXPRESSION);
             }
 
@@ -3416,14 +3300,14 @@ namespace Parser {
         }
 
         if (
-            isEndToken(token, endToken) || 
+            isEndToken(token, endToken) ||
             (param & USE_KEYWORD_AS_END && token.kind == Lex::TK_KEYWORD) ||
             param & ALLOW_UNEXPECTED_END
         ) {
             return token;
         }
-        
-        Logger::log(Logger::ERROR, "Blablbalba", span);            
+
+        Logger::log(logErr, "Blablbalba", span);
         return Lex::toToken(Err::UNEXPECTED_SYMBOL);
 
     }

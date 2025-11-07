@@ -1,22 +1,18 @@
-// #pragma once
+#include "logger.h"
+#include "utils.h"
+//#include "globals.h"
 
 #include <stdio.h>
-#include <string.h>
 #include <stdarg.h>
-
-#include "logger.h"
-#include "globals.h"
-#include "Utils.h"
-#include "lexer.h"
 
 #define DEFAULT_MESSAGE_LENGTH 256
 #define TAB_SIZE 4
 
-#define RED_ESC "\033[1;31m"
-#define YELLOW_ESC "\033[1;33m"
+#define RED_ESC         "\033[1;31m"
+#define YELLOW_ESC      "\033[1;33m"
 #define COLOR_RESET_ESC "\033[0m"
 
-#define ERR_ESC RED_ESC
+#define ERR_ESC     RED_ESC
 #define WARNING_ESC YELLOW_ESC
 
 namespace Logger {
@@ -35,10 +31,9 @@ namespace Logger {
     }
 
     // messy
-    void log(const uint32_t type, const char* const message, Span* span, ...) {
+    void log(const Type type, const char* const message, Span* span, ...) {
 
-        if (mute) return;
-        if (!(verbosity & type)) return;
+        if (mute || !(verbosity & type.level)) return;
 
         char* body = NULL;
 
@@ -51,7 +46,7 @@ namespace Logger {
 
         if (span) {
             // TODO : buggy when \0
-            body = span->file->buff;
+            body = (char*) span->str;
             idx = span->start.idx;
             lnStartIdx = Utils::findLineStart(body, idx, &tabCount);
             lnEndIdx = Utils::findLineEnd(body, idx);
@@ -60,7 +55,7 @@ namespace Logger {
         }
 
         const char* underlineEscColor = "";
-        switch (type) {
+        switch (type.level) {
 
             case INFO : {
                 printf("INFO");
@@ -79,16 +74,20 @@ namespace Logger {
                 // printf("(%i, %i) : ", span->line, idx - lnStartIdx + 1);
                 break;
             }
-        
+
             default :
                 break;
-        
+
+        }
+
+        if (type.tag) {
+            printf("[%s]", type.tag);
         }
 
         if (span) {
             printf("(%i, %i) : ", span->end.ln, idx - lnStartIdx + 1);
         } else {
-            if (type != PLAIN) printf(" : ");
+            if (type.level != PLAIN) printf(" : ");
         }
 
         va_list args;
@@ -105,7 +104,7 @@ namespace Logger {
         sprintf(numbuff, "%i | ", span->end.ln);
 
         printf("%s%.*s\n", numbuff, lnLength, body + lnStartIdx);
-        
+
         // awful
         const int tabOffset = tabCount * (TAB_SIZE - 1);
         int i = lnStartIdx;
@@ -118,20 +117,20 @@ namespace Logger {
         for (; i < lnEndIdx; i++) putchar(' ');
 
         putchar('\n');
-        
-        printf(" in file: %s\n", span->file->name);
-        
+
+        printf(" in file: %.*s\n", span->fileInfo->name.len, span->fileInfo->name.buff);
+
         putchar('\n');
 
     }
 
-    void log(const uint32_t type, const char* const message) {
+    void log(Type type, const char* const message) {
 
         if (mute) return;
-        if (!(verbosity & type)) return;
+        if (!(verbosity & type.level)) return;
 
         const char* underlineEscColor = "";
-        switch (type) {
+        switch (type.level) {
 
             case HINT : {
                 break;
@@ -151,10 +150,10 @@ namespace Logger {
                 printf(RED_ESC "\nERROR " COLOR_RESET_ESC);
                 break;
             }
-        
+
             default :
                 break;
-        
+
         }
 
         printf(message);

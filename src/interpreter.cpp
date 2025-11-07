@@ -1,167 +1,21 @@
 // #pragma once
 
 #include "interpreter.h"
+
 #include "syntax.h"
 #include "error.h"
-#include "utils.h"
-
-#include <bit>
 
 
 #define TO_PVOID(var) ((void*) *((uint64_t*) &var))
 
 namespace Interpreter {
-    
-    struct MemBlock {
-        int offset;
-        int value;
-    };
-
-    std::vector<MemBlock> mem;
-
-
-
-    // IMAGINE WORLD POINTER DOESNT EXISTS!!!
-    //
-    //
-    //
-    //
-    //
-    //
-    //
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-int applyUnaryOperatorAddress(Operand* operand) {
-    
-    Pointer* ptr = new Pointer;
-    ptr->pointsTo = operand->dtype;
-    ptr->pointsToEnum = operand->cvalue.dtypeEnum;
-    
-    operand->cvalue.dtypeEnum = DT_POINTER;
-    operand->dtype = (void*) ptr;
-    
-    return Err::OK;
-
-}
-
-int applyBinaryOperatorSubscript(Operand* a, Operand* b) {
-    if (!IS_INT(b->cvalue.dtypeEnum)) return Err::INVALID_DATA_TYPE;
-    return ((Pointer*) (a->dtype))->pointsToEnum; // TODO : do general solution!!!
-}
-
-int applyBinaryOperatorMemberSelection(Operand* ans, Operand* a, Operand* b) {
-    
-    if (b->cvalue.dtypeEnum != DT_MEMBER) return Err::INVALID_DATA_TYPE;
-
-    Variable* var = Utils::find(((TypeDefinition*) a->dtype)->vars, ((Variable*) b)->name, ((Variable*) b)->nameLen);
-    if (!var) return Err::INVALID_ATTRIBUTE_NAME;
-
-    b->cvalue.dtypeEnum = var->cvalue.dtypeEnum; // dont know about this one
-    b->dtype = var->dtype;
-    ((Variable*) b)->id = var->id;
-    ans->dtype = var->dtype;
-
-    return Err::OK;
-
-}
-
-int applyBinaryOperatorMemberSelectionEnum(Operand* ans, Operand* a, Operand* b) {
-    
-    if (b->cvalue.dtypeEnum != DT_MEMBER) return Err::INVALID_DATA_TYPE;
-
-    Variable* var = Utils::find(((Enumerator*) a->dtype)->vars, ((Variable*) b)->name, ((Variable*) b)->nameLen);
-    if (!var) return Err::INVALID_ATTRIBUTE_NAME;
-
-    ans->cvalue.dtypeEnum = var->cvalue.dtypeEnum; // dont know about this one
-    ans->dtype = var->dtype;
-    ans->cvalue.value = var->cvalue.value;
-    ans->cvalue.hasValue = var->cvalue.hasValue;
-    ans->def = var->def;
-    ans->expression = NULL;
-    ans->unrollExpression = 0;
-
-    b->cvalue.dtypeEnum = var->cvalue.dtypeEnum;
-
-    return Err::OK;
-
-}
-
-int applyBinaryOperatorMemberSelectionPointer(Operand* ans, Operand* a, Operand* b) {
-    
-    if (b->cvalue.dtypeEnum != DT_MEMBER) return Err::INVALID_DATA_TYPE;
-
-    Pointer* ptr = (Pointer*) (a->dtype);
-    if (ptr->pointsToEnum != DT_CUSTOM) return Err::INVALID_DATA_TYPE;
-
-    TypeDefinition* td = (TypeDefinition*) (ptr->pointsTo);
-
-    Variable* var = Utils::find(td->vars, ((Variable*) b)->name, ((Variable*) b)->nameLen);
-    if (!var) return Err::INVALID_ATTRIBUTE_NAME;
-
-    b->cvalue.dtypeEnum = var->cvalue.dtypeEnum; // dont know about this one
-    b->dtype = var->dtype;
-    ((Variable*) b)->id = var->id;
-    ans->dtype = var->dtype;
-    ((BinaryExpression*) (ans->expression))->operType = OP_DEREFERENCE_MEMBER_SELECTION;
-    ((BinaryExpression*) (ans->expression))->oper = operators + OP_DEREFERENCE_MEMBER_SELECTION;
-
-    return Err::OK;
-
-}
-
-
-
-// custom dypes
-int applyUnaryOperatorPlusCustom(Operand* operand) {
-    return Err::OK;
-}
-
-
-int applyUnaryOperatorMinusCustom(Operand* operand) {
-    return Err::OK;
-}
-
-*/
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     // TODO : for now global
     uint64_t contextId = 1;
     uint64_t stackIdx = 1;
 
-    // RR_RETURN has to be last, it defines offset of the 
-    // index of the return statement that triggered early 
+    // RR_RETURN has to be last, it defines offset of the
+    // index of the return statement that triggered early
     // return in children nodes of calling node
     // hope make sense
     enum EarlyReturnReason {
@@ -170,48 +24,50 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
     };
 
 
-    
 
-    inline void insertValue(Operand* op, Value value, const int idx) {
-        if (op->istack.size() < idx + 1) {
-            op->istack.resize(idx + 1);
+
+    inline void insertValue(Variable* op, Value value, const int idx) {
+        if (op->istack.base.size < idx + 1) {
+            // op->istack.resize(idx + 1);
         }
-        op->istack[idx] = value;
+        // op->istack[idx] = value;
     }
 
     // BUG : instad of push_back make sure to insert new value to aproprate index!!!
-    inline void writeValue(Operand* op, Value value, int stackIdx) {
+    inline void writeValue(Variable* op, Value value, int stackIdx) {
         if (stackIdx >= 2) {
             const int idx = stackIdx - 2;
-            if (op->istack.size() <= idx) {
-                op->istack.resize(idx + 1);
+            if (op->istack.base.size <= idx) {
+                //op->istack.resize(idx + 1);
             }
-            op->istack[idx] = value;
+            //op->istack[idx] = value;
         } else {
             op->ivalue = value;
         }
 
     }
 
-    inline void writeValue(Operand* op, Value value) {
+    inline void writeValue(Variable* op, Value value) {
         if (stackIdx >= 2) {
             const int idx = stackIdx - 2;
-            if (op->istack.size() <= idx) {
-                op->istack.resize(idx + 1); 
+            if (op->istack.base.size <= idx) {
+                // op->istack.resize(idx + 1);
             }
-            op->istack[idx] = value;
+            // op->istack[idx] = value;
         } else {
             op->ivalue = value;
         }
 
     }
 
-    inline Value* readValue(Operand* op) {
-        return (stackIdx >= 2) ? &(op->istack[stackIdx - 2]) : &(op->ivalue);
+    inline Value* readValue(Variable* op) {
+        // return (stackIdx >= 2) ? &(op->istack[stackIdx - 2]) : &(op->ivalue);
+        return NULL;
     }
 
-    inline int readHasValue(Operand* op) {
-        return (stackIdx >= 2) ? op->istack[stackIdx - 2].hasValue : op->ivalue.hasValue;
+    inline int readHasValue(Variable* op) {
+        // return (stackIdx >= 2) ? op->istack[stackIdx - 2].hasValue : op->ivalue.hasValue;
+        return NULL;
     }
 
 
@@ -301,7 +157,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
             case DT_F64:    value->*M = static_cast<T>(value->f64); break;
             default:
                 return; // TODO
-        
+
         }
 
         value->dtypeEnum = TargetType;
@@ -316,10 +172,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
     void cast(Value* value, DataTypeEnum dtype) {
 
         switch (dtype) {
-            
+
             case DT_I8 :    cast<DT_I8>(value); return;
             case DT_I16 :   cast<DT_I16>(value); return;
-            case DT_INT : 
+            case DT_INT :
             case DT_I32 :   cast<DT_I32>(value); return;
             case DT_I64 :   cast<DT_I64>(value); return;
             case DT_U8 :    cast<DT_U8>(value); return;
@@ -524,7 +380,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
     }
 
 
-    //void (*operatorFunctions[]) (Operand*, Operand*) 
+    //void (*operatorFunctions[]) (Variable*, Variable*)
     union OperatorFunction {
         void (*binary) (Value*, Value*);
         void (*unary) (Value*);
@@ -572,10 +428,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorMultiplicationI32,
         &applyBinaryOperatorDivisionI32,
         &applyBinaryOperatorModuloI32,
-        
+
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -583,20 +439,20 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         &applyBinaryOperatorEqual,
         &applyBinaryOperatorNotEqual,
         &applyBinaryOperatorLessThan,
         &applyBinaryOperatorGreaterThan,
         &applyBinaryOperatorLessThanOrEqual,
         &applyBinaryOperatorGreaterThanOrEqual,
-        
+
         &applyBinaryOperatorBoolAnd,
         &applyBinaryOperatorBoolOr,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -611,10 +467,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         & applyBinaryOperatorMultiplicationI32,
         & applyBinaryOperatorDivisionI32,
         & applyBinaryOperatorModuloI32,
-        
+
         {.unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -631,10 +487,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         & applyBinaryOperatorGreaterThanOrEqual,
         & applyBinaryOperatorBoolAnd,
         & applyBinaryOperatorBoolOr,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -649,10 +505,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         & applyBinaryOperatorMultiplicationI32,
         & applyBinaryOperatorDivisionI32,
         & applyBinaryOperatorModuloI32,
-        
+
         {.unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -660,7 +516,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         & applyBinaryOperatorEqual,
         & applyBinaryOperatorNotEqual,
         & applyBinaryOperatorLessThan,
@@ -669,10 +525,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         & applyBinaryOperatorGreaterThanOrEqual,
         & applyBinaryOperatorBoolAnd,
         & applyBinaryOperatorBoolOr,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -687,10 +543,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorMultiplicationI32,
         &applyBinaryOperatorDivisionI32,
         &applyBinaryOperatorModuloI32,
-        
+
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -698,7 +554,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         &applyBinaryOperatorEqual,
         &applyBinaryOperatorNotEqual,
         &applyBinaryOperatorLessThan,
@@ -707,16 +563,16 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorGreaterThanOrEqual,
         &applyBinaryOperatorBoolAnd,
         &applyBinaryOperatorBoolOr,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
         NULL,
         NULL,
-        
+
         // INT_64
         { .unary = &applyUnaryOperatorPlusI64 },
         { .unary = &applyUnaryOperatorMinusI64 },
@@ -725,10 +581,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorMultiplicationI64,
         &applyBinaryOperatorDivisionI64,
         &applyBinaryOperatorModuloI64,
-        
+
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -736,7 +592,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         &applyBinaryOperatorEqual,
         &applyBinaryOperatorNotEqual,
         &applyBinaryOperatorLessThan,
@@ -745,10 +601,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorGreaterThanOrEqual,
         &applyBinaryOperatorBoolAnd,
         &applyBinaryOperatorBoolOr,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -906,7 +762,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-        
+
         // FLOAT_32
         { .unary = &applyUnaryOperatorPlusF32 },
         { .unary = &applyUnaryOperatorMinusF32 },
@@ -915,10 +771,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorMultiplicationF32,
         &applyBinaryOperatorDivisionF32,
         NULL,
-        
+
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -926,7 +782,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         &applyBinaryOperatorEqual,
         &applyBinaryOperatorNotEqual,
         &applyBinaryOperatorLessThan,
@@ -935,16 +791,16 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorGreaterThanOrEqual,
         &applyBinaryOperatorBoolAnd,
         &applyBinaryOperatorBoolOr,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
         NULL,
         NULL,
-        
+
         // FLOAT_64
         { .unary = &applyUnaryOperatorPlusF64 },
         { .unary = &applyUnaryOperatorMinusF64 },
@@ -953,10 +809,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorMultiplicationF64,
         &applyBinaryOperatorDivisionF64,
         NULL,
-        
+
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -964,7 +820,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         &applyBinaryOperatorEqual,
         &applyBinaryOperatorNotEqual,
         &applyBinaryOperatorLessThan,
@@ -973,16 +829,16 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         &applyBinaryOperatorGreaterThanOrEqual,
         &applyBinaryOperatorBoolAnd,
         &applyBinaryOperatorBoolOr,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
         NULL,
         NULL,
-        
+
         // STRING
         NULL,
         NULL,
@@ -991,10 +847,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-        
+
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -1012,16 +868,16 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
         NULL,
         NULL,
-        
+
         // POINTER
         NULL,
         NULL,
@@ -1030,10 +886,10 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-        
-        { .unary = &applyUnaryOperatorAddress },        
+
+        { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -1054,14 +910,14 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         &applyBinaryOperatorSubscript,
         &applyBinaryOperatorMemberSelectionPointer,
         NULL,
-        
+
         NULL,
         NULL,
-        
+
         // ARRAY
         NULL,
         NULL,
@@ -1072,7 +928,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -1093,11 +949,11 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         &applyBinaryOperatorSubscript,
         &applyBinaryOperatorMemberSelectionPointer,
         NULL,
-        
+
         NULL,
         NULL,
 
@@ -1132,7 +988,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-        
+
         // MULTIPLE_TYPES
         NULL,
         NULL,
@@ -1143,7 +999,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -1168,7 +1024,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-        
+
         // CUSTOM
         NULL,
         NULL,
@@ -1179,7 +1035,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         { .unary = &applyUnaryOperatorAddress },
         NULL,
-        
+
         NULL,
         NULL,
         NULL,
@@ -1200,11 +1056,11 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         NULL,
         NULL,
-        
+
         NULL,
         &applyBinaryOperatorMemberSelection,
         NULL,
-        
+
         NULL,
         NULL,
 
@@ -1303,7 +1159,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-        
+
         // ENUM
         NULL,
         NULL,
@@ -1335,53 +1191,58 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
         NULL,
         NULL,
         NULL,
-    
+
     };
 
 
 
 
     int applyOperator(OperatorEnum oper, Value* value) {
-        
-        OperatorFunction fcn = operatorFunctions[value->dtypeEnum * OPERATORS_COUNT + oper]; 
+
+        /*
+        OperatorFunction fcn = operatorFunctions[value->dtypeEnum * OPERATORS_COUNT + oper];
         fcn.unary(value);
         return Err::OK;
-
+        */
+        return NULL;
     }
 
     int applyOperator(OperatorEnum oper, Value* valueA, Value* valueB) {
-        
+        /*
         OperatorFunction fcn = operatorFunctions[valueA->dtypeEnum * OPERATORS_COUNT + oper];
         fcn.binary(valueA, valueB);
         return Err::OK;
-
+        */
+        return NULL;
     }
 
-    int applyOperator(OperatorEnum oper, Operand* operand) {
-        
-        OperatorFunction fcn = operatorFunctions[operand->ivalue.dtypeEnum * OPERATORS_COUNT + oper]; 
+    int applyOperator(OperatorEnum oper, Variable* operand) {
+        /*
+        OperatorFunction fcn = operatorFunctions[operand->ivalue.dtypeEnum * OPERATORS_COUNT + oper];
         fcn.unary(readValue(operand));
         return Err::OK;
-
+        */
+        return NULL;
     }
 
-    int applyOperator(OperatorEnum oper, Operand* operandA, Operand* operandB) {
-        
-        OperatorFunction fcn = operatorFunctions[operandA->ivalue.dtypeEnum * OPERATORS_COUNT + oper];
-        fcn.binary(readValue(operandA), readValue(operandB));
+    int applyOperator(OperatorEnum oper, Variable* left, Variable* right) {
+        /*
+        OperatorFunction fcn = operatorFunctions[left->ivalue.dtypeEnum * OPERATORS_COUNT + oper];
+        fcn.binary(readValue(left), readValue(right));
         return Err::OK;
-
+        */
+        return NULL;
     }
 
-    inline void icopy(Operand* dest, Operand* src) {
+    inline void icopy(Variable* dest, Variable* src) {
         writeValue(dest, *readValue(src));
     }
 
-    inline void copy(Operand* dest, Operand* src) {
+    inline void copy(Variable* dest, Variable* src) {
         writeValue(dest, src->cvalue);
     }
 
-    inline int evaluate(Operand* op) {
+    inline int evaluate(Variable* op) {
 
         if (op->expression == NULL) {
 
@@ -1392,9 +1253,9 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
                 return Err::OK;
             }
 
-            Operand* defOp = op->def->var;
-            
-            if ((defOp->istack.size() > stackIdx - 2) && (readHasValue(defOp) == contextId)) {
+            Variable* defOp = op->def->var;
+
+            if ((defOp->istack.base.size > stackIdx - 2) && (readHasValue(defOp) == contextId)) {
                 icopy(op, defOp);
             } else {
                 copy(op, defOp);
@@ -1406,28 +1267,21 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         Expression* ex = op->expression;
         switch (ex->type) {
-            
-            case EXT_WRAPPER : {
-                WrapperExpression* wex = (WrapperExpression*) ex;
-                if (wex->operand) evaluate(wex->operand);
-                icopy(op, wex->operand);     
-                break;
-            }
 
             case EXT_UNARY : {
                 UnaryExpression* uex = (UnaryExpression*) ex;
                 if (uex->operand) evaluate(uex->operand);
-                applyOperator(uex->operType, uex->operand);
+                // applyOperator(uex->operType, uex->operand);
                 icopy(op, uex->operand);
                 break;
             }
 
             case EXT_BINARY : {
                 BinaryExpression* bex = (BinaryExpression*) ex;
-                if (bex->operandA) evaluate(bex->operandA);
-                if (bex->operandB) evaluate(bex->operandB);
-                applyOperator(bex->operType, bex->operandA, bex->operandB);
-                icopy(op, bex->operandA);
+                if (bex->left) evaluate(bex->left);
+                if (bex->right) evaluate(bex->right);
+                // applyOperator(bex->operType, bex->left, bex->right);
+                icopy(op, bex->left);
                 break;
             }
 
@@ -1438,21 +1292,24 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
             case EXT_FUNCTION_CALL : {
                 FunctionCall* fex = (FunctionCall*) ex;
                 Function* const fcn = fex->fcn;
-                for (int i = 0; i < fcn->inArgs.size(); i++) {
+                for (int i = 0; i < fcn->prototype.inArgs.base.size; i++) {
 
-                    evaluate(fex->inArgs[i]);
+                    //evaluate(fex->inArgs[i]);
 
-                    Value* value = readValue(fex->inArgs[i]);
-                    value->hasValue = contextId + 1;
+                    //Value* value = readValue(fex->inArgs[i]);
+                    //value->hasValue = contextId + 1;
 
                     //const int tmp = fex->inArgs[i]->ivalue.hasValue;
                     //fex->inArgs[i]->ivalue.hasValue = contextId + 1;
-                    writeValue(fcn->inArgs[i]->var, *value, fcn->istackIdx + 1);
+                    //writeValue(fcn->inArgs[i]->var, *value, fcn->istackIdx + 1);
                     //fex->inArgs[i]->ivalue.hasValue = tmp;
 
                 }
                 execFunction(fcn, op);
                 break;
+            }
+            default: {
+
             }
 
         }
@@ -1480,27 +1337,27 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
     inline int execBranch(Branch* node) {
 
-        for (int i = 0; i < node->expressions.size(); i++){
-            evaluate(node->expressions[i]);
-            if (readValue(node->expressions[i])->i32) {
-                return execScope(node->scopes[i]);
-            }
+        for (int i = 0; i < node->expressions.base.size; i++){
+            // evaluate(node->expressions[i]);
+            //if (readValue(node->expressions[i])->i32) {
+            //    return execScope(node->scopes[i]);
+            //}
         }
 
-        if (node->scopes.size() > node->expressions.size()) {
-            return execScope(node->scopes[node->scopes.size() - 1]);;
+        if (node->scopes.base.size > node->expressions.base.size) {
+            //return execScope(node->scopes[node->scopes.size - 1]);;
         }
 
         return Err::OK;
 
     }
-    
+
     inline int execVariableDefinition(VariableDefinition* node) {
         evaluate(node->var);
         //copy(node->var->def->var, node->var);
         return Err::OK;
     }
-    
+
     inline int execVariableAssignment(VariableAssignment* node) {
 
         evaluate(node->rvar);
@@ -1517,29 +1374,32 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
     }
 
     inline int execScope(Scope* node) {
-           
-        std::vector<SyntaxNode*> nodes = node->children;
-        for (int i = 0; i < nodes.size(); i++) {
 
-            SyntaxNode* const node = nodes[i];
-            
+        DArraySyntaxNode nodes = node->children;
+        for (int i = 0; i < nodes.base.size; i++) {
+
+            SyntaxNode* const node = ((SyntaxNode*) nodes.base.buffer) + i;
+
             int err = Err::OK;
-            switch (nodes[i]->type) {
+            switch (node->type) {
 
                 case NT_BRANCH :
                     err = execBranch((Branch*) node);
                     break;
-                
-                case NT_VARIABLE_DEFINITION : 
+
+                case NT_VARIABLE_DEFINITION :
                     err = execVariableDefinition((VariableDefinition*) node);
                     break;
 
-                case NT_VARIABLE_ASSIGNMENT : 
+                case NT_VARIABLE_ASSIGNMENT :
                     err = execVariableAssignment((VariableAssignment*) node);
                     break;
 
                 case NT_RETURN_STATEMENT :
                     err = execReturnStatement((ReturnStatement*) node);
+                    break;
+
+                default:
                     break;
 
             }
@@ -1552,7 +1412,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
     }
 
-    int execFunction(Function* fcn, Operand* ans) {
+    int execFunction(Function* fcn, Variable* ans) {
 
         fcn->icnt++;
         fcn->istackIdx++;
@@ -1562,15 +1422,15 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
         const int idx = execScope(fcn->bodyScope);
         if (idx < 0) return idx;
-        
+
         if (idx >= RR_RETURN) {
-            ReturnStatement* const rt = (ReturnStatement*) fcn->returns[idx - RR_RETURN];
+            // ReturnStatement* const rt = (ReturnStatement*) fcn->returns[idx - RR_RETURN];
             if (stackIdx > 2) {
-                insertValue(ans, rt->var->istack[stackIdx - 2], stackIdx - 3);
+                // insertValue(ans, rt->var->istack[stackIdx - 2], stackIdx - 3);
             } else if (stackIdx == 2) {
-                ans->ivalue = rt->var->istack[stackIdx - 2];
+                // ans->ivalue = rt->var->istack[stackIdx - 2];
             } else {
-                ans->cvalue = rt->var->ivalue;
+                // ans->cvalue = rt->var->ivalue;
             }
             // ans->dtypeEnum = rt->vars[0]->dtypeEnum;
         }
@@ -1584,7 +1444,7 @@ int applyUnaryOperatorMinusCustom(Operand* operand) {
 
 
 
-    
+
 
 
 

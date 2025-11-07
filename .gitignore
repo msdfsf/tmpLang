@@ -8,6 +8,8 @@ tmp/*
 *.exe
 *.txt
 
+.clangd
+
 .vscode/
 
 !doc/doc.html

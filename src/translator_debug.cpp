@@ -1,7 +1,7 @@
-// #pragma once
-
-#include "itself_console_translator.h"
+#include "translator_debug.h"
 #include "lexer.h"
+#include "syntax.h"
+#include <cstdint>
 
 
 #define CSP_MAX_TAB_LEVEL 4
@@ -32,7 +32,6 @@ static void printBranch(FILE* file, int level, Branch* const node, Variable* lva
 static void printWhileLoop(FILE* file, int level, WhileLoop* const node, Variable* lvalue = NULL);
 static void printForLoop(FILE* file, int level, ForLoop* const node, Variable* lvalue = NULL);
 static void printExpression(FILE* file, int level, Expression* const node, Variable* lvalue = NULL);
-static void printWrapperExpression(FILE* file, int level, WrapperExpression* const node, Variable* lvalue = NULL);
 static void printConstExpression(FILE* file, int level, ConstExpression* const node, Variable* lvalue = NULL);
 static void printCatchExpression(FILE * file, int level, Catch* const node, Variable * lvalue);
 static void printOperatorExpression(FILE* file, int level, OperatorExpression* const node, Variable* lvalue = NULL);
@@ -40,10 +39,7 @@ static void printUnaryExpression(FILE* file, int level, UnaryExpression* const n
 static void printBinaryExpression(FILE* file, int level, BinaryExpression* const node, Variable* lvalue = NULL);
 static void printTernaryExpression(FILE* file, int level, TernaryExpression* const node, Variable* lvalue = NULL);
 static void printFunctionCall(FILE* file, int level, FunctionCall* const node, Variable* lvalue = NULL);
-static void printOperand(FILE* file, int level, Operand* const node, Variable* lvalue = NULL);
-static void printUnaryOperator(FILE* file, int level, UnaryOperator* const node, Variable* lvalue = NULL);
-static void printBinaryOperator(FILE* file, int level, BinaryOperator* const node, Variable* lvalue = NULL);
-static void printTernaryOperator(FILE* file, int level, TernaryOperator* const node, Variable* lvalue = NULL);
+static void printOperand(FILE* file, int level, Variable* const node, Variable* lvalue = NULL);
 
 static void printStringInitialization(FILE* file, int level, StringInitialization* const node, Variable* lvalue);
 static void printArrayInitialization(FILE* file, int level, ArrayInitialization* const node, Variable* lvalue);
@@ -64,14 +60,14 @@ void printForeignLangFunction(FILE* file, Function* node) {
 
 
 
-void init (char* const dirName) {
+static void init (char* const dirName) {
 
 }
 
 void print(FILE* file, int level, SyntaxNode* node, Variable* lvalue = NULL) {
-    
+
     switch (node->type) {
-        
+
         case NT_SCOPE :
             printScope(file, level, (Scope*) node, lvalue);
             break;
@@ -138,27 +134,13 @@ void print(FILE* file, int level, SyntaxNode* node, Variable* lvalue = NULL) {
         case NT_STATEMENT :
             printStatement(file, level, (Statement*) node, lvalue);
             break;
-        case NT_FUNCTION_CALL :
-            printFunctionCall(file, level, (FunctionCall*) node, lvalue);
-            break;
-        case NT_OPERAND :
-            printOperand(file, level, (Operand*) node, lvalue);
-            break;
-        case NT_UNARY_OPERATOR :
-            printUnaryOperator(file, level, (UnaryOperator*) node, lvalue);
-            break;
-        case NT_BINARY_OPERATOR :
-            printBinaryOperator(file, level, (BinaryOperator*) node, lvalue);
-            break;
-        case NT_TERNARY_OPERATOR :
-            printTernaryOperator(file, level, (TernaryOperator*) node, lvalue);
-            break;
-        case NT_EXPRESSION_WRAPPER :
-            break;     
-    
+        //case NT_FUNCTION_CALL :
+        //    printFunctionCall(file, level, (FunctionCall*) node, lvalue);
+        //    break;
+
         default:
             break;
-    
+
     }
 
 }
@@ -173,12 +155,12 @@ void printDataType(const DataTypeEnum dtypeEnum) {
 
     if (dtypeEnum == DT_CUSTOM) {
 
-        printf("%.*s", dtype->nameLen, dtype->name);    
-    
+        //printf("%.*s", dtype->name.len, dtype->name);
+
     } else if (dtypeEnum == DT_POINTER) {
 
         // cant do anything..
-    
+
     } else {
 
         switch (dtypeEnum) {
@@ -186,60 +168,61 @@ void printDataType(const DataTypeEnum dtypeEnum) {
             case DT_INT :
                 printf("int");
                 break;
-                
+
             case DT_I32 :
                 printf("i32");
                 break;
-                
+
             case DT_I64 :
                 printf("i64");
                 break;
-                
+
             case DT_F32 :
                 printf("f32");
                 break;
-                
+
             case DT_F64 :
                 printf("f64");
                 break;
 
             default :
-                printf("%s", dtype->name);
-        
+                printf("<DTYPE>");
+                // printf("%s", dtype->name);
+
         }
-    
+
     }
 
 }
 
 void printDataType(const DataTypeEnum dtypeEnum, void* dtype) {
-    
+
     if (dtypeEnum == DT_POINTER) {
 
         Pointer* const ptr = ((Pointer*) dtype);
         printDataType(ptr->pointsToEnum, ptr->pointsTo);
         putchar('^');
-    
+
     } else if (dtypeEnum == DT_ARRAY) {
-        
+
         Array* const arr = (Array*) dtype;
-        printDataType(arr->pointsToEnum, arr->pointsTo);
+        printDataType(arr->base.pointsToEnum, arr->base.pointsTo);
 
     } else if (dtypeEnum == DT_CUSTOM) {
-        
+
         TypeDefinition* td = (TypeDefinition*) (dtype);
-        printf("%.*s", td->nameLen, td->name);
+        printf("%.*s", td->name.len, td->name.buff);
         // fprintf(stdout, "%.*s", td->nameLen, td->name)
 
     } else {
 
         printDataType(dtypeEnum);
-    
+
     }
 
 }
 
-void printOperandValue(Operand* op) {
+void printOperandValue(Variable* op) {
 
     switch (op->cvalue.dtypeEnum) {
 
@@ -253,7 +236,7 @@ void printOperandValue(Operand* op) {
         }
 
         case DT_I64 : {
-            printf("%li", op->cvalue.i64);
+            printf("%lli", op->cvalue.i64);
             break;
         }
 
@@ -276,7 +259,7 @@ void printOperandValue(Operand* op) {
         default : {
             printf("<unknown type>");
         }
-    
+
     }
 
 }
@@ -286,7 +269,7 @@ void printDataType(DataType* const dtype, const DataTypeEnum dtypeEnum) {
 
     if (dtypeEnum == DT_CUSTOM) {
 
-        printf("%.*s", dtype->name, dtype->nameLen);
+        // printf("%.*s", dtype->name, dtype->nameLen);
         return;
 
     } else if (dtypeEnum == DT_POINTER) {
@@ -295,10 +278,10 @@ void printDataType(DataType* const dtype, const DataTypeEnum dtypeEnum) {
         DataType* ptrDtype = dataTypes + DT_POINTER;
 
         printDataType((DataType*) ptr->pointsTo, ptr->pointsToEnum);
-        printf("%s", ptrDtype->name);
-        
+        // printf("%s", ptrDtype->name);
+
         return;
-    
+
     }
 
     switch (dtypeEnum) {
@@ -356,7 +339,8 @@ void printDataType(DataType* const dtype, const DataTypeEnum dtypeEnum) {
         break;
 
     default:
-        printf("%s", (dataTypes + dtypeEnum)->name);
+        printf("<DTYPE>");
+        // printf("%s", (dataTypes + dtypeEnum)->name);
 
     }
 
@@ -365,15 +349,15 @@ void printDataType(DataType* const dtype, const DataTypeEnum dtypeEnum) {
 void printOperator(OperatorEnum opType) {
 
     switch (opType) {
-        
+
         case OP_UNARY_PLUS :
-            putchar('+');    
+            putchar('+');
             break;
-        
+
         case OP_UNARY_MINUS :
             putchar('-');
             break;
-        
+
         case OP_ADDITION :
             putchar('+');
             break;
@@ -399,7 +383,7 @@ void printOperator(OperatorEnum opType) {
             break;
 
         case OP_GET_VALUE :
-            putchar('*');            
+            putchar('*');
             break;
 
         case OP_BITWISE_AND :
@@ -410,7 +394,7 @@ void printOperator(OperatorEnum opType) {
             putchar('=');
             putchar('=');
             break;
-        
+
         case OP_NOT_EQUAL :
             putchar('!');
             putchar('=');
@@ -428,7 +412,7 @@ void printOperator(OperatorEnum opType) {
             putchar('<');
             putchar('=');
             break;
-        
+
         case OP_BOOL_AND :
             putchar('&');
             putchar('&');
@@ -461,6 +445,9 @@ void printOperator(OperatorEnum opType) {
         case OP_MEMBER_SELECTION :
             putchar('.');
             break;
+
+        default:
+            printf("<OPERATOR>");
     }
 
 }
@@ -474,10 +461,11 @@ void printScope(FILE* file, int level, Scope* const node, Variable* lvalue) {
     level = (level > CSP_MAX_TAB_LEVEL) ? CSP_MAX_TAB_LEVEL : level;
     char tab[CSP_MAX_TAB_LEVEL + 1];
     CSP_GEN_TAB(tab, level);
-    
+
     printf("%s{\n", tab);
-    for (int i = 0; i < (int) node->children.size(); i++) {
-        print(file, level + 1, node->children[i]);
+    for (int i = 0; i < (int) node->children.base.size; i++) {
+        SyntaxNode* node = ((SyntaxNode*) node->scope->children.base.buffer) + i;
+        print(file, level + 1, ((SyntaxNode*) node->scope->children.base.buffer) + i);
     }
     printf("%s}\n", tab);
 
@@ -490,18 +478,18 @@ void printVariableDefinition(FILE* file, int level, VariableDefinition* const no
     CSP_GEN_TAB(tab, level);
 
     printf("%s", tab);
-    if (node->flags & IS_CONST) {
+    if (node->base.flags & IS_CONST) {
         printf("const ");
         printDataType((DataType*) node->var->cvalue.any, node->var->cvalue.dtypeEnum);
     } else {
         printDataType((DataType*) node->var->cvalue.any, node->var->cvalue.dtypeEnum);
     }
 
-    printf(" %.*s = ", node->var->nameLen, node->var->name);
-    
+    printf(" %.*s = ", node->var->name.len, node->var->name.buff);
+
     // again, somehow have to get rid of this check
     if (node->var->expression) {
-        
+
         Expression* ex = node->var->expression;
         printExpression(file, level, ex);
 
@@ -526,7 +514,7 @@ void printVariableAssignment(FILE* file, int level, VariableAssignment* const no
     //printf("%s%.*s = ", tab, var->nameLen, var->name);
     // again, somehow have to get rid of this check
     if (node->rvar->expression) {
-        
+
         Expression* ex = node->rvar->expression;
         printExpression(file, level, ex);
 
@@ -544,38 +532,38 @@ void printTypeDefinition(FILE* file, int level, TypeDefinition* const node, Vari
     char tab[CSP_MAX_TAB_LEVEL + 1];
     CSP_GEN_TAB(tab, level);
 
-    printf("%sdef %.*s \n%s{\n", tab, node->nameLen, node->name, tab);
-    
-    const int lastIdx = (int) node->vars.size() - 1;
-    
+    printf("%sdef %.*s \n%s{\n", tab, node->name.len, node->name.buff, tab);
+
+    const int lastIdx = (int) node->vars.base.size - 1;
+
     for (int i = 0; i < lastIdx; i++) {
-        
-        Variable* const var = node->vars[i];
-        
+
+        Variable* const var = ((Variable*) node->vars.base.buffer) + i;
+
         // TODO : cleanup
         if (var->cvalue.dtypeEnum != DT_CUSTOM) {
-            DataType* const dtype = dataTypes + var->cvalue.dtypeEnum; 
-            printf("%s\t%.*s %.*s = %li,\n", tab, dtype->nameLen, dtype->name, var->nameLen, var->name, var->cvalue.i64);
+            DataType* const dtype = dataTypes + var->cvalue.dtypeEnum;
+            // printf("%s\t%.*s %.*s = %li,\n", tab, dtype->name.len, dtype->name, var->nameLen, var->name, var->cvalue.i64);
         } else {
-            TypeDefinition* const dtype = var->cvalue.def; 
-            printf("%s\t%.*s %.*s = %li,\n", tab, dtype->nameLen, dtype->name, var->nameLen, var->name, var->cvalue.i64);    
+            TypeDefinition* const dtype = var->cvalue.def;
+            // printf("%s\t%.*s %.*s = %li,\n", tab, dtype->nameLen, dtype->name, var->nameLen, var->name, var->cvalue.i64);
         }
 
     }
 
     if (lastIdx - 1 >= 0) {
-        
-        Variable* const var = node->vars[lastIdx];
-        
+
+        Variable* const var = ((Variable*) node->vars.base.buffer) + lastIdx;
+
         if (var->cvalue.dtypeEnum != DT_CUSTOM) {
-            DataType* const dtype = dataTypes + var->cvalue.dtypeEnum; 
-            printf("%s\t%.*s %.*s = %li\n", tab, dtype->nameLen, dtype->name, var->nameLen, var->name, var->cvalue.i64);
+            DataType* const dtype = dataTypes + var->cvalue.dtypeEnum;
+            // printf("%s\t%.*s %.*s = %li\n", tab, dtype->nameLen, dtype->name, var->nameLen, var->name, var->cvalue.i64);
         } else {
-            TypeDefinition* const dtype = var->cvalue.def; 
-            printf("%s\t%.*s %.*s = %li\n", tab, dtype->nameLen, dtype->name, var->nameLen, var->name, var->cvalue.i64);
+            TypeDefinition* const dtype = var->cvalue.def;
+            // printf("%s\t%.*s %.*s = %li\n", tab, dtype->nameLen, dtype->name, var->nameLen, var->name, var->cvalue.i64);
         }
     }
-    
+
     printf("%s}\n", tab);
 
 }
@@ -588,14 +576,14 @@ void printTypeInitialization(FILE* file, int level, TypeInitialization* const no
 
     printf("{\n");
 
-    for (int i = 0; i < (int) node->attributes.size() - 1; i++) {
-        
-        Variable* const var = node->attributes[i];
-        
+    for (int i = 0; i < (int) node->attributes.base.size - 1; i++) {
+
+        Variable* const var = ((Variable*) node->attributes.base.buffer) + i;
+
         printf("%s\t", tab);
 
-        if (var->nameLen > 0) {
-            printf("%.*s = ", var->nameLen, var->name);
+        if (var->name.len > 0) {
+            printf("%.*s = ", var->name.len, var->name.buff);
             if (var->expression) {
                 printExpression(file, level + 1, var->expression);
             } else {
@@ -615,14 +603,15 @@ void printTypeInitialization(FILE* file, int level, TypeInitialization* const no
 
     }
 
-    if ((int) node->attributes.size() > 0) {
-        
-        Variable* const var = node->attributes[(int) node->attributes.size() - 1];
-        
+    if ((int) node->attributes.base.size > 0) {
+
+        const int idx = (int) node->attributes.base.size - 1;
+        Variable* const var = ((Variable*) node->attributes.base.buffer) + idx;
+
         printf("%s\t", tab);
 
-        if (var->nameLen > 0) {
-            printf("%.*s = ", var->nameLen, var->name);
+        if (var->name.len > 0) {
+            printf("%.*s = ", var->name.len, var->name.buff);
             if (var->expression) {
                 printExpression(file, level + 1, var->expression);
             } else {
@@ -660,30 +649,30 @@ void printEnumerator(FILE* file, int level, Enumerator* const node, Variable* lv
 
     DataType* const dt = dataTypes + node->dtype;
 
-    printf("%senum %.*s %.*s \n%s{\n", tab, node->nameLen, node->name, dt->nameLen, dt->name, tab);
-    
-    const int lastIdx = (int) node->vars.size() - 1;
-    
+    // printf("%senum %.*s %.*s \n%s{\n", tab, node->name.len, node->name, dt->name.len, dt->name, tab);
+
+    const int lastIdx = (int) node->vars.base.size - 1;
+
     for (int i = 0; i < lastIdx; i++) {
-        Variable* const var = node->vars[i];
-        printf("%s\t%.*s = %li,\n", tab, var->nameLen, var->name, var->cvalue.i64);
+        Variable* const var = ((Variable*) node->vars.base.buffer) + i;
+        printf("%s\t%.*s = %lli,\n", tab, var->name.len, var->name.buff, var->cvalue.i64);
     }
 
     if (lastIdx - 1 >= 0) {
-        Variable* const var = node->vars[lastIdx];
-        printf("%s\t%.*s = %li\n", tab, var->nameLen, var->name, var->cvalue.i64);
+        Variable* const var = ((Variable*) node->vars.base.buffer) + lastIdx;
+        printf("%s\t%.*s = %lli\n", tab, var->name.len, var->name.buff, (uint64_t) var->cvalue.i64);
     }
-    
+
     printf("%s}\n", tab);
 
 }
 
 void printVariable(FILE* file, int level, Variable* const node, Variable* lvalue) {
-    
-    if (node->def && node->def->flags & IS_CMP_TIME) {
+
+    if (node->def && node->def->base.flags & IS_CMP_TIME) {
         printOperandValue(node->def->var);
-    } else if (node->nameLen > 0) {
-        printf("%.*s_%i", node->nameLen, node->name, node->id);
+    } else if (node->name.len > 0) {
+        printf("%.*s_%lli", node->name.len, node->name.buff, node->name.id);
     } else {
         if (node->expression) printExpression(file, level, node->expression);
         else printOperandValue(node);
@@ -698,28 +687,30 @@ void printFunction(FILE* file, int level, Function* const node, Variable* lvalue
     char tab[CSP_MAX_TAB_LEVEL + 1];
     CSP_GEN_TAB(tab, level);
 
-    printf("%s%.*s(", tab, node->nameLen, node->name);
+    printf("%s%.*s(", tab, node->name.len, node->name.buff);
+
+    VariableDefinition* const inArgs = (VariableDefinition*) node->prototype.inArgs.base.buffer;
 
     // in args
-    for (int i = 0; i < ((int) node->inArgs.size()) - 1; i++) {
-        Variable* const var = node->inArgs[i]->var;
-        printf("%s %.*s, ", (dataTypes + var->cvalue.dtypeEnum)->name, var->nameLen, var->name);
+    for (int i = 0; i < ((int) node->prototype.inArgs.base.size) - 1; i++) {
+        Variable* const var = (inArgs + i)->var;
+        // printf("%s %.*s, ", (dataTypes + var->cvalue.dtypeEnum)->name, var->name.len, var->name.buff);
     }
-    if ((int) node->inArgs.size() - 1 >= 0) {
-        Variable* const var = node->inArgs[node->inArgs.size() - 1]->var;
-        printf("%s %.*s) => (", (dataTypes + var->cvalue.dtypeEnum)->name, var->nameLen, var->name);
+    if ((int) node->prototype.inArgs.base.size - 1 >= 0) {
+        Variable* const var = (inArgs + (node->prototype.inArgs.base.size - 1))->var;
+        // printf("%s %.*s) => (", (dataTypes + var->cvalue.dtypeEnum)->name, var->name.len, var->name.buff);
     } else {
         printf(") => (");
-    
+
     }
 
     // out arg
-    const int outDtype = node->outArg->var->cvalue.dtypeEnum;
+    const int outDtype = node->prototype.outArg->var->cvalue.dtypeEnum;
     if (outDtype == DT_VOID) {
         printf(")\n");
     } else {
         const DataType dtype = dataTypes[outDtype];
-        printf("%s)\n", dtype.name);
+        // printf("%s)\n", dtype.name);
     }
 
     // TODO : empty body crash
@@ -734,25 +725,28 @@ void printBranch(FILE* file, int level, Branch* const node, Variable* lvalue) {
     char tab[CSP_MAX_TAB_LEVEL + 1];
     CSP_GEN_TAB(tab, level);
 
+    Scope* scopes = (Scope*) node->scopes.base.buffer;
+    Variable* expressions = (Variable*) node->expressions.base.buffer;
+
     // basic if branche
     printf("%s%s ", tab, Lex::KWS_IF);
-    printVariable(file, level, node->expressions[0]);
+    printVariable(file, level, expressions);
     putchar('\n');
-    printScope(file, level, node->scopes[0]);
-    
+    printScope(file, level, scopes);
+
     // if elses
     int i = 1;
-    for (; i < node->expressions.size(); i++) {
+    for (; i < node->expressions.base.size; i++) {
         printf("%s%s %s ", tab, Lex::KWS_ELSE, Lex::KWS_IF);
-        printVariable(file, level, node->expressions[i]);
+        printVariable(file, level, expressions + i);
         putchar('\n');
-        printScope(file, level, node->scopes[i]);
+        printScope(file, level, scopes + i);
     }
 
     // final else if present
-    if (i < node->scopes.size()) {
+    if (i < node->scopes.base.size) {
         printf("%s%s\n", tab, Lex::KWS_ELSE);
-        printScope(file, level, node->scopes[(int) node->scopes.size() - 1]);
+        printScope(file, level, scopes + ((int) node->scopes.base.size - 1));
     }
 
 }
@@ -806,13 +800,13 @@ void printBreakStatement(FILE* file, int level, BreakStatement* const node, Vari
 
 void printGotoStatement(FILE* file, int level, GotoStatement* const node, Variable* lvalue) {
 
-    printf("goto %.*s;", node->nameLen, node->name);
+    printf("goto %.*s;", (int) node->name.len, node->name.buff);
 
 }
 
 void printLabel(FILE* file, int level, Label* const node, Variable* lvalue) {
 
-    printf(">%.*s;", node->nameLen, node->name);
+    printf(">%.*s;", node->name.len, node->name.buff);
 
 }
 
@@ -821,12 +815,9 @@ void printNamespace(FILE* file, int level, Namespace* const node, Variable* lval
 }
 
 void printExpression(FILE* file, int level, Expression* const node, Variable* lvalue) {
-    
+
     switch (node->type) {
 
-        case EXT_WRAPPER:
-            printWrapperExpression(file, level, (WrapperExpression*)node, lvalue);
-            break;
         case EXT_UNARY:
             printUnaryExpression(file, level, (UnaryExpression*)node, lvalue);
             break;
@@ -851,18 +842,14 @@ void printExpression(FILE* file, int level, Expression* const node, Variable* lv
         case EXT_CATCH:
             printCatchExpression(file, level, (Catch*)node, lvalue);
             break;
+        default:
+            break;
 
     }
 
 }
 
 void printForeignCode() {
-
-}
-
-void printWrapperExpression(FILE* file, int level, WrapperExpression* const node, Variable* lvalue) {
-
-    printVariable(file, level, node->operand);
 
 }
 
@@ -883,9 +870,9 @@ void printCatchExpression(FILE* file, int level, Catch* const node, Variable* lv
 void printUnaryExpression(FILE* file, int level, UnaryExpression* const node, Variable* lvalue) {
 
     printf("(");
-    
+
     // node->oper->print(thisTranslator);
-    printOperator(node->operType);
+    printOperator(node->base.opType);
 
     if (node->operand->unrollExpression && node->operand->expression) {
         printExpression(file, level, node->operand->expression);
@@ -900,23 +887,23 @@ void printUnaryExpression(FILE* file, int level, UnaryExpression* const node, Va
 void printBinaryExpression(FILE* file, int level, BinaryExpression* const node, Variable* lvalue) {
 
     printf("(");
-    
-    if (node->operandA->unrollExpression && node->operandA->expression) {
-        printExpression(file, level, node->operandA->expression);
+
+    if (node->left->unrollExpression && node->left->expression) {
+        printExpression(file, level, node->left->expression);
     } else {
-        printVariable(file, level, node->operandA); 
+        printVariable(file, level, node->left);
     }
 
     // node->oper->print(thisTranslator, 1);
-    printOperator(node->operType);
+    printOperator(node->base.opType);
 
-    if (node->operandB->unrollExpression && node->operandB->expression) {
-        printExpression(file, level, node->operandB->expression);
+    if (node->right->unrollExpression && node->right->expression) {
+        printExpression(file, level, node->right->expression);
     } else {
-        printVariable(file, level, node->operandB);
+        printVariable(file, level, node->right);
     }
 
-    if (node->operType == OP_SUBSCRIPT) putchar(']');
+    if (node->base.opType == OP_SUBSCRIPT) putchar(']');
 
     printf(")");
 
@@ -927,8 +914,8 @@ void printTernaryExpression(FILE* file, int level, TernaryExpression* const node
 }
 
 void printStatement(FILE* file, int level, Statement* const node, Variable* lvalue) {
-    
-    printVariable(file, level, node->op);
+
+    printVariable(file, level, node->operand);
     putchar(';');
 
 }
@@ -937,28 +924,29 @@ void printFunctionCall(FILE* file, int level, FunctionCall* const node, Variable
 
     if (node->fptr) {
 
-        printf("%.*s_%i(", node->nameLen, node->name, node->fptr->id);
-    
+        printf("%.*s_%lli(", node->name.len, node->name.buff, node->fptr->name.id);
+
     } else if (node->fcn->internalIdx <= 0) {
-        
-        printf("%.*s_%i(", node->nameLen, node->name, node->fcn->id);
-    
+
+        printf("%.*s_%lli(", node->name.len, node->name.buff, node->fcn->name.id);
+
     } else {
 
-        printf("%.*s(", node->nameLen, node->name);
+        printf("%.*s(", node->name.len, node->name.buff);
 
     }
 
-    const int inArgsCnt = node->inArgs.size();
+    Variable* callInArgs = (Variable*) node->inArgs.base.buffer;
+    const int inArgsCnt = node->inArgs.base.size;
     int multipleTypes = 0;
     for (int i = 0; i < inArgsCnt; i++) {
-        printVariable(file, level, node->inArgs[i]);
-        
+        printVariable(file, level, callInArgs + i);
+
         if (!multipleTypes) {
 
             Variable* tmp;
-            if (node->fcn) { 
-                tmp = node->fcn->inArgs[i]->var;
+            if (node->fcn) {
+                tmp = (((VariableDefinition*) node->fcn->prototype.inArgs.base.buffer) + i)->var;
             } else {
                 tmp = node->fptr;
             }
@@ -967,9 +955,9 @@ void printFunctionCall(FILE* file, int level, FunctionCall* const node, Variable
                 multipleTypes = 1;
             } else if (tmp->cvalue.dtypeEnum == DT_ARRAY && !(tmp->cvalue.arr->flags & IS_ARRAY_LIST)) {
                 fputc(',', file);
-                printVariable(file, 0, node->inArgs[i]->cvalue.arr->length);
+                printVariable(file, 0, (callInArgs + i)->cvalue.arr->length);
             }
-        
+
         }
 
         if (i < inArgsCnt - 1) {
@@ -984,7 +972,7 @@ void printFunctionCall(FILE* file, int level, FunctionCall* const node, Variable
 
 }
 
-void printOperand(FILE* file, int level, Operand* const node, Variable* lvalue) {
+void printOperand(FILE* file, int level, Variable* const node, Variable* lvalue) {
 
     // maybe separate type?
     if (node->expression) {
@@ -1010,21 +998,9 @@ void printErrorSet(FILE* file, int level, ErrorSet* const node, Variable* lvalue
 
 }
 
-void printUnaryOperator(FILE* file, int level, UnaryOperator* const node, Variable* lvalue) {
-
-}
-
-void printBinaryOperator(FILE* file, int level, BinaryOperator* const node, Variable* lvalue) {
-
-}
-
-void printTernaryOperator(FILE* file, int level, TernaryOperator* const node, Variable* lvalue) {
-
-}
 
 
-
-Translator translatorItselfConsole{
+Translator translatorDebug {
     NULL,
     0,
     &init,

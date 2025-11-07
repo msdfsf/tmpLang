@@ -51,7 +51,7 @@ void printLabel(Label* const node, Variable* lvalue = NULL);
 void printNamespace(Namespace* const node, Variable* lvalue = NULL);
 void printStatement(Statement* const node, Variable* lvalue = NULL);
 void printFunctionCall(FunctionCall* const node, Variable* lvalue = NULL, Variable* err = NULL);
-void printOperand(Operand* const node, Variable* lvalue = NULL);
+void printOperand(Variable* const node, Variable* lvalue = NULL);
 void printUnaryOperator(UnaryOperator* const node, Variable* lvalue = NULL);
 void printBinaryOperator(BinaryOperator* const node, Variable* lvalue = NULL);
 void printTernaryOperator(TernaryOperator* const node, Variable* lvalue = NULL);
@@ -174,7 +174,7 @@ void LspRenderer::render(SyntaxNode* const node, Variable* lvalue) {
             printFunctionCall((FunctionCall*) node, lvalue);
             break;
         case NT_OPERAND :
-            printOperand((Operand*) node, lvalue);
+            printOperand((Variable*) node, lvalue);
             break;
         case NT_UNARY_OPERATOR :
             printUnaryOperator((UnaryOperator*) node, lvalue);
@@ -303,7 +303,7 @@ void printFunctionCall(FunctionCall* const node, Variable* lvalue, Variable* err
 
 }
 
-void printOperand(Operand* const node, Variable* lvalue) {
+void printOperand(Variable* const node, Variable* lvalue) {
 
 }
 

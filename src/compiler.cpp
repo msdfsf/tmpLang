@@ -1,35 +1,20 @@
-// #pragma once
-#include <cstdint>
-
 #include "compiler.h"
+
+#include "allocator.h"
 #include "parser.h"
+#include "syntax.h"
 #include "validator.h"
 #include "logger.h"
-#include "syntax.h"
 #include "error.h"
-#include "utils.h"
 
-#include "file_driver.h"
-
-#include "itself_console_translator.h"
-#include "c_translator.h"
-
+#include "translator_debug.h"
+#include "translator_c.h"
 
 #include "../lib/libtcc.h"
 
-#include <map>
-#include <string>
-#include <filesystem>
+
 
 #define NULL 0
-
-inline void runTranslator(Translator* t) {
-    t->debugInfo = Compiler::debugInfo;
-    t->init(Compiler::outDir);
-    t->printNode(t->mainFile, 0, SyntaxNode::root, NULL);
-    t->printForeignCode();
-    t->exit();
-}
 
 
 
@@ -43,19 +28,13 @@ int Compiler::debugInfo = 0;
 
 
 
-struct ForeignLangsData {
-    LangDef* data;
-    FILE* file;    
-};
-std::map<std::string, ForeignLangsData*> foreignLangsMap;
-
-
-
-template <typename T>
-int printForeignCode(std::vector<T*> codeBlocks, std::vector<LangDef*>, char* outDir);
-int printForeignFunction(std::vector<ForeignFunction*> foreignFcn, std::vector<LangDef*> langDefs, char* outDir);
-
-int compileForeignCode(char* path);
+inline void runTranslator(Translator* t) {
+    t->debugInfo = Compiler::debugInfo;
+    t->init(Compiler::outDir);
+    t->printNode(t->mainFile, 0, (SyntaxNode*) SyntaxNode::root, NULL);
+    t->printForeignCode();
+    t->exit();
+}
 
 int build();
 
@@ -63,63 +42,71 @@ int build();
 
 int Compiler::compile() {
 
-    Logger::log(Logger::INFO, "Compilation started...\n");
+    alc = &_allocatorMem;
+    initAlloc(alc);
+    initNAlloc(nalc);
+
+    Reg.init();
+    Internal::init();
+    FileSystem::init();
+
+    Logger::log({ Logger::INFO }, "Compilation started...\n");
 
     int err;
 
+    Parser::init();
     err = Parser::parse(mainFile);
     if (err < 0) return err;
-    
-    Logger::log(Logger::INFO, "Parsing completed...\n");
+
+    Logger::log({ Logger::INFO }, "Parsing completed...\n");
 
     err = Validator::validate();
     if (err < 0) return err;
 
-    Logger::log(Logger::INFO, "Validating completed...\n");
+    Logger::log({ Logger::INFO }, "Validating completed...\n");
 
     // if (printForeignCode(SyntaxNode::codeBlocks, SyntaxNode::langDefs, Compiler::outDir)) return -1;
     // if (printForeignFunction(SyntaxNode::foreignFunctions, SyntaxNode::langDefs, Compiler::outDir)) return -1;
     // if (compileForeignCode(Compiler::outDir)) return -1;
-    
+
     // Logger::log(Logger::INFO, "Foreign block of codes assembled...\n");
 
     // TODO : make parallel
-    if (outLangs & ITSELF_CONSOLE_LANG) runTranslator(&translatorItselfConsole);
+    if (outLangs & ITSELF_CONSOLE_LANG) runTranslator(&translatorDebug);
     if (outLangs & C_LANG) runTranslator(&translatorC);
-    
-    Logger::log(Logger::INFO, "Translation completed...\n");
+
+    Logger::log({ Logger::INFO }, "Translation completed...\n");
     if (Compiler::command == TRANSLATE) return 0;
 
     err = build();
     if (err < 0) return err;
 
-    Logger::log(Logger::INFO, "Binary generation completed...\n");
+    Logger::log({ Logger::INFO }, "Binary generation completed...\n");
 
     return Err::OK;
 
 }
 
 int build() {
-    
-    std::filesystem::path exePath = Utils::getExePath();
-    
-    std::string libPath = (exePath / "../tcc/lib").string();
-    
-    std::string tccIncPath[] = {
+
+    FileSystem::Path* exePath = FileSystem::getExePath();
+    const char* libPath = FileSystem::catPaths(exePath, "../tcc/lib");
+
+    const char* tccIncPath[] = {
         #ifdef _WIN32
-            (exePath / "../tcc/inc").string(),
-            (exePath / "../tcc/inc/winapi").string()
+            FileSystem::catPaths(exePath, "../tcc/inc"),
+            FileSystem::catPaths(exePath, "../tcc/inc/winapi")
         #else
             "/usr/include"
         #endif
     };
-    const int tccIncPathLen = sizeof(tccIncPath) / sizeof(std::string);
+    const int tccIncPathLen = sizeof(tccIncPath) / sizeof(const char*);
 
-    std::string resIncPath = (exePath / "../resources").string();
+    const char* resIncPath = FileSystem::catPaths(exePath, "../resources");
 
     TCCState *state = tcc_new();
     if (!state) {
-        Logger::log(Logger::ERROR, "TCC: Failed to create TCC state.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to create TCC state.\n");
         return Err::TCC_ERROR;
     }
 
@@ -132,30 +119,30 @@ int build() {
     }
 
     if (tcc_set_output_type(state, TCC_OUTPUT_EXE) < 0) {
-        Logger::log(Logger::ERROR, "TCC: Failed to set output type.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to set output type.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
-    
-    if (tcc_add_library_path(state, libPath.c_str()) < 0) {
-        Logger::log(Logger::ERROR, "TCC: Failed to add library path.\n");
+
+    if (tcc_add_library_path(state, libPath) < 0) {
+        Logger::log({ Logger::ERROR }, "TCC: Failed to add library path.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
 
     for (int i = 0; i < tccIncPathLen; i++) {
-        if (tcc_add_include_path(state, tccIncPath[i].c_str()) < 0) {
-            Logger::log(Logger::ERROR, "TCC: Failed to add include path.\n");
+        if (tcc_add_include_path(state, tccIncPath[i]) < 0) {
+            Logger::log({ Logger::ERROR }, "TCC: Failed to add include path.\n");
             tcc_delete(state);
             return Err::TCC_ERROR;
         }
     }
-    
+
     if (
-        tcc_add_include_path(state, resIncPath.c_str()) < 0 ||
+        tcc_add_include_path(state, resIncPath) < 0 ||
         tcc_add_include_path(state, ".") < 0
     ) {
-        Logger::log(Logger::ERROR, "TCC: Failed to add include path.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to add include path.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
@@ -168,20 +155,20 @@ int build() {
         tcc_add_library(state, "msvcrt") < 0 ||
         tcc_add_library(state, "tcc1-64") < 0
     ) {
-        Logger::log(Logger::ERROR, "TCC: Failed to add required libraries.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to add required libraries.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
     #else
-    
+
     if (tcc_add_include_path(state, "/usr/lib/gcc/x86_64-linux-gnu/11/include") < 0) {
-        Logger::log(Logger::ERROR, "TCC: Failed to add library path.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to add library path.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
 
     if (tcc_add_library_path(state, "/usr/lib") < 0) {
-        Logger::log(Logger::ERROR, "TCC: Failed to add library path.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to add library path.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
@@ -193,7 +180,7 @@ int build() {
         tcc_add_library(state, "pthread") < 0 || // POSIX threads library
         tcc_add_library(state, "tcc1-64") < 0
     ) {
-        Logger::log(Logger::ERROR, "TCC: Failed to add required libraries.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to add required libraries.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
@@ -202,19 +189,19 @@ int build() {
     if (
         tcc_add_file(state, "main.c") < 0
     ) {
-        Logger::log(Logger::ERROR, "TCC: Failed to add .c files.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to add .c files.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
 
     if (tcc_output_file(state, Compiler::outFile) < 0) {
-        Logger::log(Logger::ERROR, "TCC: Failed to generate output executable.\n");
+        Logger::log({ Logger::ERROR }, "TCC: Failed to generate output executable.\n");
         tcc_delete(state);
         return Err::TCC_ERROR;
     }
-    
+
     tcc_delete(state);
-    
+
     return Err::OK;
 
 }

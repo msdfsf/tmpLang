@@ -1,13 +1,14 @@
 #pragma once
 
-// errors should be logged at the place, not propagated and then logged
-// as at point of occurrence there is way more info to offer to user
+#include <cstdint>
+
+
 
 #define ERR_STR(e) ((char*) Err::str[-e])
 #define ERR_PSTR(e) ((char**) &(Err::str[-e]))
 
 namespace Err {
-    
+
     enum Err : int64_t {
         OK                              = 0,
         MALLOC                          = -1,
@@ -69,6 +70,7 @@ namespace Err {
         INVALID_ARGUMENTS               = -57,
         NOT_YET_IMPLEMENTED             = -58,
         IO_ERROR                        = -59,
+        MAX_FILE_PATH_EXCEEDED          = -60,
     };
 
     const char* const str[] = {
@@ -133,6 +135,7 @@ namespace Err {
         "Invalid arguments!",
         "Not yet implemented!",
         "IO error!",
+        "Max file path exceeded!"
     };
 
 }

@@ -1,13 +1,14 @@
 #pragma once
 
-#include "globals.h"
+#include "operators.h"
+#include "data_types.h"
 #include <array>
 
 namespace Lex {
 
     enum TokenKind : int32_t;
     enum TokenDetail : int32_t;
-    
+
     union Token {
         struct {
             int32_t kind;
@@ -217,59 +218,58 @@ namespace Lex {
     constexpr int KW_TABLE_SIZE = 158;
     constexpr std::array<int, KW_TABLE_SIZE> makeKeywordTable() {
 
-        std::array<int, KW_TABLE_SIZE> table = {};
+            std::array<int, KW_TABLE_SIZE> table = {};
 
-        table[6] = KW_I32;
-        table[9] = KW_FOR;
-        table[11] = KW_CATCH;
-        table[13] = KW_STRUCT;
-        table[14] = KW_FREE;
-        table[15] = KW_NAMESPACE;
-        table[19] = KW_CONTINUE;
-        table[21] = KW_INT;
-        table[23] = KW_IF;
-        table[30] = KW_VOID;
-        table[32] = KW_WHEN;
-        table[36] = KW_LOOP;
-        table[38] = KW_ERROR;
-        table[40] = KW_F64;
-        table[43] = KW_ELSE;
-        table[49] = KW_IMPORT;
-        table[52] = KW_RETURN;
-        table[59] = KW_BREAK;
-        table[61] = KW_FCN;
-        table[67] = KW_U8;
-        table[68] = KW_TRUE;
-        table[72] = KW_I16;
-        table[82] = KW_SCOPE;
-        table[83] = KW_U64;
-        table[85] = KW_MUTON;
-        table[86] = KW_U32;
-        table[99] = KW_ALLOC;
-        table[101] = KW_I64;
-        table[105] = KW_F32;
-        table[108] = KW_USING;
-        table[109] = KW_AUTON;
-        table[113] = KW_GOTO;
-        table[117] = KW_CONST;
-        table[122] = KW_CASE;
-        table[123] = KW_UNION;
-        table[125] = KW_EMBED;
-        table[127] = KW_FALSE;
-        table[129] = KW_ENUM;
-        table[133] = KW_NULL;
-        table[136] = KW_FROM;
-        table[139] = KW_I8;
-        table[140] = KW_AS;
-        table[144] = KW_U16;
-        table[145] = KW_WHILE;
-        table[149] = KW_DEF;
-        
-        return table;
+            table[6] = KW_I32;
+            table[9] = KW_FOR;
+            table[11] = KW_CATCH;
+            table[13] = KW_STRUCT;
+            table[14] = KW_FREE;
+            table[15] = KW_NAMESPACE;
+            table[19] = KW_CONTINUE;
+            table[21] = KW_INT;
+            table[23] = KW_IF;
+            table[30] = KW_VOID;
+            table[32] = KW_WHEN;
+            table[36] = KW_LOOP;
+            table[38] = KW_ERROR;
+            table[40] = KW_F64;
+            table[43] = KW_ELSE;
+            table[49] = KW_IMPORT;
+            table[52] = KW_RETURN;
+            table[59] = KW_BREAK;
+            table[61] = KW_FCN;
+            table[67] = KW_U8;
+            table[68] = KW_TRUE;
+            table[72] = KW_I16;
+            table[82] = KW_SCOPE;
+            table[83] = KW_U64;
+            table[85] = KW_MUTON;
+            table[86] = KW_U32;
+            table[99] = KW_ALLOC;
+            table[101] = KW_I64;
+            table[105] = KW_F32;
+            table[108] = KW_USING;
+            table[109] = KW_AUTON;
+            table[113] = KW_GOTO;
+            table[117] = KW_CONST;
+            table[122] = KW_CASE;
+            table[123] = KW_UNION;
+            table[125] = KW_EMBED;
+            table[127] = KW_FALSE;
+            table[129] = KW_ENUM;
+            table[133] = KW_NULL;
+            table[136] = KW_FROM;
+            table[139] = KW_I8;
+            table[140] = KW_AS;
+            table[144] = KW_U16;
+            table[145] = KW_WHILE;
+            table[149] = KW_DEF;
 
-    };
-    constexpr auto keywordTable = makeKeywordTable();
+            return table;
 
+        };
+        constexpr auto keywordTable = makeKeywordTable();
     constexpr int CD_TABLE_SIZE = 1;
     static const int directivesTable[CD_TABLE_SIZE] = {
         CD_TEST,
@@ -297,14 +297,14 @@ namespace Lex {
         TK_ARROW,
         TK_SKIP,
         TK_FILE,
-        
+
         // If used, detail should be valid OperatorEnum
         TK_BINARY_OPERATOR,
-        // Not used as TokenDetail, since some operators may 
-        // represent other tokens. Such tokens are more 
-        // convenient to access via TokenKind, so storing 
+        // Not used as TokenDetail, since some operators may
+        // represent other tokens. Such tokens are more
+        // convenient to access via TokenKind, so storing
         // operators in this field is preferred.
-        // Colliding tokens will be represented by constants 
+        // Colliding tokens will be represented by constants
         // with the same value, defined outside of this enum.
         TK_OP_BEGIN,
 
@@ -346,7 +346,7 @@ namespace Lex {
     constexpr TokenKind TK_THE_REST = TK_OP_CONCATENATION;
     constexpr TokenKind TK_SLICE = TK_STATEMENT_BEGIN;
 
-    // CAUTION: Keyword enum must be aligned with 
+    // CAUTION: Keyword enum must be aligned with
     //          corresponding token representations
     enum TokenDetail : int32_t {
         TD_NONE = -1,
@@ -400,7 +400,7 @@ namespace Lex {
         TD_CD_BEGIN,
         TD_CD_TEST,
         TD_CD_END,
-        
+
         TD_DT_VOID,
         TD_DT_I64,
         TD_DT_U64,
@@ -410,6 +410,8 @@ namespace Lex {
     };
 
 
+
+    void init();
 
     const char* toStr(TokenKind token);
 
@@ -461,7 +463,7 @@ namespace Lex {
             case TD_KW_FCN: return DT_FUNCTION;
             default: return DT_VOID;
         }
-    
+
     }
 
     static inline DataTypeEnum toDtype(Keyword val) {
@@ -491,7 +493,7 @@ namespace Lex {
             case TK_OP_NEGATION         : return OP_BITWISE_NEGATION;
             case TK_OP_BOOL_NEGATION    : return OP_NEGATION;
             default                     : return OP_NONE;
-        
+
         }
 
     }
@@ -503,7 +505,7 @@ namespace Lex {
             case TK_OP_INCREMENT        : return OP_INCREMENT;
             case TK_OP_DECREMENT        : return OP_DECREMENT;
             default                     : return OP_NONE;
-        
+
         }
 
     }
@@ -537,7 +539,7 @@ namespace Lex {
             case TK_OP_SHIFT_LEFT               : return OP_SHIFT_LEFT;
             case TK_ARRAY_BEGIN                 : return OP_SUBSCRIPT;
             default                             : return OP_NONE;
-        
+
         }
 
     }
@@ -563,9 +565,9 @@ namespace Lex {
     }
 
     static inline int isPostfixOperator(Token val) {
-        return val.kind == TK_OP_INCREMENT || val.kind == TK_OP_DECREMENT;    
+        return val.kind == TK_OP_INCREMENT || val.kind == TK_OP_DECREMENT;
     }
-    
+
     static inline int compareChars(const char* str, uint16_t ch) {
         return (str[0] == (char)(ch & 0xFF)) && (str[1] == (char)(ch >> 8));
     }
@@ -578,4 +580,3 @@ namespace Lex {
     }
 
 }
-
