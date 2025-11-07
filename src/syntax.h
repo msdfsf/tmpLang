@@ -1024,7 +1024,191 @@ struct ImportStatement : SyntaxNode {
     // root scope of the imports file
     // Scope* root;
 
-    ImportStatement() : SyntaxNode(NT_IMPORT) {};
+
+
+// ======================================
+// NODE REGISTRY
+// ===
+
+// contain references to nodes in linear way
+// so validator dont have to traverse tree that much
+namespace Reg {
+
+    constexpr size_t dataSize = 26;
+
+    // ))
+    extern "C" union {
+        // TODO : think of better name
+        DArray::Container data[dataSize];
+
+        struct {
+            DArrayLangDef              langDefs;
+            DArrayCodeBlock            codeBlocks;
+            DArrayForeignFunction      foreignFunctions;
+            DArrayVariable             variables;
+            DArrayVariable             fcnCalls;
+            DArrayFunction             fcns;
+            DArrayVariableDefinition   customDataTypesReferences;
+            DArrayVariableAssignment   variableAssignments;
+            DArrayVariable             cmpTimeVars;
+            DArrayVariable             arrays;
+            DArrayLoop                 loops;
+            DArrayLabel                labels;
+            DArrayVariable             branchExpressions;
+            DArrayStatement            statements;
+            DArrayVariableDefinition   initializations;
+            DArrayReturnStatement      returnStatements;
+            DArraySwitchCase           switchCases;
+            DArrayVariableDefinition   variableDefinitions;
+            DArrayErrorSet             customErrors;
+            DArrayUnion                unions;
+            DArraySlice                slices;
+            DArrayVariableAssignment   arraysAllocations;
+            DArrayImportStatement      imports;
+            DArrayTypeDefinition       customDataTypes;
+            DArrayEnumerator           enumerators;
+            DArrayGotoStatement        gotos;
+        };
+    };
+
+    void init();
+
+    namespace Node {
+
+        Scope*              initScope();
+        Namespace*          initNamespace();
+        Using*              initUsing();
+        CodeBlock*          initCodeBlock();
+        Enumerator*         initEnumerator();
+        Statement*          initStatement();
+        VariableDefinition* initVariableDefinition();
+        VariableAssignment* initVariableAssignment();
+        Variable*           initVariable();
+        Function*           initFunction();
+        ForeignFunction*    initForeignFunction();
+        Branch*             initBranch();
+        SwitchCase*         initSwitchCase();
+        WhileLoop*          initWhileLoop();
+        ForLoop*            initForLoop();
+        Loop*               initLoop();
+        ReturnStatement*    initReturnStatement();
+        ContinueStatement*  initContinueStatement();
+        BreakStatement*     initBreakStatement();
+        GotoStatement*      initGotoStatement();
+        Label*              initLabel();
+        TypeDefinition*     initTypeDefinition();
+        Union*              initUnion();
+        ErrorSet*           initErrorSet();
+        ImportStatement*    initImportStatement();
+
+        FunctionCall*           initFunctionCall();
+        OperationExpression*    initOperationExpression();
+        UnaryExpression*        initUnaryExpression();
+        BinaryExpression*       initBinaryExpression();
+        TernaryExpression*      initTernaryExpression();
+        Catch*                  initCatch();
+        Slice*                  initSlice();
+
+        Pointer* initPointer();
+        Array* initArray();
+        FunctionPrototype* initFunctionPrototype();
+        ArrayInitialization* initArrayInitialization();
+        StringInitialization* initStringInitialization();
+        TypeInitialization* initTypeInitialization();
+        QualifiedName* initQualifiedName();
+
+        Scope*              copy(Scope* node);
+        Namespace*          copy(Namespace* node);
+        Using*              copy(Using* node);
+        CodeBlock*          copy(CodeBlock* node);
+        Enumerator*         copy(Enumerator* node);
+        Statement*          copy(Statement* node);
+        VariableDefinition* copy(VariableDefinition* node);
+        VariableAssignment* copy(VariableAssignment* node);
+        Variable*           copy(Variable* node);
+        Function*           copy(Function* node);
+        ForeignFunction*    copy(ForeignFunction* node);
+        Branch*             copy(Branch* node);
+        SwitchCase*         copy(SwitchCase* node);
+        WhileLoop*          copy(WhileLoop* node);
+        ForLoop*            copy(ForLoop* node);
+        Loop*               copy(Loop* node);
+        ReturnStatement*    copy(ReturnStatement* node);
+        ContinueStatement*  copy(ContinueStatement* node);
+        BreakStatement*     copy(BreakStatement* node);
+        GotoStatement*      copy(GotoStatement* node);
+        Label*              copy(Label* node);
+        TypeDefinition*     copy(TypeDefinition* node);
+        Union*              copy(Union* node);
+        ErrorSet*           copy(ErrorSet* node);
+        ImportStatement*    copy(ImportStatement* node);
+
+        FunctionCall*           copy(FunctionCall* node);
+        OperationExpression*    copy(OperationExpression* node);
+        UnaryExpression*        copy(UnaryExpression* node);
+        BinaryExpression*       copy(BinaryExpression* node);
+        TernaryExpression*      copy(TernaryExpression* node);
+
+        Variable* copy(Variable* dest, Variable* src);
+
+    }
+
+    namespace Find {
+
+        void* generic(DArray::Container* arr, String* name, MemberOffset mName);
+        void* generic(Scope* scope, String* name, MemberOffset mName, MemberOffset mArray);
+
+
+        // Non-dynamic arrays usually don't occur, as the tree has to be ready
+        // to be modified at any moment, so I won't predefine them.
+        Variable* inArray(Variable* arr, int arrLen, String* name);
+
+        // Explicitly declared DArray find functions to reduce a bit of verbosity
+        // and add some type safety
+        Variable*           inArray(DArrayVariable* arr, String* name);
+        Function*           inArray(DArrayFunction* arr, String* name);
+        Enumerator*         inArray(DArrayEnumerator* arr, String* name);
+        Namespace*          inArray(DArrayNamespace* arr, String* name);
+        Union*              inArray(DArrayUnion* arr, String* name);
+        ErrorSet*           inArray(DArrayErrorSet* arr, String* name);
+        TypeDefinition*     inArray(DArrayTypeDefinition* arr, String* name);
+        Label*              inArray(DArrayLabel* arr, String* name);
+        GotoStatement*      inArray(DArrayGotoStatement* arr, String* name);
+        Using*              inArray(DArrayUsing* arr, String* name);
+        ImportStatement*    inArray(DArrayImportStatement* arr, String* name);
+        CodeBlock*          inArray(DArrayCodeBlock* arr, String* name);
+        ForeignFunction*    inArray(DArrayForeignFunction* arr, String* name);
+        VariableDefinition* inArray(DArrayVariableDefinition* arr, String* name);
+
+        // And 'full' functions that can be used to get the index. In fact, these alone
+        // are sufficient, but I feel having both versions is more convenient.
+        // There's something about going down the rabbit hole...
+        int inArray(DArrayVariable* arr, String* name, Variable** out);
+        int inArray(DArrayFunction* arr, String* name, Function** out);
+        int inArray(DArrayEnumerator* arr, String* name, Enumerator** out);
+        int inArray(DArrayNamespace* arr, String* name, Namespace** out);
+        int inArray(DArrayUnion* arr, String* name, Union** out);
+        int inArray(DArrayErrorSet* arr, String* name, ErrorSet** out);
+        int inArray(DArrayTypeDefinition* arr, String* name, TypeDefinition** out);
+        int inArray(DArrayLabel* arr, String* name, Label** out);
+        int inArray(DArrayGotoStatement* arr, String* name, GotoStatement** out);
+        int inArray(DArrayUsing* arr, String* name, Using** out);
+        int inArray(DArrayImportStatement* arr, String* name, ImportStatement** out);
+        int inArray(DArrayCodeBlock* arr, String* name, CodeBlock** out);
+        int inArray(DArrayForeignFunction* arr, String* name, ForeignFunction** out);
+        int inArray(DArrayVariableDefinition* arr, String* name, VariableDefinition** out);
+
+        Variable*       inScopeVariable(Scope* scope, String* name);
+        Function*       inScopeFunction(Scope* scope, String* name);
+        Union*          inScopeUnion(Scope* scope, String* name);
+        Label*          inScopeLabel(Scope* scope, String* name);
+        ErrorSet*       inScopeErrorSet(Scope* scope, String* name);
+        TypeDefinition* inScopeTypeDefinition(Scope* scope, String* name);
+        Enumerator*     inScopeEnumerator(Scope* scope, String* name);
+        Namespace*      inScopeNamespace(Scope* scope, String* name);
+        GotoStatement*  inScopeGotoStatement(Scope* scope, String* name);
+
+    }
 
 };
 
