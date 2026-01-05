@@ -1,116 +1,154 @@
 #include "dynamic_arena.h"
+#include "utils.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <stdlib.h>
 #include <cstring>
+#include <cstddef>
 
-
+#define max(a, b) ((a) > (b) ? (a) : (b))
 
 namespace Arena {
 
-    inline void setNextStack(uint8_t* stack, size_t size, void* nextStack) {
+    Block* initBlock(Container* arena) {
 
-        uint8_t** linkPos = (uint8_t**) (stack + size);
-        *linkPos = (uint8_t*) nextStack;
+        Block* block = (Block*) malloc(sizeof(Block) + arena->blockPayloadSize);
+        if (!block) {
+            // TODO
+            exit(1231);
+        };
 
-    }
+        block->padding = 0;
+        block->pos = 0;
+        block->prev = NULL;
+        block->next = NULL;
 
-    inline uint8_t* getNextStack(uint8_t* stack, size_t size) {
-
-        uint8_t** linkPos = (uint8_t**) (stack + size);
-        return *linkPos;
-
-    }
-
-    inline void setPrevStack(uint8_t* stack, size_t size, void* prevStack) {
-
-        uint8_t** linkPos = (uint8_t**) (stack + size + sizeof(uint8_t*));
-        *linkPos = (uint8_t*) prevStack;
+        return block;
 
     }
 
-    inline uint8_t* getPrevStack(uint8_t* stack, size_t size) {
-
-        uint8_t** linkPos = (uint8_t**) (stack + size + sizeof(uint8_t*));
-        return *linkPos;
-
+    void releaseBlock(Block* block) {
+        free(block);
     }
 
     void init(Container* arena, uint64_t initialSize) {
 
-        arena->headStack = (uint8_t*) malloc(initialSize + 2 * sizeof(void*));
-        arena->tailStack = arena->headStack;
-        arena->stackSize = initialSize;
-        arena->stackPos = 0;
-        arena->stackCount = 1;
-
-        setNextStack(arena->headStack, arena->stackSize, NULL);
-        setPrevStack(arena->headStack, arena->stackSize, NULL);
+        arena->blockPayloadSize = initialSize;
+        arena->head = initBlock(arena);
+        arena->tail = arena->head;
+        arena->blockCount = 1;
+        arena->logicalPos = 0;
+        arena->maxAlignSeen = 1;
 
     }
 
     void release(Container* arena) {
 
-        uint8_t* stack = arena->headStack;
-        while (stack) {
-            uint8_t* tmp = getNextStack(stack, arena->stackSize);
-            free(stack);
-            stack = tmp;
+        Block* block = arena->head;
+        while (block) {
+            Block* next = block->next;
+            free(block);
+            block = next;
         }
+
+        arena->head = NULL;
+        arena->tail = NULL;
+        arena->blockCount = 0;
 
     }
 
     void* push(Container* arena, size_t size) {
+        return push(arena, size, alignof(std::max_align_t));
+    }
 
-        if (arena->stackPos + size > arena->stackSize) {
+    void* push(Container* arena, size_t size, size_t align) {
 
-            uint8_t* nextStack = getNextStack(arena->tailStack, arena->stackSize);
-            if (!nextStack) {
-                nextStack = (uint8_t*) malloc(arena->stackSize + 2 * sizeof(void*));
-                setNextStack(arena->tailStack, arena->stackSize, nextStack);
-                setNextStack(nextStack, arena->stackSize, NULL);
-                setPrevStack(nextStack, arena->stackSize, arena->tailStack);
-                arena->stackCount++;
+        // make sure align is 2^n
+        align = Utils::getPow2Ceil(align);
+
+        uintptr_t addr = (uintptr_t) arena->tail->data + arena->tail->pos;
+        size_t padding = Utils::getPadding(addr, align);
+
+        if (arena->tail->pos + padding + size > arena->blockPayloadSize) {
+
+            if (size > arena->blockPayloadSize) {
+                // TODO: block cannot fit - add custom sizes
+                exit(12313);
             }
 
-            arena->tailStack = nextStack;
-            arena->stackPos = 0;
+            Block* nextBlock = arena->tail->next;
+            if (!nextBlock) {
+                nextBlock = initBlock(arena);
+                nextBlock->prev = arena->tail;
+                arena->tail->next = nextBlock;
+                arena->blockCount++;
+            }
+
+            arena->tail = nextBlock;
+
+            // computing block padding, we want to preserve layout
+            // as it was pushed at one block
+
+            // we ghostly allow alignment higher than max align
+            const uint64_t baseAlign = alignof(std::max_align_t);
+            const uint64_t syncAlign = max(align, baseAlign);
+
+            arena->tail->padding = arena->logicalPos % syncAlign;
+            arena->tail->pos = arena->tail->padding;
+
+            padding = Utils::getPadding((uintptr_t) arena->tail->data, align);
 
         }
 
-        void* ptr = arena->tailStack + arena->stackPos;
-        arena->stackPos += size;
-        arena->lastPushSize = size;
+        void* ptr = arena->tail->data + arena->tail->pos + padding;
+        arena->tail->pos += padding + size;
+        arena->logicalPos += padding + size;
+
+        if (align > arena->maxAlignSeen) arena->maxAlignSeen = align;
 
         return ptr;
 
     }
 
-    void pop(Container* arena) {
+    void rollback(Container* arena, Marker marker, bool freeMemory) {
 
-        if (arena->stackPos < arena->lastPushSize) {
-            arena->stackPos = 0;
-        } else {
-            arena->stackPos -= arena->lastPushSize;
+        arena->tail = marker.block;
+        arena->tail->pos = marker.pos;
+
+        if (freeMemory) {
+
+            Block* block = arena->tail->next;
+            while (block) {
+                Block* next = block->next;
+                free(block);
+                block = next;
+            }
+
         }
 
     }
 
-    void rollback(Container* arena, void* ptr) {
+    void rollback(Container* arena, void* ptr, bool freeMemory) {
 
-        uint8_t* stack = arena->tailStack;
-        while (stack) {
+        Block* block = arena->tail;
+        while (block) {
 
-            if (ptr < stack || ptr >= stack + arena->stackSize) {
-                stack = getPrevStack(stack, arena->stackSize);
-                continue;
+            uint8_t* start = block->data;
+            uint8_t* end = start + arena->blockPayloadSize;
+
+            if (ptr >= start && ptr < end) {
+                arena->tail = block;
+                arena->tail->pos = (uint8_t*) ptr - start;
+                return;
             }
 
-            int64_t diff = (uint64_t) ptr - (uint64_t) stack;
-            arena->stackPos = diff;
-            arena->tailStack = stack;
+            block = block->prev;
 
-            return;
+            if (freeMemory) {
+                releaseBlock(block->next);
+                block->next = NULL;
+            }
 
         }
 
@@ -118,10 +156,33 @@ namespace Arena {
 
     void clear(Container* arena) {
 
-        arena->stackPos = 0;
-        arena->stackCount = 1;
-        arena->lastPushSize = 0;
-        arena->tailStack = arena->headStack;
+        if (!arena->head) return;
+
+        arena->tail = arena->head;
+        arena->tail->pos = 0;
+        arena->blockCount = 1;
+
+    }
+
+    uint64_t getFlatSize(Arena::Container* arena) {
+        return arena->logicalPos;
+    }
+
+    uint64_t getMaxAlign(Arena::Container* arena) {
+        return alignof(std::max_align_t);
+    }
+
+    // dest should be aligned at least at result of getMaxAlign
+    // dest should be able to fit at least result of getFlatSize
+    void flatCopy(Container* arena, uint8_t* dest) {
+
+        Block* block = arena->head;
+
+        while (block) {
+            memcpy(dest, block->data + block->padding, block->pos);
+            dest += block->pos;
+            block = block->next;
+        }
 
     }
 

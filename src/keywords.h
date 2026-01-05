@@ -1,6 +1,6 @@
 #pragma once
 
-enum KeywordType {
+enum Keyword {
     KW_VOID,
     KW_INT,
     KW_I8,
@@ -45,6 +45,7 @@ enum KeywordType {
     KW_TRUE,
     KW_FALSE,
     KW_AS,
+    KW_TO,
     KW_NULL,
     KW_COUNT
 };
@@ -57,10 +58,4 @@ enum TypedefKeyword {
 enum DirectiveKeyword {
     DKW_LANG_DEF,
     DKW_IMPORT
-};
-
-// TODO: remove?
-struct Keyword {
-    int type;
-    const char* str;
 };

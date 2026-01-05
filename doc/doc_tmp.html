@@ -4,103 +4,24 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
+
     <title>Language Documentation</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&display=swap" rel="stylesheet">
 
-    <style>
-        
-        :root {
-            --background: #131010;
-            --foreground: #FFF0DC;
-            --title: #F0BB78;
-            --subtle-foreground: #b8b5b1;
-            --tmp-color-1: #7aa5d4;
-            --tmp-color-2: #d9a86a;
-            --tmp-color-3: #8fbc8f;
-        }
-
-        body {
-            color: var(--foreground);
-            background-color: var(--background);
-            font-family: "Roboto", sans-serif;
-            margin: 0;
-            padding: 0;
-            line-height: 1.6;
-            font-weight: 300;
-        }
-
-        main {
-            max-width: 50em;
-            padding: 2em 1em;
-            margin: 0 auto;
-        }
-
-        h1, h2, h3 {
-            color: var(--title);
-            font-weight: 500;
-            line-height: 1.3;
-            margin-top: 2.5em;
-            margin-bottom: 0.8em;
-        }
-
-        h1 { font-size: 2.2em; margin-top: 0; }
-        h2 { font-size: 1.8em; }
-        h3 { font-size: 1.4em; margin-top: 2em; }
-
-        p {
-            margin-top: 0;
-            margin-bottom: 1em;
-        }
-
-        pre, code {
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            overflow-wrap: break-word;
-        }
-
-        pre {
-            border-left: 2px solid var(--tmp-color-3); 
-            padding: 10px 10px 10px 15px;
-            margin-left: 1em;
-            margin-right: 1em;
-        }
-
-        code {
-            font-size: inherit;
-            font-family: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-        }
-
-        .note {
-            font-style: italic;
-            color: var(--subtle-foreground);
-            font-size: 0.9em;
-            margin-top: -0.5em;
-            margin-bottom: 1.5em;
-        }
-
-        a {
-            color: var(--title);
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-
-    </style>
+    <link rel="stylesheet" href="doc_style.css" />
 
 </head>
 <body>
     <main>
-        <h1>Language Documentation</h1> 
+        <h1>Language Documentation</h1>
 
         <section>
             <h2>Introduction</h2>
             <p>This document introduces the basic syntax and semantics of the language. It primarily focuses on how to use the language, rather than the design rationale behind its features.</p>
-            
+
         <section>
             <h2>Hello, World!</h2>
             <p>The language does not require an explicit <code>main</code> function. The program's execution begins at the start of the source file provided to the compiler.</p>
@@ -112,7 +33,7 @@
             <pre><code>
 "Hello, %s!" "world"; // Prints "Hello, world!"
             </code></pre>
-            
+
             <h3>Compiling and Running</h3>
             <p>Compile a source file (e.g., `hello.txt`) into an executable (`app.exe`):</p>
             <pre><code>
@@ -127,7 +48,7 @@ compiler run hello.txt
 compiler translate hello.txt
             </code></pre>
         </section>
-        
+
         <section>
             <h2>Character Set</h2>
             <p>Source files are expected to be encoded in UTF-8. This allows the direct use of Unicode characters within the code, including string and character literals.</p> </section>
@@ -141,8 +62,8 @@ compiler translate hello.txt
             </code></pre> <p>Multi-line comments are enclosed in <code>/{</code> and <code>/}</code> and can be nested:</p>
             <pre><code>
 /{
-    This is a 
-    /{ nested /} 
+    This is a
+    /{ nested /}
     multi-line comment.
 /}
             </code></pre>
@@ -153,7 +74,7 @@ compiler translate hello.txt
             <p>The following keywords are reserved and cannot be used as identifiers:</p>
             <pre><code>
 alloc, as, catch, const, def, embed, error, fcn, for, free, from, import, local, loop, namespace, return, using, while, int, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64
-            </code></pre> 
+            </code></pre>
             <p class="note">Other identifiers like type names (<code>i32</code>, <code>u8</code> etc.) and the literal <code>null</code> are predefined but not strictly reserved keywords.</p>
         </section>
 
@@ -179,7 +100,7 @@ f64 ratio = 1.23;
         <section>
             <h2>Literals</h2>
             <p>Literals represent fixed values directly in the source code.</p>
-            
+
             <h3>Integer Literals</h3>
             <p>Integers can be written in decimal, hexadecimal (prefix <code>0x</code>), or binary (prefix <code>0b</code>). Underscores (<code>_</code>) can be used as visual separators.</p>
             <pre><code>
@@ -187,15 +108,15 @@ i32 decimal_val = 1_000;
 u32 hex_val     = 0xFF_00;
 u8 binary_val  = 0b1010_0101;
             </code></pre>
-            
+
             <h3>Floating-Point Literals</h3>
             <p>Floating-point literals include a decimal point. A suffix <code>f</code> denotes an <code>f32</code> literal; otherwise, the default is <code>f64</code>.</p>
             <pre><code>
 f64 pi = 3.14159;
-f32 speed_of_light = 299_792_458f; 
+f32 speed_of_light = 299_792_458f;
 f64 default_float = 1.0; // 1 would also be cast implicitly
-            </code></pre> 
-            
+            </code></pre>
+
             <h3>Character Literals</h3>
             <p>Character literals represent a single Unicode code point (which may consist of multiple bytes in UTF-8 encoding) or map directly to small integer values. They are enclosed in single quotes (<code>'</code>).</p>
             <p>The type of the resulting integer value depends on the character itself and the context (e.g., the type of the variable it is assigned to). Standard ASCII characters, common escape sequences (<code>\n</code>, <code>\t</code>, etc.), and hexadecimal escapes (<code>\xNN</code>) are supported and typically fit within an 8-bit type:</p>
@@ -218,7 +139,7 @@ u32 multi_ascii_padded = 'abc'; // 0x00616263
 // Forms the integer 0xC48D2000 (assuming padding to 32 bits)
 // Practical use cases for multi-byte characters in multi-character literals might be specific.
 u32 multi_utf8 = 'č ';
-            </code></pre> 
+            </code></pre>
             <p class="note">Character literals (<code>'...'</code>) produce scalar integer values. For representing sequences of characters as arrays, use string literals (<code>"..."</code>).</p>
 
             <h3>String Literals</h3>
@@ -232,12 +153,12 @@ u16[] utf8_str = "čau";   // 'č' requires u16/u32, so becomes u16 array (or u3
             <p>To obtain the raw UTF-8 byte sequence of a string literal as a <code>u8</code> array, use the <code>b</code> suffix:</p>
             <pre><code>
 u8[] raw_bytes = "čau"b; // Represents the bytes: C4 8D 61 75
-            </code></pre> 
+            </code></pre>
         </section>
 
         <section>
             <h2>Operators</h2>
-            <p>Common operators are supported (precedence generally follows C conventions):</p> 
+            <p>Common operators are supported (precedence generally follows C conventions):</p>
             <pre><code>
 // Arithmetic:  + - * / %
 // Bitwise:     & | ^ ~ << >>
@@ -260,7 +181,7 @@ const f64 PI = 3.14159;             // Cannot be modified after initialization
             <ul>
                 <li><code>embed</code>: Ensures the value is known at compile time. The variable itself may not exist at runtime; its value is embedded directly where used.</li>
                 <li><code>const</code>: Makes the variable read-only after initialization.</li>
-            </ul>      
+            </ul>
         </section>
 
         <section>
@@ -286,20 +207,20 @@ i32 result = p_add(5, 3);          // Call function via pointer (result is 8)
             <p>Use <code>alloc</code> to allocate memory dynamically on the heap, returning a pointer. Use <code>free</code> to deallocate.</p>
             <pre><code>
 // Allocate space for one int
-i32^ p1 = alloc i32; 
+i32^ p1 = alloc i32;
 
 // Allocate space for 10 floats
-f32^ p2 = alloc f32[10]; 
+f32^ p2 = alloc f32[10];
 
 // Allocate and initialize
-i32^ p3 = alloc i32 : 42; 
-Point^ p4 = alloc Point : { x: 1, y: 1 }; 
+i32^ p3 = alloc i32 : 42;
+Point^ p4 = alloc Point : { x: 1, y: 1 };
 
 // Type inference from left side
 i32^ p5 = alloc : 100; // Allocates int, initializes to 100
 
-free p1; 
-free p2; 
+free p1;
+free p2;
 // ... free other pointers when done
             </code></pre>
             <p class="note"><code>alloc</code> must appear on the right side of an assignment.</p> <p class="note">The initializer after <code>:</code> must be compatible with the allocated type.</p> </section>
@@ -309,20 +230,20 @@ free p2;
             <p>Arrays represent a contiguous sequence of elements of the same type. Operations on array variables often apply element-wise (value semantics).</p> <p>Declaration and initialization:</p>
             <pre><code>
 // Static array of 4 integers (size known at compile time)
-i32[4] static_arr; 
+i32[4] static_arr;
 
 // Initialized static array (length inferred)
-i32[] static_init = { 10, 20, 30 }; 
+i32[] static_init = { 10, 20, 30 };
 
 // Initialize all elements to zero
-f32[10] zeros = 0.0; 
+f32[10] zeros = 0.0;
 
 // Qualifiers apply to elements
 const i32[] read_only_arr = { 1, 1, 2, 3 };
 embed i32[] compile_time_arr = { 1, 2, 3 };
             </code></pre>
             <p class="note">Declaring an array without an initializer (like <code>static_arr</code> above) leaves its element values undefined.</p>
-            
+
             <p>Access elements by zero-based index:</p>
             <pre><code>
                 i32 first = static_init[0]; // 10
@@ -333,17 +254,17 @@ embed i32[] compile_time_arr = { 1, 2, 3 };
             <p class="note"><code>.size</code> is generally calculated as <code>element_type_size * array.length</code>. For array lists, <code>.capacity</code> gives the allocated size.</p> <p>Four main array types exist:</p>
             <pre><code>
 // 1. Static: Compile-time fixed size, usually stack/static allocation
-Type[N] static_array; 
+Type[N] static_array;
 
 // 2. Const-Dynamic: Runtime fixed size, heap allocated, length constant after alloc
 Type[const] const_dyn_array = alloc Type[runtime_size];
 
 // 3. Dynamic: Runtime variable size (manual reallocation needed), heap allocated
-Type[dynamic] dyn_array = alloc Type[runtime_size]; 
+Type[dynamic] dyn_array = alloc Type[runtime_size];
 // dyn_array might be reassigned to result of another alloc
 
 // 4. Array List (Autonomous): Auto-resizing on write, heap allocated
-Type[auton] list = alloc Type[initial_capacity]; 
+Type[auton] list = alloc Type[initial_capacity];
 list[large_index] = value; // May reallocate and grow
 u64 cap = list.capacity;   // Get allocated capacity
             </code></pre>
@@ -354,7 +275,7 @@ i32[] a = {1, 2};
 i32[] b = {3, 4};
 i32[const] c = alloc []: a .. b; // c = {1, 2, 3, 4}
             </code></pre>
-            
+
             <h3>Slices</h3>
             <p>Slices provide a way to refer to a contiguous subsequence of an array's elements using the syntax <code>array[start : end]</code> (inclusive). While slices internally reference the original array data (pointer, length, offset), operations involving slices typically exhibit value semantics.</p>
             <p>Creating a slice does not copy data immediately. However, assigning a slice to an array variable copies the referenced elements:</p>
@@ -362,18 +283,18 @@ i32[const] c = alloc []: a .. b; // c = {1, 2, 3, 4}
 i32[] array = { 10, 20, 30, 40, 50 };
 // slice_val now contains a copy of { 20, 30, 40 }
 i32[] slice_val = array[1 : 3];
-            </code></pre> 
+            </code></pre>
             <p>Slices can be used on the left side of an assignment to modify a portion of the original array. The right-hand side expression (which might itself be a slice) is evaluated, and its elements are copied into the memory locations designated by the left-hand slice:</p>
             <pre><code>
 i32[] array = { 10, 20, 30, 40, 50 };
 i32[] new_data = { 22, 33 };
 
 // Copies elements from new_data into array at indices 1 and 2
-array[1 : 2] = new_data; 
+array[1 : 2] = new_data;
 // array is now { 10, 22, 33, 40, 50 }
 
 // Copies element from array[4] into array[0]
-array[0 : 0] = array[4 : 4]; 
+array[0 : 0] = array[4 : 4];
 // array is now { 50, 22, 33, 40, 50 }
             </code></pre>
             <p>Slice syntax variants:</p>
@@ -394,9 +315,9 @@ for i32 i = 0; i < 10; i = i + 1 { /{ ... /} }
 
 // While loop
 i32 count = 5;
-while count > 0 { 
+while count > 0 {
     count = count - 1;
-    /{ ... /} 
+    /{ ... /}
 }
 
 // Range-based loop (iterates indices 0 to array.length-1)
@@ -432,7 +353,7 @@ u8 c = Color.RED; // Access using '.'
 
         <section>
             <h2>Custom Data Types</h2>
-            
+
             <h3>Structs</h3>
             <p>Structs group multiple data fields of potentially different types under one name. Defined using <code>def</code> (<code>struct</code> keyword optional).</p>
             <pre><code>
@@ -451,19 +372,19 @@ p_ptr.y = p_ptr.x; // Access via pointer also uses '.'
             </code></pre> <p>Struct initialization options:</p>
             <pre><code>
 // Default initialization (uses default member values if specified)
-Point p_default; 
+Point p_default;
 
 // Empty initializer (leaves members uninitialized, ignoring defaults)
-Point p_empty = {}; 
+Point p_empty = {};
 
 // Ordered initialization (values match declaration order)
-Point p_ordered = { 1.0, 2.0 }; 
+Point p_ordered = { 1.0, 2.0 };
 
 // Named initialization (order doesn't matter)
 Point p_named = { y: 2.0, x: 1.0 };
 
 // Partial named initialization
-Point p_partial = { x: 1.0 }; 
+Point p_partial = { x: 1.0 };
 
 // Zero initialization (all members set to zero equivalent)
 Point p_zero = 0;
@@ -509,7 +430,7 @@ f32 circ_area = Math::area(5.0);
             <h2>Imports</h2> <p>Code from other files is included using the <code>import</code> keyword. Direct import into the current scope is disallowed; imported content must always be wrapped.</p>
             <p>Import file content into a namespace:</p>
             <pre><code>
-import math_utils.vi as namespace Math; 
+import math_utils.vi as namespace Math;
 f32 val = Math::some_function();
             </code></pre>
             <p>Import file content as a function body or into a new scope:</p>
@@ -522,14 +443,14 @@ run_init(); // Call the imported function
             <p>Import specific identifiers from a file using <code>from ... import ...</code>:</p>
             <pre><code>
 // Import PI and E from constants.vi into namespace Consts
-import from constants.vi PI, E as namespace Consts; 
+import from constants.vi PI, E as namespace Consts;
 
 // Import only 'helper_func' into the current scope
 import from helpers.vi helper_func;
 helper_func();
 // or
 import from helpers.vi helper_func as namespace Help;
-Hlp::helper_func(); 
+Hlp::helper_func();
             </code></pre> <p>Restrict visibility of imported symbols using <code>local</code> (they won't be re-exported if the current file is imported elsewhere):</p>
             <pre><code>
 import internal_lib.vi as local namespace Internal;
@@ -592,9 +513,9 @@ if err != null {
             <p>A local scope for the error can be created directly:</p>
             <pre><code>
 i32 result = process() catch { // 'err' implicitly declared for this block
-    if err != null { 
+    if err != null {
        /{ handle error /}
-    } 
+    }
 }; // Error variable 'err' does not exist beyond '}'
 // Use result if no error occurred and wasn't handled inside block
             </code></pre>

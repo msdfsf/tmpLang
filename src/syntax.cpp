@@ -13,7 +13,10 @@
 
 const Logger::Type logErr = { .level = Logger::ERROR, .tag = stageTag };
 
+Variable Internal::variables[Internal::IV_COUNT];
+Function Internal::functions[Internal::IF_COUNT];
 
+uint64_t Internal::functionUsed;
 
 Scope* SyntaxNode::root = NULL;
 INamed SyntaxNode::dir = { NULL, 0 };
@@ -33,6 +36,8 @@ void _RegMemory::init() {
 }
 
 void Internal::init() {
+
+    functionUsed = 0;
 
     Function* fPrintf = functions + IF_PRINTF;
     fPrintf->base.scope = SyntaxNode::root;
@@ -434,6 +439,7 @@ _defineInit(Statement, NT_STATEMENT);
 
 void _RegMemory::Node::init(VariableDefinition* node) {
     node->var = initVariable();
+    node->var->def = node;
     node->lastPtr = NULL;
     node->dtype = NULL;
     ::init(&node->base);
@@ -709,7 +715,12 @@ void _RegMemory::Node::init(Catch* node) {
 }
 _defineInit(Catch, AT_EXT_CATCH);
 
-
+void _RegMemory::Node::init(Cast* node) {
+    node->target = DT_VOID;
+    node->operand = NULL;
+    node->base.type = EXT_CAST;
+}
+_defineInit(Cast, AT_EXT_CAST);
 
 #define _defineCopy(T, E) \
 T* _RegMemory::Node::copy(T* node) { \
@@ -750,13 +761,12 @@ _defineCopy(BinaryExpression,    AT_EXT_BINARY);
 _defineCopy(TernaryExpression,   AT_EXT_TERNARY);
 
 Variable* _RegMemory::Node::copy(Variable* dest, Variable* src) {
-    if (!src) return nullptr;
+
+    if (!src) return NULL;
     if (!dest) {
-        dest = (Variable*)nalloc(nalc, NT_VARIABLE);
-        if (!dest) return nullptr;
+        dest = (Variable*) nalloc(nalc, NT_VARIABLE);
     }
 
-    // Copy base structure while preserving pointers
     dest->base = src->base;
     dest->def = src->def;
     dest->cvalue = src->cvalue;
@@ -765,7 +775,7 @@ Variable* _RegMemory::Node::copy(Variable* dest, Variable* src) {
     dest->expression = src->expression;
     dest->name = src->name;
 
-    // Deep copy name if it exists
+    // deep copy name if it exists
     if (src->name.buff) {
         size_t nameLen = src->name.len;
         dest->name.buff = (char*)malloc(nameLen + 1);
@@ -778,4 +788,38 @@ Variable* _RegMemory::Node::copy(Variable* dest, Variable* src) {
     }
 
     return dest;
+
+}
+
+// TODO: for now here
+//       quite strange function with wierd name, as
+//       I am not sure if it needs to exist
+Variable* _RegMemory::Node::copyRef(Variable* dest, Variable* src) {
+
+    if (!src) return NULL;
+    if (!dest) {
+        dest = (Variable*) nalloc(nalc, NT_VARIABLE);
+    }
+
+    dest->def = src->def;
+    dest->cvalue = src->cvalue;
+    dest->ivalue = src->ivalue;
+    dest->name = src->name;
+    dest->base.flags = src->base.flags;
+
+    // TODO: to a function
+    // deep copy name if it exists
+    if (src->name.buff) {
+        size_t nameLen = src->name.len;
+        dest->name.buff = (char*)malloc(nameLen + 1);
+        if (dest->name.buff) {
+            memcpy(dest->name.buff, src->name.buff, nameLen);
+            dest->name.buff[nameLen] = '\0';
+        }
+        dest->name.len = nameLen;
+        dest->name.id = src->name.id;
+    }
+
+    return dest;
+
 }

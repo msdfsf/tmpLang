@@ -1,132 +1,152 @@
 #include "data_types.h"
 #include "lexer.h"
-
 DataType dataTypes[] = {
 
-        // VOID
-        {
-            0,
-            0
-        },
+    // DT_VOID
+    {
+        .size  = 0,
+        .rank  = 0,
+        .align = 1
+    },
 
-        // INT
-        {
-            4,
-            1
-        },
+    // DT_INT (Usually i32)
+    {
+        .size  = 4,
+        .rank  = 1,
+        .align = 4
+    },
 
-        // INT_8
-        {
-            1,
-            1
-        },
+    // DT_I8
+    {
+        .size  = 1,
+        .rank  = 1,
+        .align = 1
+    },
 
-        // INT_16
-        {
-            2,
-            1
-        },
+    // DT_I16
+    {
+        .size  = 2,
+        .rank  = 1,
+        .align = 2
+    },
 
-        // INT_32
-        {
-            4,
-            1
-        },
+    // DT_I32
+    {
+        .size  = 4,
+        .rank  = 1,
+        .align = 4
+    },
 
-        // INT_64
-        {
-            8,
-            2
-        },
+    // DT_I64
+    {
+        .size  = 8,
+        .rank  = 2,
+        .align = 8
+    },
 
-        // UINT_8
-        {
-            1,
-            1
-        },
+    // DT_U8
+    {
+        .size  = 1,
+        .rank  = 1,
+        .align = 1
+    },
 
-        // UINT_16
-        {
-            2,
-            1
-        },
+    // DT_U16
+    {
+        .size  = 2,
+        .rank  = 1,
+        .align = 2
+    },
 
-        // UINT_32
-        {
-            4,
-            1
-        },
+    // DT_U32
+    {
+        .size  = 4,
+        .rank  = 1,
+        .align = 4
+    },
 
-        // UINT_64
-        {
-            8,
-            2
-        },
+    // DT_U64
+    {
+        .size  = 8,
+        .rank  = 2,
+        .align = 8
+    },
 
-        // FLOAT_32
-        {
-            4,
-            3
-        },
+    // DT_F32
+    {
+        .size  = 4,
+        .rank  = 3,
+        .align = 4
+    },
 
-        // FLOAT_64
-        {
-            8,
-            4
-        },
+    // DT_F64
+    {
+        .size  = 8,
+        .rank  = 4,
+        .align = 8
+    },
 
-        // STRING
-        {
-            8 * 2,
-            5
-        },
+    // DT_STRING (Ptr + Len = 16 bytes)
+    {
+        .size  = 16,
+        .rank  = 5,
+        .align = 8
+    },
 
-        // POINTER
-        {
-            8 * 8,
-            5
-        },
+    // DT_POINTER (64-bit Ptr)
+    {
+        .size  = 8,
+        .rank  = 5,
+        .align = 8
+    },
 
-        // ARRAY
-        {
-            8 * 8,
-            5
-        },
+    // DT_ARRAY (Ptr + Len = 16 bytes, usually)
+    {
+        .size  = 16,
+        .rank  = 5,
+        .align = 8
+    },
 
-        // SLICE
-        {
-            8 * 8,
-            5
-        },
+    // DT_SLICE (Ptr + Len = 16 bytes)
+    {
+        .size  = 16,
+        .rank  = 5,
+        .align = 8
+    },
 
-        // MULTIPLE_TYPES
-        {
-            0,
-            0
-        },
+    // DT_MULTIPLE_TYPES
+    {
+        .size  = 0,
+        .rank  = 0,
+        .align = 1
+    },
 
-        // CUSTOM
-        {
-            0,
-            10
-        },
+    // DT_CUSTOM (Dynamic size, use defaults)
+    {
+        .size  = 0,
+        .rank  = 10,
+        .align = 1
+    },
 
-        // MEMBER
-        {
-            0,
-            0
-        },
+    // DT_MEMBER
+    {
+        .size  = 0,
+        .rank  = 0,
+        .align = 1
+    },
 
-        // ENUM
-        {
-            0,
-            0
-        },
+    // DT_ENUM (Usually i32 backed)
+    {
+        .size  = 4,
+        .rank  = 0,
+        .align = 4
+    },
 
-        // UNDEFINED
-        {
-            0,
-            0
-        }
+    // DT_UNDEFINED
+    {
+        .size  = 0,
+        .rank  = 0,
+        .align = 1
+    }
 
 };

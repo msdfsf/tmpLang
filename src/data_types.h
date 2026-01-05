@@ -6,6 +6,7 @@
 struct DataType {
     int size; // in bytes
     int rank;
+    int align;
 
     // String name;
 };

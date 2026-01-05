@@ -12,9 +12,13 @@ tmp/*
 
 .vscode/
 
+!doc/bytecode_doc.html
+!doc/bytecode_doc_tmp.html
 !doc/doc.html
 !doc/doc_tmp.html
 !doc/build.js
+!doc/build_doc.bat
+!doc/build_bytecode.bat
 !doc/grammar.ebnf
 
 !test/Allocations

@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Bytecode Specification</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&amp;display=swap" rel="stylesheet">
+
+        <link rel="stylesheet" href="doc_style.css" />
+
+        <style>
+            h-opcode {
+                display: block;
+                font-family: monospace;
+                font-weight: bold;
+                font-size: 1.6em;
+                margin-top: 2em;
+                margin-bottom: 0.1rm;
+                padding-left: 1em;
+                border-left: 0.25em solid var(--title);
+                background-color: #211c1c;
+            }
+        </style>
+    </head>
+
+    <body>
+        <main>
+            <h1>Bytecode Specification</h1>
+
+            <section>
+                <h2>Introduction</h2>
+                <p>
+                    This document describes the bytecode instruction set used by
+                    so called 'interpreter' for compile-time evaluation.
+                </p>
+            </section>
+
+            <section>
+                <h2>Model</h2>
+                <p>Each function if used in compile-time context gets compiled into bytecode, which is then used for any following execution.</p>
+                <p>Global level expressions are evaluated on the fly without compilation and use of bytcode.</p>
+                <p>Each compiled function produces following components:</p>
+                <ul>
+                    <li>
+                        <b>locals block</b> – stores locals as aligned data.
+                    </li>
+                    <li>
+                        <b>raw data block</b> - storing raw const data such as string literals.
+                    </li>
+                    <li>
+                        <b>bytecode</b> – instruction stream executed by the VM as raw bytes without any alignment.
+                    </li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>Instruction Format</h2>
+
+                <p>
+                    Each instruction begins with a single-byte opcode
+                    , optionally followed by immediate
+                    operands, which format is defined individualy by each instruction.
+                </p>
+            </section>
+
+            <section>
+                <h2>Operand stack</h2>
+
+                <p>
+                    Althrough interpretation itself can be abstracted and not be dictaed by the specification I would like to introduce how the stack is implemented. It may provide some context for the instruction set.
+                </p>
+                <p>
+                    The interpreter utilizes a <b>Word-Based Stack</b>, where the fundamental unit of storage is a 64-bit word. This ensures alignment for all basic dtyes and corelates with the size of the main integer type of the languge. Regardless of the logical size of a primitive, it consumes exactly one full slot on the operand stack.
+                </p>
+                <p>
+                    The storage rules for specific types are as follows:
+                </p>
+                <ul>
+                    <li>
+                        <b>Small Integers (i8, i16, i32):</b> When loaded from memory or the bytecode stream are <b>sign-extended</b> to fill the 64-bit slot.
+                    </li>
+                    <li>
+                        <b>Unsigned Integers (u8, u16, u32):</b> Are <b>zero-extended</b> to fill the 64-bit slot.
+                    </li>
+                    <li>
+                        <b>Floating Point (f32):</b> The raw representation is stored in the lower half of the slot, with the upper half zeroed.
+                    </li>
+                    <li>
+                        <b>Native Types (i64, u64, f64, ptr):</b> These occupy the full 64-bit slot directly.
+                    </li>
+                    <li>
+                        <b>Blobs (Structs/Arrays):</b> These are pushed by value and occupy <code>ceil(size / 8)</code> contiguous slots.
+                    </li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>Instruction Set</h2>
+
+                <h-opcode>push_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>push_i8  push_u8</code></li>
+                        <li><code>push_i16 push_u16</code></li>
+                        <li><code>push_i32 push_u32</code></li>
+                        <li><code>push_i64 push_u64</code></li>
+                        <li><code>push_f32 push_f64</code></li>
+                        <li><code>push_ptr</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>push_{type} literal_value</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>{type}: literal_value</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ..., value</code></pre>
+                    <h4>Description</h4>
+                    <p>Reads a literal value stored directly in the bytecode instruction stream and pushes it onto the operand stack.</p>
+                    <p>Small integer types are automatically promoted (sign-extended or zero-extended) to the machine word size (64-bit) upon pushing.</p>
+
+                    <h-opcode>push_blob</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>push_blob size offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>
+u64: size
+u64: offset
+                    </code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ..., blob</code></pre>
+                    <h4>Description</h4>
+                    <p>Copies a block of memory (such as a struct, array literal, or string buffer) from the <b>Constant Data Section</b> to the top of the operand stack.</p>
+                    <p>The instruction reads <code>size</code> bytes starting at <code>offset</code> from the constant pool and pushes them onto the operand stack by value.</p>
+
+                    <h-opcode>pop</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>pop</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., value -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Removes the top item (64-bit word) from the operand stack.</p>
+
+                    <h-opcode>pop_n</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>pop_n size</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: size</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., [n bytes] -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Removes <code>size</code> bytes from the top of the operand stack. Used to discard large structs or arrays returned by functions.</p>
+
+                    <h-opcode>dup</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>dup</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., value -> ..., value, value</code></pre>
+                    <h4>Description</h4>
+                    <p>Duplicates the top 64-bit item on the operand stack.</p>
+
+                    <h-opcode>set_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>get_i8  get_u8</code></li>
+                        <li><code>get_i16 get_u16</code></li>
+                        <li><code>get_i32 get_u32</code></li>
+                        <li><code>get_i64 get_u64</code></li>
+                        <li><code>get_ptr</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>set_{type} fp_offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: fp_offset</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., value -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a value from the operand stack and writes it to the current stack frame (Locals).</p>
+                    <p>The target address is calculated as <code>FramePointer + fp_offset</code>.</p>
+
+                    <h-opcode>set_blob</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>set_blob size fp_offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>
+u64: size
+u64: fp_offset
+                    </code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., blob -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a generic block of memory (struct/array) of <code>size</code> bytes from the operand stack and writes it to <code>FramePointer + fp_offset</code>.</p>
+
+                    <h-opcode>get_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>get_i8  get_u8</code></li>
+                        <li><code>get_i16 get_u16</code></li>
+                        <li><code>get_i32 get_u32</code></li>
+                        <li><code>get_i64 get_u64</code></li>
+                        <li><code>get_ptr</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>get_{type} fp_offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: fp_offset</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ..., value</code></pre>
+                    <h4>Description</h4>
+                    <p>Reads a value from the current stack frame (Locals) and pushes it onto the operand stack.</p>
+                    <p>The source address is calculated as <code>FramePointer + fp_offset</code>. Small types are promoted to 64-bit words.</p>
+
+                    <h-opcode>get_blob</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>get_blob size fp_offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>
+u64: size
+u64: fp_offset
+                    </code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ..., blob</code></pre>
+                    <h4>Description</h4>
+                    <p>Reads a generic block of memory of <code>size</code> bytes from <code>FramePointer + fp_offset</code> and pushes it onto the operand stack.</p>
+
+                    <h-opcode>lea</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>lea fp_offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: fp_offset</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ..., pointer</code></pre>
+                    <h4>Description</h4>
+                    <p><b>Load Effective Address</b>. Calculates the absolute memory address of a local variable (<code>FramePointer + fp_offset</code>) and pushes that pointer onto the stack.</p>
+
+                    <h-opcode>load_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>load_i8  load_u8</code></li>
+                        <li><code>load_i16 load_u16</code></li>
+                        <li><code>load_i32 load_u32</code></li>
+                        <li><code>load_i64 load_u64</code></li>
+                        <li><code>load_ptr</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>load_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., pointer -> ..., value</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a <b>Pointer</b> from the stack, dereferences it, and pushes the value stored at that address.</p>
+
+                    <h-opcode>load_blob</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>load_blob size</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: size</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., pointer -> ..., blob_data</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a pointer from the stack. Reads <code>size</code> bytes from that memory address and pushes them onto the operand stack.</p>
+
+                    <h-opcode>store_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>load_i8  load_u8</code></li>
+                        <li><code>load_i16 load_u16</code></li>
+                        <li><code>load_i32 load_u32</code></li>
+                        <li><code>load_i64 load_u64</code></li>
+                        <li><code>load_ptr</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>store_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., pointer, value -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a <b>Value</b> and a <b>Pointer</b> from the stack. Writes the value to the memory address indicated by the pointer.</p>
+
+                    <h-opcode>store_blob</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>store_blob size</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: size</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., pointer, blob_data -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops <code>size</code> bytes of data (blob) and then a pointer from the stack. Writes the blob data to the memory address indicated by the pointer.</p>
+
+                    <h-opcode>ptr_idx</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>ptr_idx stride</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: stride</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., pointer, index -> ..., element_pointer</code></pre>
+                    <h4>Description</h4>
+                    <p>Performs pointer arithmetic for array indexing.</p>
+                    <p>Calculates <code>pointer + (index * stride)</code> and pushes the resulting address.</p>
+
+                    <h-opcode>add_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>add_i32 add_u32</code></li>
+                        <li><code>add_i64 add_u64</code></li>
+                        <li><code>add_f32 add_f64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>add_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., a, b -> ..., a + b</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops two values, performs addition, and pushes the result. Note: Integer 32-bit operations wrap on overflow.</p>
+
+                    <h-opcode>sub_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>sub_i32 sub_u32</code></li>
+                        <li><code>sub_i64 sub_u64</code></li>
+                        <li><code>sub_f32 sub_f64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>sub_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., a, b -> ..., a - b</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops two values, performs subtraction, and pushes the result. Note: Integer 32-bit operations wrap on overflow.</p>
+
+                    <h-opcode>mul_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>mul_i32</code></li>
+                        <li><code>mul_u32</code></li>
+                        <li><code>mul_i64</code></li>
+                        <li><code>mul_u64</code></li>
+                        <li><code>mul_f32</code></li>
+                        <li><code>mul_f64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>mul_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., a, b -> ..., a * b</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops two values, performs the operation <code>a op b</code>, and pushes the result. Note: Integer 32-bit operations wrap on overflow.</p>
+
+                    <h-opcode>div_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>div_i32</code></li>
+                        <li><code>div_u32</code></li>
+                        <li><code>div_i64</code></li>
+                        <li><code>div_u64</code></li>
+                        <li><code>div_f32</code></li>
+                        <li><code>div_f64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>div_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., a, b -> ..., a / b</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops two values, performs division, and pushes the result.</p>
+
+                    <h-opcode>bool_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>bool_i32</code></li>
+                        <li><code>bool_i64</code></li>
+                        <li><code>bool_f32</code></li>
+                        <li><code>bool_f64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>bool_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., value -> ..., bool_result</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a value and checks if it is <b>non-zero</b>. Pushes <code>1</code> (true) or <code>0</code> (false) as an <code>i64</code>.</p>
+
+                    <h-opcode>not_bool</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>not_bool</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., bool_value -> ..., !bool_value</code></pre>
+                    <h4>Description</h4>
+                    <p>Logical NOT. Pops a boolean (0 or 1). Pushes <code>1</code> if input was 0, else <code>0</code>.</p>
+
+                    <h-opcode>and_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>and_i32 and_u32</code></li>
+                        <li><code>and_i64 and_u64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>and_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., a, b -> ..., a & b</code></pre>
+                    <h4>Description</h4>
+                    <p>Performs bitwise AND on integer operands.</p>
+
+                    <h-opcode>or_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>or_i32 or_u32</code></li>
+                        <li><code>or_i64 or_u64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>or_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., a, b -> ..., a | b</code></pre>
+                    <h4>Description</h4>
+                    <p>Performs bitwise OR on integer operands.</p>
+
+                    <h-opcode>xor_{type}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>xor_i32 xor_i32</code></li>
+                        <li><code>xor_i64 xor_u64</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>xor_{type}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., a, b -> ..., a ^ b</code></pre>
+                    <h4>Description</h4>
+                    <p>Performs bitwise XOR on integer operands.</p>
+
+                    <h-opcode>sext_32_to_64</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>sext_32_to_64</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., val_i32 -> ..., val_i64</code></pre>
+                    <h4>Description</h4>
+                    <p>Sign-extends a signed 32-bit integer to 64-bit.</p>
+
+                    <h-opcode>zext_32_to_64</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>zext_32_to_64</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., val_u32 -> ..., val_u64</code></pre>
+                    <h4>Description</h4>
+                    <p>Zero-extends an unsigned 32-bit integer to 64-bit.</p>
+
+                    <h-opcode>trunc_64_to_32</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>trunc_64_to_32</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., val_64 -> ..., val_32</code></pre>
+                    <h4>Description</h4>
+                    <p>Truncates a 64-bit integer to 32-bit (discards upper bits).</p>
+
+                    <h-opcode>cast_{src}_to_{dest}</h-opcode>
+                    <h4>Variations</h4>
+                    <ul>
+                        <li><code>cast_i32_to_u32</code></li>
+                        <li><code>cast_i32_to_i64</code></li>
+                        <li><code>cast_i32_to_u64</code></li>
+                        <li><code>cast_i32_to_f32</code></li>
+                        <li><code>cast_i32_to_f64</code></li>
+
+                        <li><code>cast_u32_to_i32</code></li>
+                        <li><code>cast_u32_to_i64</code></li>
+                        <li><code>cast_u32_to_u64</code></li>
+                        <li><code>cast_u32_to_f32</code></li>
+                        <li><code>cast_u32_to_f64</code></li>
+
+                        <li><code>cast_i64_to_i32</code></li>
+                        <li><code>cast_i64_to_u32</code></li>
+                        <li><code>cast_i64_to_u64</code></li>
+                        <li><code>cast_i64_to_f32</code></li>
+                        <li><code>cast_i64_to_f64</code></li>
+
+                        <li><code>cast_f32_to_i32</code></li>
+                        <li><code>cast_f32_to_u32</code></li>
+                        <li><code>cast_f32_to_i64</code></li>
+                        <li><code>cast_f32_to_u64</code></li>
+                        <li><code>cast_f32_to_f64</code></li>
+
+                        <li><code>cast_f64_to_i32</code></li>
+                        <li><code>cast_f64_to_u32</code></li>
+                        <li><code>cast_f64_to_i64</code></li>
+                        <li><code>cast_f64_to_u64</code></li>
+                        <li><code>cast_f64_to_f32</code></li>
+                    </ul>
+                    <h4>Format</h4>
+                    <pre><code>cast_{src}_to_{dest}</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., value -> ..., casted_value</code></pre>
+                    <h4>Description</h4>
+                    <p>Performs value conversion between Floating Point and Integer representations.</p>
+
+                    <h-opcode>jump</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>jump offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: offset</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Unconditionally sets the Instruction Pointer (IP) to <code>code_base + offset</code>.</p>
+
+                    <h-opcode>jump_if_false</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>jump_if_false offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: offset</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., condition -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a condition (<code>i64</code> boolean). If <code>0</code>, jumps to <code>offset</code>. Otherwise continues execution.</p>
+
+                    <h-opcode>jump_if_true</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>jump_if_true offset</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: offset</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., condition -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Pops a condition. If <code>!= 0</code>, jumps to <code>offset</code>.</p>
+
+                    <h-opcode>call</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>call function_ptr</code></pre>
+                    <h4>Operands</h4>
+                    <pre><code>u64: function_ptr</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ..., ip, fp</code></pre>
+                    <h4>Description</h4>
+                    <p>Invokes a function. Pushes the Return Address and Old Frame Pointer (Linkage) to the stack, creates a new stack frame, and jumps to the function's bytecode. Funtion pointer is pointer to the actual pointer of the AST node.</p>
+
+                    <h-opcode>ret</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>ret</code></pre>
+                    <h4>Operands</h4>
+                    <ul>
+                        <li><code>u64: return_value_size</code></li>
+                    </ul>
+                    <h4>Operand Stack</h4>
+                    <pre><code>..., ip, fp, [return_value_size bytes] -> [return_value_size bytes], ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Returns from a function. Restores the previous stack frame (FP) and jumps back to the calling instruction (IP). If <code>return_value_size</code> is non-zero, it moves that many bytes from the top of the current stack to the top of the caller's stack.</p>
+
+                    <h-opcode>halt</h-opcode>
+                    <h4>Format</h4>
+                    <pre><code>halt</code></pre>
+                    <h4>Operand Stack</h4>
+                    <pre><code>... -> ...</code></pre>
+                    <h4>Description</h4>
+                    <p>Stops execution of the Virtual Machine immediately.</p>
+
+            </section>
+        </main>
+    </body>
+</html>

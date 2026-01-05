@@ -22,6 +22,7 @@
 
 
 
+
 // =========================================
 // FORWARD DECLARATIONS
 // ===
@@ -76,6 +77,10 @@ struct TypeDefinition;
 struct Pointer;
 struct Array;
 struct Slice;
+
+namespace Interpreter {
+    struct ExeBlock;
+}
 
 
 
@@ -156,6 +161,7 @@ enum AllocExType : AllocType {
     AT_EXT_ARRAY_INITIALIZATION,
     AT_EXT_SLICE,
     AT_EXT_CATCH,
+    AT_EXT_CAST,
     AT_EXT_GET_LENGTH,
     AT_EXT_GET_SIZE,
     AT_INAMED,
@@ -191,6 +197,7 @@ enum ExpressionType {
     EXT_ARRAY_INITIALIZATION,
     EXT_SLICE,
     EXT_CATCH,
+    EXT_CAST,
     EXT_GET_LENGTH,
     EXT_GET_SIZE,
 };
@@ -376,6 +383,12 @@ struct Catch {
     Scope* scope;
 };
 
+struct Cast {
+    Expression base;
+    DataTypeEnum target;
+    Variable* operand;
+};
+
 struct GetLength {
     Expression base;
     Array* arr;
@@ -403,6 +416,10 @@ struct VariableDefinition {
     Pointer* lastPtr;
     // DataTypeEnum dtypeEnum;
     // TypeDefinition* dtype;
+    //
+
+    // local offset in vm
+    uint64_t vmOffset;
 };
 
 struct VariableAssignment {
@@ -455,6 +472,8 @@ struct Function {
 
     QualifiedName* errorSetName;
     ErrorSet* errorSet;
+
+    Interpreter::ExeBlock* exe;
 };
 
 struct ForeignFunction {
@@ -497,6 +516,7 @@ struct WhileLoop {
     Variable* expression;
 };
 
+// TODO : Deprecated
 struct ForLoop {
     SyntaxNode base;
 
@@ -515,6 +535,7 @@ struct Loop {
     Variable* array;
     Variable* idx;
     VariableDefinition* idxDef;
+    Variable* to;
 };
 
 struct ReturnStatement {
@@ -654,7 +675,7 @@ struct ImportStatement {
 
     // defines how the file file content is wrapped
     // for now only KW_NAMESPACE, -1 is used for no wrapp
-    KeywordType keyword;
+    Keyword keyword;
 
     // additional parrameter for ketWord
     // for KW_NAMESPACE its the name of the namespace
@@ -697,32 +718,34 @@ struct _RegMemory {
         // TODO : think of better name
         DArray::Container          data[dataSize];
 
-        DArrayLangDef              langDefs;
-        DArrayCodeBlock            codeBlocks;
-        DArrayForeignFunction      foreignFunctions;
-        DArrayVariable             variables;
-        DArrayVariable             fcnCalls;
-        DArrayFunction             fcns;
-        DArrayVariableDefinition   customDataTypesReferences;
-        DArrayVariableAssignment   variableAssignments;
-        DArrayVariable             cmpTimeVars;
-        DArrayVariable             arrays;
-        DArrayLoop                 loops;
-        DArrayLabel                labels;
-        DArrayVariable             branchExpressions;
-        DArrayStatement            statements;
-        DArrayVariableDefinition   initializations;
-        DArrayReturnStatement      returnStatements;
-        DArraySwitchCase           switchCases;
-        DArrayVariableDefinition   variableDefinitions;
-        DArrayErrorSet             customErrors;
-        DArrayUnion                unions;
-        DArraySlice                slices;
-        DArrayVariableAssignment   arraysAllocations;
-        DArrayImportStatement      imports;
-        DArrayTypeDefinition       customDataTypes;
-        DArrayEnumerator           enumerators;
-        DArrayGotoStatement        gotos;
+        struct {
+            DArrayLangDef              langDefs;
+            DArrayCodeBlock            codeBlocks;
+            DArrayForeignFunction      foreignFunctions;
+            DArrayVariable             variables;
+            DArrayVariable             fcnCalls;
+            DArrayFunction             fcns;
+            DArrayVariableDefinition   customDataTypesReferences;
+            DArrayVariableAssignment   variableAssignments;
+            DArrayVariable             cmpTimeVars;
+            DArrayVariable             arrays;
+            DArrayLoop                 loops;
+            DArrayLabel                labels;
+            DArrayVariable             branchExpressions;
+            DArrayStatement            statements;
+            DArrayVariableDefinition   initializations;
+            DArrayReturnStatement      returnStatements;
+            DArraySwitchCase           switchCases;
+            DArrayVariableDefinition   variableDefinitions;
+            DArrayErrorSet             customErrors;
+            DArrayUnion                unions;
+            DArraySlice                slices;
+            DArrayVariableAssignment   arraysAllocations;
+            DArrayImportStatement      imports;
+            DArrayTypeDefinition       customDataTypes;
+            DArrayEnumerator           enumerators;
+            DArrayGotoStatement        gotos;
+        };
 
     };
 
@@ -760,6 +783,7 @@ struct _RegMemory {
         static void init(BinaryExpression* node);
         static void init(TernaryExpression* node);
         static void init(Catch* node);
+        static void init(Cast* node);
         static void init(Slice* node);
 
         static void init(Pointer* node);
@@ -802,6 +826,7 @@ struct _RegMemory {
         static BinaryExpression*    initBinaryExpression();
         static TernaryExpression*   initTernaryExpression();
         static Catch*               initCatch();
+        static Cast*                initCast();
         static Slice*               initSlice();
 
         static Pointer*              initPointer();
@@ -845,6 +870,7 @@ struct _RegMemory {
         static TernaryExpression*      copy(TernaryExpression* node);
 
         static Variable* copy(Variable* dest, Variable* src);
+        static Variable* copyRef(Variable* dest, Variable* src);
 
     };
     Node Node;
@@ -941,14 +967,14 @@ namespace Internal {
         IF_COUNT  = 4,
     };
 
-    static Variable variables[IV_COUNT];
-    static Function functions[IF_COUNT];
+    extern Variable variables[IV_COUNT];
+    extern Function functions[IF_COUNT];
 
     extern Variable* zero;
 
     // each bit corresponds with the InternaFunction enum
     // indicates if function was used at least once in code
-    static uint64_t functionUsed = 0;
+    extern uint64_t functionUsed;
 
     void init();
 
@@ -999,6 +1025,7 @@ constexpr int nodeTypeSize[AT_COUNT] = {
     sizeof(ArrayInitialization),
     sizeof(Slice),
     sizeof(Catch),
+    sizeof(Cast),
     sizeof(GetLength),
     sizeof(GetSize),
 

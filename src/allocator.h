@@ -50,9 +50,28 @@
         return Arena::push(allocator, size);
     }
 
+    inline void* alloc(Arena::Container* allocator, size_t size, size_t align) {
+        return Arena::push(allocator, size, align);
+    }
+
     inline void dealloc(Arena::Container* allocator, void* ptr) {
         // ))
         return Arena::rollback(allocator, ptr);
+    }
+
+    // start a transaction
+    inline uint64_t beginScope (Arena::Container* allocator) {
+        return 0; //TODO
+    }
+
+    // free everything allocated since 'begin'
+    inline void rewindScope (Arena::Container* allocator, uint64_t handle) {
+        // TODO
+    }
+
+    // keep the data, drop the 'begin' and all asociated data
+    inline void commitScope (Arena::Container* allocator, uint64_t handle) {
+        // TODO
     }
 
 #endif

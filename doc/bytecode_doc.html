@@ -1,0 +1,236 @@
+<html lang="en"><head>
+        <meta charset="UTF-8">
+        <title>Bytecode Specification</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&amp;display=swap" rel="stylesheet">
+
+        <style>:root {
+    --background: #131010;
+    --foreground: #fff0dc;
+    --title: #f0bb78;
+    --subtle-foreground: #b8b5b1;
+    --tmp-color-1: #7aa5d4;
+    --tmp-color-2: #d9a86a;
+    --tmp-color-3: #8fbc8f;
+}
+
+body {
+    color: var(--foreground);
+    background-color: var(--background);
+    font-family: "Roboto", sans-serif;
+    margin: 0;
+    padding: 0;
+    line-height: 1.6;
+    font-weight: 300;
+}
+
+main {
+    max-width: 50em;
+    padding: 2em 1em;
+    margin: 0 auto;
+}
+
+h1,
+h2,
+h3 {
+    color: var(--title);
+    font-weight: 500;
+    line-height: 1.3;
+    margin-top: 2.5em;
+    margin-bottom: 0.8em;
+}
+
+h1 {
+    font-size: 2.2em;
+    margin-top: 0;
+}
+h2 {
+    font-size: 1.8em;
+}
+h3 {
+    font-size: 1.4em;
+    margin-top: 2em;
+}
+
+p {
+    margin-top: 0;
+    margin-bottom: 1em;
+}
+
+pre,
+code {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+pre {
+    border-left: 2px solid var(--tmp-color-3);
+    padding: 10px 10px 10px 15px;
+    margin-left: 1em;
+    margin-right: 1em;
+}
+
+code {
+    font-size: inherit;
+    font-family:
+        SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+        "Courier New", monospace;
+}
+
+.note {
+    font-style: italic;
+    color: var(--subtle-foreground);
+    font-size: 0.9em;
+    margin-top: -0.5em;
+    margin-bottom: 1.5em;
+}
+
+a {
+    color: var(--title);
+    text-decoration: none;
+}
+a:hover {
+    text-decoration: underline;
+}
+</style>
+
+        <style>
+            h-opcode {
+                display: block;
+                font-family: monospace;
+                font-weight: bold;
+                font-size: 1.6em;
+                margin-top: 2em;
+                margin-bottom: 0.1rm;
+                padding-left: 1em;
+                border-left: 0.25em solid var(--title);
+                background-color: #211c1c;
+            }
+        </style>
+    </head>
+
+    <body>
+        <main>
+            <h1>Bytecode Specification</h1>
+
+            <section>
+                <h2>Introduction</h2>
+                <p>
+                    This document describes the bytecode instruction set used by
+                    so called 'interpreter' for compile-time evaluation.
+                </p>
+            </section>
+
+            <section>
+                <h2>Model</h2>
+                <p>Each function if used in compile-time context gets compiled into bytecode, which is then used for any following execution.</p>
+                <p>Global level expressions are evaluated on the fly without compilation and use of bytcode.</p>
+                <p>Each compiled function produces two components:</p>
+
+                <ul>
+                    <li>
+                        <b>locals block</b> – raw bytes storing arguments and locals
+                    </li>
+                    <li>
+                        <b>bytecode</b> – instruction stream executed by the VM
+                    </li>
+                </ul>
+            </section>
+
+            <section>
+                <h2>Instruction Format</h2>
+
+                <p>
+                    Each instruction begins with a single-byte opcode
+                    , optionally followed by immediate
+                    operands, which format is defined individualy by each instruction.
+                </p>
+            </section>
+
+            <section>
+                <h2>Instruction Set</h2>
+
+                <h-opcode>push_{type}</h-opcode>
+                <h4>Variations</h4>
+                <ul>
+                <li><code>push_i32</code></li>
+                <li><code>push_i64</code></li>
+                <li><code>push_f32</code></li>
+                <li><code>push_f64</code></li>
+                <li><code>push_ptr</code></li>
+                </ul>
+                <h4>Format</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#D0CDC8">push_</span><span style="color:#A68295">{</span><span style="color:#D0CDC8">type</span><span style="color:#A68295">}</span><span style="color:#D0CDC8"> literal_value</span></span></code></pre>
+                <h4>Operands</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#A68295">{</span><span style="color:#D0CDC8">type</span><span style="color:#A68295">}:</span><span style="color:#D0CDC8"> literal_value</span></span></code></pre>
+                <h4>Description</h4>
+                <p>Reads a literal value stored directly in the bytecode instruction stream and pushes it onto the operand stack.</p>
+
+                <h-opcode>push_const</h-opcode>
+                <h4>Format</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">push_const</span><span style="color:#DA9188"> size</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Operands</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> size</span></span>
+<span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Description</h4>
+                <p>Copies a block of memory (such as a struct or array) from the constant data section to the top of the operand stack.</p>
+                <p>The instruction reads <code>size</code> bytes starting at <code>offset</code> from the constant data section and pushes them onto the operand stack by value.</p>
+
+                <h-opcode>set_local_{type}</h-opcode>
+                <h4>Variations</h4>
+                <ul>
+                <li><code>set_local_i32</code></li>
+                <li><code>set_local_i64</code></li>
+                <li><code>set_local_f32</code></li>
+                <li><code>set_local_f64</code></li>
+                <li><code>set_local_ptr</code></li>
+                </ul>
+                <h4>Format</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#D0CDC8">set_local_</span><span style="color:#A68295">{</span><span style="color:#D0CDC8">type</span><span style="color:#A68295">}</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Operands</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Description</h4>
+                <p>Pops a primitive value of a specific type from the operand stack and writes it to the local variable storage.</p>
+
+                <h-opcode>set_local</h-opcode>
+                <h4>Format</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">set_local</span><span style="color:#DA9188"> size</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Operands</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> size</span></span>
+<span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Description</h4>
+                <p>Pops a block of memory of <code>size</code> bytes from the operand stack and writes it to the local variable storage on <code>offset</code>.</p>
+
+                <h-opcode>get_local_{type}</h-opcode>
+                <h4>Variations</h4>
+                <ul>
+                <li><code>get_local_i32</code></li>
+                <li><code>get_local_i64</code></li>
+                <li><code>get_local_f32</code></li>
+                <li><code>get_local_f64</code></li>
+                <li><code>get_local_ptr</code></li>
+                </ul>
+                <h4>Format</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#D0CDC8">get_local_</span><span style="color:#A68295">{</span><span style="color:#D0CDC8">type</span><span style="color:#A68295">}</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Operands</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Description</h4>
+                <p>Reads a primitive value of a specific type from the local variable storage and pushes it onto the operand stack.</p>
+
+                <h-opcode>get_local</h-opcode>
+                <h4>Format</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">get_local</span><span style="color:#DA9188"> size</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Operands</h4>
+                <pre class="shiki Witchesbrew" style="background-color:#11080d;color:#d0cdc8" tabindex="0"><code><span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> size</span></span>
+<span class="line"><span style="color:#DA9188">u64</span><span style="color:#A68295">:</span><span style="color:#D0CDC8"> offset</span></span></code></pre>
+                <h4>Description</h4>
+                <p>Copies a block of memory of <code>size</code> bytes from the local variable storage to the top of the operand stack.</p>
+            </section>
+        </main>
+    
+
+</body></html>

@@ -109,14 +109,14 @@ typedef String INamed;
 // stuff... stuff...
 struct INamedLoc {
     char* buff;
-    int len;
+    uint64_t len;
     Span* span;
 };
 
 // LOOK AT : maybe better name
 struct INamedEx {
     char* buff;
-    int len;
+    uint64_t len;
     Span* span;
     Id id;
 };
@@ -129,6 +129,9 @@ inline void init(INamedEx* name) {
 }
 
 
+static inline int isValidFunctionIdx(int idx) {
+    return idx >= 0;
+}
 
 static inline int isValidPos(Pos pos) {
     return pos.ln != INVALID_POS.ln;

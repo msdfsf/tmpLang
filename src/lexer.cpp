@@ -90,10 +90,10 @@ namespace Lex {
     }
 
     unsigned int hash(const char* str, int len) {
-        unsigned int hash = 5381 ^ 0x9c8d7e6f;
+        unsigned int hash = 5381 ^ 0x2c3d4e5f;
         int idx = 0;
         while (idx < len) {
-            hash = ((hash << 5) + hash) ^ (uint8_t) str[idx++];
+            hash = ((hash << 5) + hash) + (uint8_t) str[idx++];
         }
         return hash % KW_TABLE_SIZE;
     }
@@ -369,6 +369,8 @@ namespace Lex {
     int parseEscapeChar(const char* str, int* idx) {
 
         const char ch = str[*idx];
+        *idx += 1;
+
         switch(ch) {
 
             case 'a':
@@ -404,16 +406,17 @@ namespace Lex {
 
     uint64_t parseHexInt(const char* const str, int* idx) {
 
+        const int pivot = *idx;
         uint64_t num = 0;
         for (int i = 0;; i++) {
 
-            const char ch = str[i];
+            const char ch = str[pivot + i];
 
             if (ch >= '0' && ch <= '9') num = num * 16 + (ch - '0');
             else if (ch >= 'A' && ch <= 'F') num = num * 16 + (10 + ch - 'A');
             else if (ch >= 'a' && ch <= 'f') num = num * 16 + (10 + ch - 'a');
             else {
-                *idx = i;
+                *idx += i;
                 return num;
             }
 
@@ -429,16 +432,17 @@ namespace Lex {
 
             if (str[*idx + 1] == 'x') {
 
-                int hexLen;
-                ch = parseHexInt(str + *idx + 2, &hexLen);
-                if (hexLen == 0) {
+                *idx += 2;
+                int tmp = *idx;
+                ch = parseHexInt(str, idx);
+                if (*idx == tmp) {
                     // Logger::log(Logger::ERROR, "At least one hex digit required!", span, 1);
                     return Err::UNEXPECTED_SYMBOL;
                 }
-                idx += hexLen;
 
             } else {
 
+                *idx += 1;
                 ch = parseEscapeChar(str, idx);
                 if (ch == -1) {
                     // parseHexInt(str, &idx);
@@ -448,6 +452,10 @@ namespace Lex {
 
             }
 
+        } else {
+
+            *idx += 1;
+        
         }
 
         return ch;
@@ -456,13 +464,12 @@ namespace Lex {
 
     int parseCharLiteral(const char* const str, int* len, uint64_t* out) {
 
-        int idx = 0;
         uint64_t tmpOut = 0;
 
         int size = 0;
         while (1) {
 
-            char ch = parseChar(str, &idx);
+            char ch = parseChar(str, len);
 
             if (ch == CHAR_LITERAL) break;
             if (ch == EOS) {
@@ -478,7 +485,7 @@ namespace Lex {
 
             size++;
 
-            idx++;
+            // idx++;
 
         }
 
@@ -488,8 +495,6 @@ namespace Lex {
         }
 
         tmpOut >>= (8 - size) * 8;
-
-        *len = idx;
         *out = tmpOut;
 
         return size;
@@ -506,11 +511,11 @@ namespace Lex {
             if (ch == STRING_LITERAL) break;
             if (ch == EOS) return Err::UNEXPECTED_END_OF_FILE;
 
-            idx++;
+            // idx++;
 
         }
 
-        idx += (str[idx + 1] == RAW_POSTFIX);
+        idx += (str[idx] == RAW_POSTFIX);
 
         return idx;
 
@@ -518,22 +523,23 @@ namespace Lex {
 
     int parseStringLiteral(const char* const str, int* len, StringInitialization** initOut) {
 
-        int idx = 0;
-
+        int charCnt = 0;
+        
         while (1) {
 
-            const char ch = parseChar(str, &idx);
+            const char ch = parseChar(str, len);
             if (ch == STRING_LITERAL) break;
             if (ch == EOS) return Err::UNEXPECTED_END_OF_FILE;
 
-            idx++;
+            charCnt++;
 
         }
 
-        const int strLen = idx;
-        const int rawStringRequired = (str[idx + 1] == RAW_POSTFIX) ? 1 : 0;
+        const int strLen = charCnt;
+        const int rawStringRequired = (str[*len] == RAW_POSTFIX) ? 1 : 0;
 
         StringInitialization* init = (StringInitialization*) alloc(alc, AT_EXT_STRING_INITIALIZATION);
+        init->base.type = EXT_STRING_INITIALIZATION;
         init->rawStr = std::string(str, strLen);
         init->rawPtr = (char*) str;
         init->rawPtrLen = strLen;
@@ -542,7 +548,7 @@ namespace Lex {
         if (rawStringRequired) {
             init->wideStr = NULL;
             init->wideDtype = DT_U8;
-            idx++;
+            *len += 1;
         } else {
 
             int utf8Len;
@@ -560,7 +566,6 @@ namespace Lex {
 
         }
 
-        *len = idx;
         *initOut = init;
 
         return Err::OK;
@@ -738,6 +743,8 @@ namespace Lex {
 
             case CHAR_LITERAL: {
 
+                len = 0;
+
                 uint64_t ch = 0;
                 const int size = parseCharLiteral(str + startPos.idx + 1, &len, &ch);
                 if (size < 0) {
@@ -749,12 +756,14 @@ namespace Lex {
                 token.kind = TK_CHAR;
                 token.detail = size;
 
-                len += 2;
+                len += 1;
                 break;
 
             }
 
             case STRING_LITERAL: {
+
+                len = 0;
 
                 if (val) {
                     StringInitialization* init;
@@ -771,7 +780,7 @@ namespace Lex {
 
                 token.kind = TK_STRING;
 
-                len += 2;
+                len += 1;
                 break;
 
             }

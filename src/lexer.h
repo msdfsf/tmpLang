@@ -1,6 +1,7 @@
 #pragma once
 
 #include "operators.h"
+#include "keywords.h"
 #include "data_types.h"
 #include <array>
 
@@ -19,9 +20,10 @@ namespace Lex {
 
     union TokenValue {
         uint64_t ival;
-        double  fval;
-        String* str;
-        void* any;
+        float_t  f32;
+        double_t f64;
+        String*  str;
+        void*    any;
     };
 
     static inline uint64_t packTokens(TokenKind a, TokenKind b) {
@@ -102,59 +104,11 @@ namespace Lex {
     static const char* KWS_TRUE = "true";
     static const char* KWS_FALSE = "false";
     static const char* KWS_AS = "as";
+    static const char* KWS_TO = "to";
     static const char* KWS_NULL = "null";
 
     static const char* CDS_NONE = "none";
     static const char* CDS_TEST = "test";
-
-    enum Keyword {
-        KW_VOID,
-        KW_INT,
-        KW_I8,
-        KW_I16,
-        KW_I32,
-        KW_I64,
-        KW_U8,
-        KW_U16,
-        KW_U32,
-        KW_U64,
-        KW_F32,
-        KW_F64,
-        KW_CONST,
-        KW_EMBED,
-        KW_MUTON,
-        KW_AUTON,
-        KW_FCN,
-        KW_DEF,
-        KW_STRUCT,
-        KW_UNION,
-        KW_IF,
-        KW_ELSE,
-        KW_FOR,
-        KW_WHILE,
-        KW_LOOP,
-        KW_WHEN,
-        KW_CASE,
-        KW_GOTO,
-        KW_ENUM,
-        KW_RETURN,
-        KW_CONTINUE,
-        KW_BREAK,
-        KW_USING,
-        KW_SCOPE,
-        KW_NAMESPACE,
-        KW_ALLOC,
-        KW_FREE,
-        KW_ERROR,
-        KW_CATCH,
-        KW_IMPORT,
-        KW_FROM,
-        KW_TRUE,
-        KW_FALSE,
-        KW_AS,
-        KW_NULL,
-        KW_COUNT
-    };
 
     enum Directive {
         CD_NONE,
@@ -207,6 +161,7 @@ namespace Lex {
         KWS_TRUE,
         KWS_FALSE,
         KWS_AS,
+        KWS_TO,
         KWS_NULL,
     };
 
@@ -215,61 +170,63 @@ namespace Lex {
         CDS_TEST,
     };
 
-    constexpr int KW_TABLE_SIZE = 158;
+    constexpr int KW_TABLE_SIZE = 107;
     constexpr std::array<int, KW_TABLE_SIZE> makeKeywordTable() {
 
             std::array<int, KW_TABLE_SIZE> table = {};
 
-            table[6] = KW_I32;
-            table[9] = KW_FOR;
-            table[11] = KW_CATCH;
-            table[13] = KW_STRUCT;
-            table[14] = KW_FREE;
-            table[15] = KW_NAMESPACE;
-            table[19] = KW_CONTINUE;
-            table[21] = KW_INT;
-            table[23] = KW_IF;
-            table[30] = KW_VOID;
-            table[32] = KW_WHEN;
-            table[36] = KW_LOOP;
-            table[38] = KW_ERROR;
-            table[40] = KW_F64;
-            table[43] = KW_ELSE;
-            table[49] = KW_IMPORT;
-            table[52] = KW_RETURN;
-            table[59] = KW_BREAK;
-            table[61] = KW_FCN;
-            table[67] = KW_U8;
-            table[68] = KW_TRUE;
-            table[72] = KW_I16;
-            table[82] = KW_SCOPE;
-            table[83] = KW_U64;
-            table[85] = KW_MUTON;
-            table[86] = KW_U32;
-            table[99] = KW_ALLOC;
-            table[101] = KW_I64;
-            table[105] = KW_F32;
-            table[108] = KW_USING;
-            table[109] = KW_AUTON;
-            table[113] = KW_GOTO;
-            table[117] = KW_CONST;
-            table[122] = KW_CASE;
-            table[123] = KW_UNION;
-            table[125] = KW_EMBED;
-            table[127] = KW_FALSE;
-            table[129] = KW_ENUM;
-            table[133] = KW_NULL;
-            table[136] = KW_FROM;
-            table[139] = KW_I8;
-            table[140] = KW_AS;
-            table[144] = KW_U16;
-            table[145] = KW_WHILE;
-            table[149] = KW_DEF;
+            table[7] = KW_IF;
+            table[9] = KW_INT;
+            table[11] = KW_FCN;
+            table[13] = KW_ALLOC;
+            table[16] = KW_NULL;
+            table[17] = KW_IMPORT;
+            table[18] = KW_BREAK;
+            table[19] = KW_CATCH;
+            table[20] = KW_NAMESPACE;
+            table[21] = KW_CONST;
+            table[23] = KW_I64;
+            table[25] = KW_CASE;
+            table[29] = KW_I32;
+            table[31] = KW_DEF;
+            table[32] = KW_STRUCT;
+            table[35] = KW_LOOP;
+            table[36] = KW_U8;
+            table[37] = KW_U64;
+            table[41] = KW_AUTON;
+            table[42] = KW_CONTINUE;
+            table[43] = KW_U32;
+            table[47] = KW_WHEN;
+            table[50] = KW_WHILE;
+            table[52] = KW_TRUE;
+            table[55] = KW_FREE;
+            table[58] = KW_TO;
+            table[60] = KW_GOTO;
+            table[67] = KW_EMBED;
+            table[68] = KW_I8;
+            table[69] = KW_RETURN;
+            table[72] = KW_FROM;
+            table[73] = KW_F64;
+            table[74] = KW_I16;
+            table[77] = KW_AS;
+            table[79] = KW_F32;
+            table[84] = KW_FALSE;
+            table[87] = KW_USING;
+            table[88] = KW_U16;
+            table[90] = KW_FOR;
+            table[93] = KW_MUTON;
+            table[95] = KW_UNION;
+            table[97] = KW_ELSE;
+            table[102] = KW_ENUM;
+            table[103] = KW_VOID;
+            table[104] = KW_SCOPE;
+            table[105] = KW_ERROR;
 
             return table;
 
-        };
-        constexpr auto keywordTable = makeKeywordTable();
+    };
+    constexpr auto keywordTable = makeKeywordTable();
+
     constexpr int CD_TABLE_SIZE = 1;
     static const int directivesTable[CD_TABLE_SIZE] = {
         CD_TEST,
@@ -395,6 +352,7 @@ namespace Lex {
         TD_KW_TRUE,
         TD_KW_FALSE,
         TD_KW_AS,
+        TD_KW_TO,
         TD_KW_NULL,
 
         TD_CD_BEGIN,

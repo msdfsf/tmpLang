@@ -1,32 +1,61 @@
 #pragma once
 
+#include <cstdint>
 #include <stdint.h>
-
+#include <cstddef>
 
 
 namespace Arena {
 
+    struct Block {
+        Block* prev;
+        Block* next;
+
+        // the offset we need to take at the start of the block
+        // to simulate alignments of elements if they were
+        // pushed to 'one big block'
+        uint8_t padding;
+
+        uint64_t pos; // basicaly represent used size of the block
+        alignas(std::max_align_t) uint8_t data[];
+    };
+
     struct Container {
+        Block* head;
+        Block* tail;
 
-        uint64_t stackPos;
-        uint64_t stackSize;
-        uint64_t stackCount;
+        // the 'virtual' position
+        // tracks where we are in the hypothetical 'one big buffer'
+        uint64_t logicalPos;
 
-        uint8_t* headStack;
-        uint8_t* tailStack;
+        // track the strictest alignment ever requested
+        size_t maxAlignSeen;
 
-        uint64_t lastPushSize;
+        // TODO: better name?
+        uint64_t blockPayloadSize;
+        uint64_t blockCount;
+    };
 
+    struct Marker {
+        Block* block;
+        uint64_t pos;
     };
 
     void init(Container* arena, uint64_t initialSize);
     void release(Container* arena);
 
     void* push(Container* arena, size_t size);
-    void pop(Container* arena);
+    void* push(Container* arena, size_t size, size_t align);
 
-    void rollback(Container* arena, void* ptr);
+    Marker getMarker(Container* arena);
+    void rollback(Container* arena, Marker marker, bool freeMemory = false);
+    void rollback(Container* arena, void* ptr, bool freeMemory = false);
 
     void clear(Container* arena);
+
+    uint64_t getFlatSize(Container* arena);
+    uint64_t getMaxAlign(Container* arena);
+
+    void flatCopy(Container* arena, uint8_t* dest);
 
 }

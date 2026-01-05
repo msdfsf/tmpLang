@@ -2,16 +2,18 @@
 #include "array_list.h"
 #include "allocator.h"
 #include "string.h"
+#include <cstdint>
 
 namespace OrderedDict {
 
     void init(Container* dict, size_t initialSize) {
 
+        dict->it = 0;
         dict->flags = 0;
         DArray::init(&dict->pairs, initialSize, sizeof(Pair));
 
     }
-    
+
     struct Slot {
         bool match;
         int idx;
@@ -53,7 +55,7 @@ namespace OrderedDict {
     void* get(Container* dict, String key) {
 
         const Slot slot = getSlot(dict, key);
-        return slot.match ? ((Pair*) dict->pairs.buffer) + slot.idx : NULL;
+        return slot.match ? (((Pair*) dict->pairs.buffer) + slot.idx)->data : NULL;
 
     }
 
@@ -77,6 +79,40 @@ namespace OrderedDict {
         DArray::set(&dict->pairs, slot.idx, &pair);
 
         return 1;
+
+    }
+
+    Pair* getNext(Container* dict) {
+
+        if (dict->pairs.size <= 0) return NULL;
+
+        Pair* pair = ((Pair*) dict->pairs.buffer + dict->it);
+
+        dict->it++;
+        if (dict->it >= dict->pairs.size) dict->it = 0;
+
+        return pair;
+
+    }
+
+    void clear(Container* dict) {
+        DArray::clear(&dict->pairs);
+        dict->it = 0;
+    }
+
+    Container* tightCopy(Container* src) {
+
+        Container* dest = (Container*) alloc(alc, sizeof(Container));
+
+        DArray::init(&dest->pairs, src->pairs.size, src->pairs.elementSize);
+        memcpy(dest->pairs.buffer, src->pairs.buffer, src->pairs.size * src->pairs.elementSize);
+        dest->pairs.size = src->pairs.size;
+        
+        dest->it = src->it;
+        dest->flags = src->flags;
+
+
+        return dest;
 
     }
 
