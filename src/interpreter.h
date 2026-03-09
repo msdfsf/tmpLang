@@ -2,16 +2,111 @@
 
 #include <cstdint>
 
+#include "data_types.h"
 #include "dynamic_arena.h"
 #include "error.h"
+#include "operators.h"
 #include "ordered_dict.h"
 #include "syntax.h"
 
 
 
+/**
+ * CALL STACK
+ * --------------------------------------
+ * This architecture was chosen as a compromise to keep the final bytecode simple
+ * for non-variadic cases, while ensuring all local offsets remain fixed and known
+ * at compile-time relative to the Frame Pointer (fp).
+ *
+ * A function's stack frame is divided into four logical groups:
+ *   1. Required Arguments
+ *   2. Default Arguments
+ *   3. Scope Variables (Internal Locals)
+ *   4. Variadic Arguments (Varargs)
+ *
+ * The first three groups have a fixed size known at compile-time and are collectively
+ * referred to as 'locals'. Although variadic arguments are technically part of the
+ * function’s stack frame, they are not included in this so-called 'definition' as they
+ * dont obey this property. Fixed portion of the stack frame remains the same across
+ * all calls, and therefore can be determined once at compile time and reused during
+ * code generation or exection.
+ *
+ * DESIGN CHOICE:
+ * We anchor 'fp' at the first Required Argument. To keep the layout contiguous,
+ * varargs have to be plaace either before or after the locals. The latter was
+ * chosen.
+ *
+ * Rationale:
+ * For non-variadic functions, this keeps the call/return logic trivial.
+ * Variadic functions require slightly more work at runtime (shifting the vararg
+ * section to insert scope locals), but this was deemed an acceptable trade-off
+ * since variadic calls are less frequent during compile-time execution. While
+ * it is possible to insert a stack-grow instruction to allocate space naturally,
+ * this approach becomes non-trivial for one-pass compilation if recursive calls
+ * has to be handled.
+ *
+ * COMPILER METADATA:
+ * During compilation, the following properties are recorded in the ExeBlock:
+ *   - exe->locals:          A template array containing initial values for
+ *                           Default Args and Scope Locals. Used for fast dispatch
+ *                           via memcpy.
+ *
+ *                           Required arguments are not included, since they must
+//                           always be pushed explicitly onto the stack and are
+//                           therefore inherently call-specific.
+ *   - exe->fixedSize:       Total count of slots for (Req Args + Def Args + Scope Vars).
+ *   - exe->defaultArgsSize: Size of the Default Arguments section.
+ *
+ * STACK STATE: IMMEDIATELY BEFORE OC_CALL
+ * ------------------------------------------
+ * (Address Increases Downwards)
+ *
+ *  Offset | Content                   | Comment
+ * --------|---------------------------|------------------------------
+ *         | [ Reserved Slot (IP)    ] | Empty slots reserved by the
+ *         | [ Reserved Slot (FP)    ] | caller for VM metadata.
+ * --------|---------------------------|------------------------------
+ *         | [ Required Argument 1   ] |
+ *         | [ ...                   ] | Arguments pushed by the
+ * --------|---------------------------| caller onto the operand stack
+ *         | [ Default Argument 1    ] |
+ *         | [ ...                   ] |
+ * --------|---------------------------|------------------------------
+ *         | [ Vararg 1 (Any)        ] | Varargs are pushed as 'Any'
+ *         | [ Vararg N (Any)        ] | pairs:
+ *  sp     | [ <vararg count>        ] | {u64: TypeInfo*, u64: Value}
+ * --------|---------------------------|------------------------------
+ *
+ *
+ * STACK STATE: AFTER OC_CALL EXECUTION
+ * ---------------------------------------
+ *
+ *  Offset | Content                   | Comment
+ * --------|---------------------------|--------------------
+ *  fp - 2 | [ Saved IP              ] | Restored on OC_RET
+ *  fp - 1 | [ Saved FP              ] |
+ * --------|---------------------------|--------------------   -[ exe:
+ *  fp     | [ Required Argument 1   ] | Existing data          [ f
+ *         | [ ...                   ] |                        [ i
+ * --------|---------------------------|--------------- -[ exe: [ x  -[ exe:
+ *         | [ Default Argument 1    ] | Existing data   [ l    [ e   [ defaultArgsCount
+ *         | [ ...                   ] |                 [ o    [ d   [
+ * --------|---------------------------|---------------  [ c    [ S  -[
+ *         | [ Scope Local 1         ] | Initialized via [ a    [ i
+ *         | [ ...                   ] | memcpy by VM    [ l    [ z
+ * --------|---------------------------|--------------- -[ s   -[ e
+ *         | [ Vararg 1 (Any)        ] | Shifted "down" in memory
+ *         | [ Vararg N (Any)        ] | by the VM to make room
+ *  sp - 1 | [ <vararg count>        ] | for Scope Locals
+ * --------|---------------------------|-----------------------------
+ */
+
+
+
 namespace Interpreter {
 
-    constexpr int VM_STACK_ALIGNMENT = 16;
+    typedef uint64_t vmword;
+    #define BYTES_TO_WORDS(bsize) (((bsize) + 7) >> 3)
 
     // order of dtypes matters, see DtypeOffset
     enum Opcode : uint8_t {
@@ -55,9 +150,6 @@ namespace Interpreter {
         OC_GET_PTR,
         OC_GET_BLOB,
 
-        OC_LEA,
-        OC_PTR_IDX,
-
         OC_LOAD_I8,
         OC_LOAD_U8,
         OC_LOAD_I16,
@@ -83,6 +175,13 @@ namespace Interpreter {
         OC_STORE_F64,
         OC_STORE_PTR,
         OC_STORE_BLOB,
+
+        OC_LEA,
+        OC_LEA_CONST,
+        OC_STORE_INDEXED,
+        OC_STORE_INDEXED_TMP,
+        OC_PTR_IDX,
+        OC_DEREF, // TODO : delete
 
         OC_POP,
         OC_POP_N,
@@ -230,8 +329,26 @@ namespace Interpreter {
         OC_CALL,
         OC_RET, // TODO separate RET_BLOB
 
+        OC_GROW,
+
         OC_NOP,
         OC_HALT,
+
+        // general fat-vector instructions
+        OC_VEC_VV,
+        OC_VEC_VS,
+        OC_VEC_SV,
+        OC_VEC_UNARY,
+        OC_VEC_CAT,
+        OC_VEC_COPY,
+        OC_VEC_FILL,
+        OC_VEC_LOAD_INDIRECT,
+        OC_VEC_STORE_INDIRECT,
+        OC_VEC_CAST,
+        OC_VEC_ALLOC,
+        OC_VEC_TO_REF,
+        OC_VEC_MEM_RESET,
+        OC_VEC_RESET,
 
         OC_COUNT
 
@@ -252,9 +369,46 @@ namespace Interpreter {
         OFF_GENERIC,
     };
 
+    enum VecDescriptorEncoding : uint64_t {
+        DE_DTYPE_SHIFT     = 0,
+        DE_OPER_SHIFT      = 8,
+        DE_SRC_DTYPE_SHIFT = 16,
+        DE_FLAGS_SHIFT     = 32,
+
+        DE_DTYPE_MASK     = ((uint64_t) 0xFF) << DE_DTYPE_SHIFT,
+        DE_OPER_MASK      = ((uint64_t) 0xFF) << DE_OPER_SHIFT,
+        DE_SRC_DTYPE_MASK = ((uint64_t) 0xFF) << DE_SRC_DTYPE_SHIFT,
+        DE_FLAGS_MASK     = ((uint64_t) 0xFFFFFFFF) << DE_FLAGS_SHIFT,
+
+        // F as Flags, as names are pretty long at this point
+        DE_F_DEST_SHIFT  = 31,
+        DE_F_LEFT_SHIFT  = 30,
+        DE_F_RIGHT_SHIFT = 29,
+
+        DE_F_DEST  = 1U << DE_F_DEST_SHIFT,
+        DE_F_LEFT  = 1U << DE_F_LEFT_SHIFT,
+        DE_F_RIGHT = 1U << DE_F_RIGHT_SHIFT,
+    };
+
+    struct VecDescriptor {
+        DataTypeEnum dtype;
+        OperatorEnum oper;
+        DataTypeEnum srcDtype; // for cast
+        uint8_t reserved;
+        uint32_t flags;
+    };
+    static_assert(sizeof(VecDescriptor) == sizeof(vmword), "VecDescriptor must match 'vmword' size!");
+
+    struct VecInfo {
+        uint64_t dest;
+        VecDescriptor desc;
+    };
+
     struct LocalVarInfo {
         // for now enough
         Variable* var;
+        uint64_t size;
+        uint64_t align;
     };
 
     struct LocalFcnInfo {
@@ -262,10 +416,28 @@ namespace Interpreter {
         Function* fcn;
     };
 
+    struct LineInfo {
+        uint64_t ocOffsetStart;
+        uint64_t ocOffsetEnd;
+        Span span;
+    };
+
+    struct VecResult {
+        bool isTmp;
+    };
+
     struct CompilerState {
 
-        // dynamic stacks used during compilation
+        // We dont want to populate locals with call args
+        // as they naturaly grow on stack. But we want
+        // keep here default args and scope locals so we
+        // can speedup call stack construction.
+        //
+        // NOTE : localPos is used for dummy offset calculation
         Arena::Container locals;
+        //Controls if locals are populated during offset calculation
+        bool populateLocals;
+
         Arena::Container bytecode;
 
         // stores raw const data such as string literals that
@@ -275,8 +447,24 @@ namespace Interpreter {
         // keys are locals offsets, values are type of LocalVarInfo
         OrderedDict::Container localsInfoMap;
 
+        // lines spans to map bytecode and lines in source code
+        DArray::Container lines;
+
+        // to track and build line spans
+        Span currentLineSpan;
+        uint64_t currentOffsetStart;
+
         // max encoutered alignment during building locals stack
         uint64_t maxAlign;
+
+        uint64_t fixedSize;
+        uint64_t defaultArgsSize;
+
+        VecResult vecResult;
+
+        // vectorized opperations metadata
+        uint64_t maxArrayLiteralSize; // so we can prealocated just enough memory
+        uint64_t currentArrayLiteralOffset; // offset in prealocated block
 
         Opcode lastOpcode;
 
@@ -285,14 +473,28 @@ namespace Interpreter {
     struct ExeBlock {
 
         // raw bytes for initial local variable state
-        uint8_t* locals;
+        vmword* locals;
         uint64_t localsSize;
 
         uint8_t* bytecode;
         uint64_t bytecodeSize;
 
+        uint8_t* rawData;
+        uint64_t rawDataSize;
+
+        LineInfo* lines;
+        uint64_t linesSize;
+
         // maps offsets in locals to their info as LocalVarDebugInfo
         OrderedDict::Container* localsInfoMap;
+
+        // for now like bool, later if there will be
+        // more characteristics transform to flag
+        bool isVariadic;
+
+        // in vmword slots
+        uint64_t fixedSize;
+        uint64_t defaultArgsSize;
 
         // original 'ast' node its based on
         void* node;
@@ -301,21 +503,25 @@ namespace Interpreter {
 
 
 
+    void initDebug();
     void initBuild();
     void initExec();
     void initEval();
     inline void init() {
+        initDebug();
         initBuild();
         initExec();
         initEval();
     }
 
-    Err::Err compile(Function* fcn);
+    Err::Err compile(Function* fcn, bool waitForExecution = true);
+    Err::Err compile(CompilerState* state, Function* fcn);
 
     Err::Err exec(Function* fcn, Value* out);
 
+    void print(Function* fcn, uint64_t depth = 0);
     void print(ExeBlock* block);
-
+    const char* toStr(Opcode opcode);
 
 
     // returns error or dtype enumeric value of the result
@@ -328,4 +534,6 @@ namespace Interpreter {
     int applyOperator(OperatorEnum oper, Value* value);
     int applyOperator(OperatorEnum oper, Value* valueA, Value* valueB);
 
+    vmword encodeVecDescriptor(const VecDescriptor desc);
+    VecDescriptor decodeVecDescriptor(const vmword word);
 };

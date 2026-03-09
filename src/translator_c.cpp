@@ -407,10 +407,6 @@ void printOperandValue(FILE* file, Variable* op) {
 
     switch (op->cvalue.dtypeEnum) {
 
-        case DT_INT : {
-
-        }
-
         case DT_I32 : {
             fprintf(file, "%i", op->cvalue.i32);
             break;
@@ -461,10 +457,6 @@ void printOperandValue(FILE* file, Variable* op) {
 void printDataType(FILE* file, const DataTypeEnum dtypeEnum) {
 
     switch (dtypeEnum) {
-
-        case DT_INT :
-            fprintf(file, "int");
-            break;
 
         case DT_I8 :
             fprintf(file, "int8_t");
@@ -1109,10 +1101,10 @@ int printArrayRValue(FILE* file, Variable* lvalue, Variable* var, Variable** arr
 
             StringInitialization* init = (StringInitialization*) ex;
 
-            if (init->wideStr) {
-                fprintf(file, "int len%iT=%i;", *pid, init->wideLen);
+            if (init->wideStr.buff) {
+                fprintf(file, "int len%iT=%i;", *pid, init->wideStr.len);
             } else {
-                fprintf(file, "int len%iT=%i;", *pid, init->rawPtrLen);
+                fprintf(file, "int len%iT=%i;", *pid, init->rawStr.len);
             }
 
             const int nameLen = 1 + MAX_ARRAY_ID_SIZE + 1;
@@ -1721,8 +1713,8 @@ void printTypeInitialization(FILE* file, int level, TypeInitialization* const no
 
 void printStringInitialization(FILE* file, int level, StringInitialization* const node, Variable* lvalue) {
 
-    if (!(node->wideStr)) {
-        fprintf(file, "\"%.*s\"", node->rawPtrLen, node->rawPtr);
+    if (!(node->wideStr.buff)) {
+        fprintf(file, "\"%.*s\"", node->rawStr.len, node->rawStr.buff);
         return;
     }
 
@@ -1737,45 +1729,45 @@ void printStringInitialization(FILE* file, int level, StringInitialization* cons
     switch (node->wideDtype) {
 
         case DT_U8: {
-            uint8_t* arr = (uint8_t*) node->wideStr;
+            uint8_t* arr = (uint8_t*) node->wideStr.buff;
 
-            for (int i = 0; i < node->wideLen - 1; i++) {
+            for (int i = 0; i < node->wideStr.len - 1; i++) {
                 fprintf(file, "%u,", arr[i]);
             }
-            fprintf(file, "%u", arr[node->wideLen - 1]);
+            fprintf(file, "%u", arr[node->wideStr.len - 1]);
 
             break;
         }
 
         case DT_U16: {
-            uint16_t* arr = (uint16_t*) node->wideStr;
+            uint16_t* arr = (uint16_t*) node->wideStr.buff;
 
-            for (int i = 0; i < node->wideLen - 1; i++) {
+            for (int i = 0; i < node->wideStr.len - 1; i++) {
                 fprintf(file, "%u,", arr[i]);
             }
-            fprintf(file, "%u", arr[node->wideLen - 1]);
+            fprintf(file, "%u", arr[node->wideStr.len - 1]);
 
             break;
         }
 
         case DT_U32: {
-            uint32_t* arr = (uint32_t*) node->wideStr;
+            uint32_t* arr = (uint32_t*) node->wideStr.buff;
 
-            for (int i = 0; i < node->wideLen - 1; i++) {
+            for (int i = 0; i < node->wideStr.len - 1; i++) {
                 fprintf(file, "%u,", arr[i]);
             }
-            fprintf(file, "%u", arr[node->wideLen - 1]);
+            fprintf(file, "%u", arr[node->wideStr.len - 1]);
 
             break;
         }
 
         case DT_U64: {
-            uint64_t* arr = (uint64_t*) node->wideStr;
+            uint64_t* arr = (uint64_t*) node->wideStr.buff;
 
-            for (int i = 0; i < node->wideLen - 1; i++) {
+            for (int i = 0; i < node->wideStr.len - 1; i++) {
                 fprintf(file, "%llu,", arr[i]);
             }
-            fprintf(file, "%llu", arr[node->wideLen - 1]);
+            fprintf(file, "%llu", arr[node->wideStr.len - 1]);
 
             break;
         }

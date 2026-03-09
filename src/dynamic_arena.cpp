@@ -158,9 +158,11 @@ namespace Arena {
 
         if (!arena->head) return;
 
+        // TODO : it seems we are losing allocated blocks
         arena->tail = arena->head;
         arena->tail->pos = 0;
         arena->blockCount = 1;
+        arena->logicalPos = 0;
 
     }
 

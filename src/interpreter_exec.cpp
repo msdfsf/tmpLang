@@ -1,8 +1,9 @@
-// interpreter related code that suppose
-// to handle bytecode interpretatione
 
 #include "data_types.h"
+#include "dynamic_arena.h"
 #include "interpreter.h"
+#include "operators.h"
+#include "supplement/runtime.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -12,9 +13,9 @@
 #include "logger.h"
 #include "syntax.h"
 
-namespace Interpreter {
+#include "vec_kernel.h"
 
-    typedef uint64_t vmword;
+namespace Interpreter {
 
     Logger::Type logErr = { Logger::ERROR };
     Logger::Type LogWrn = { Logger::WARNING };
@@ -22,16 +23,28 @@ namespace Interpreter {
     vmword* stack;
     uint64_t stackSize;
 
+    // TODO : for now
+    Arena::Container heap;
+
+    // for now, and maybe forever, we just simply push to arena
+    struct VecContext {
+        Arena::Container arena;
+    };
+    thread_local VecContext vecContext;
 
 
+
+    // TODO : refactor to getVM and create struct
     vmword* getFreeStack() {
-        // TODO for now no concurency
+        // TODO for now no concurrency
         return stack;
     }
 
     void initExec() {
         stackSize = 1024 * 1024;
         stack = (vmword*) alloc(alc, stackSize, 8);
+        Arena::init(&heap, stackSize);
+        Arena::init(&vecContext.arena, stackSize);
     }
 
     Err::Err toValue(Function* fcn, vmword* buff, uint64_t buffSize, Value* out) {
@@ -81,8 +94,9 @@ namespace Interpreter {
     }
 
 
+
     // some useful functions to not copy-paste that much
-    // hopefuly they get optimized
+    // hopefully they get optimized
 
     template <typename Dtype>
     inline Dtype _unaligned_fetch(uint8_t*& buffer) {
@@ -104,28 +118,18 @@ namespace Interpreter {
         stack++;
     }
 
-    inline void setupCall(ExeBlock* exe, vmword*& sp, uint8_t*& ip) {
-        PUSH(sp, (uint64_t) ip);
-        PUSH(sp, (uint64_t) fp);
-
-        fp = (uint8_t*) sp;
-
-        GROW(sp, exe->localsSize);
-        memcpy(fp, exe->locals, exe->localsSize);
-
-        ip = exe->bytecode;
-    }
-
     // macros so we can change the implementation
     // for platforms/build modes
 
-    #define GROW(stack, size) (stack += ((size) + 7) >> 3)
-    #define DROP(stack, size) (stack -= ((size) + 7) >> 3)
+    #define GROW(stack, size) ((stack) += ((size) + 7) >> 3)
+    #define GROW_IN_WORDS(stack, size) ((stack) += (size))
+    #define DROP(stack, size) ((stack) -= ((size) + 7) >> 3)
+    #define DROP_IN_WORDS(stack, size) ((stack) -= (size))
 
     #define FETCH(buffer, dtype) (_unaligned_fetch<dtype>(buffer))
     #define FETCH_ALIGN(buffer, dtype) (_aligned_fetch<dtype>(buffer))
     #define PUSH(stack, word) (_push(stack, word))
-    #define POP(stack) (*stack -= 1)
+    #define POP(stack) (*(stack -= 1))
 
     #define BINARY_EXP(dtype, op) BINARY_EXP_EX(dtype, dtype, op)
     #define BINARY_EXP_EX(dtype, resultCast, op) \
@@ -140,22 +144,129 @@ namespace Interpreter {
         *(sp - 1) = *(store*) &val;
 
 
+    int execPrint(ExeBlock* exe, uint8_t* fp, vmword* sp) {
+
+        uint64_t argsCnt = POP(sp);
+        DROP(sp, argsCnt * 2 * sizeof(vmword));
+
+        uint64_t fmtLen = POP(sp);
+        char* fmt = (char*) (exe->rawData + POP(sp));
+
+        int idx = 0;
+        int argIdx = 1;
+        int beginIdx = 0;
+        for (; idx < fmtLen; idx++) {
+
+            const char ch = fmt[idx];
+            if (ch == '%') {
+
+                if (argIdx >= argsCnt + 1) {
+                    printf("<MISSING ARG>");
+                    beginIdx = idx + 1;
+                    continue;
+                }
+
+                Runtime::_Any arg;
+                arg.info = (Runtime::_TypeInfo*) sp[2 * argIdx];
+                arg.u = sp[2 * argIdx + 1];
+
+                fwrite(fmt + beginIdx, 1, idx - beginIdx, stdout);
+                printValue(arg);
+
+                argIdx++;
+                beginIdx = idx + 1;
+
+            }
+
+        }
+
+        fwrite(fmt + beginIdx, 1, idx - beginIdx, stdout);
+
+        return 2 + argsCnt * 2 + 1;
+
+    }
+
+    int execAlloc(ExeBlock* exe, uint8_t* fp, vmword* sp) {
+
+        uint64_t bytes = POP(sp);
+
+        void* ptr = Arena::push(&heap, bytes);
+        PUSH(sp, (vmword) ptr);
+
+        return 2 + 1;
+
+    }
+
+    // returns the size of the stack frame in words
+    int internalCall(ExeBlock* exe, uint8_t* fp, vmword* sp, Internal::FunctionType ft) {
+
+        switch (ft) {
+
+            case Internal::IF_PRINTF: {
+                return execPrint(exe, fp, sp);
+            }
+
+            case Internal::IF_ALLOC: {
+                return execAlloc(exe, fp, sp);
+            }
+
+            default: {
+                printf("<UNIMPLEMENTED>");
+            }
+
+        }
+
+    }
+
+
+
+    // --- Some vectorization functions
+    //
+
+    VecInfo vecFetchInfo(uint8_t** ip) {
+        uint64_t desc = FETCH(*ip, uint64_t);
+        uint64_t dest = FETCH(*ip, uint64_t);
+        return {
+            .dest = dest,
+            .desc = decodeVecDescriptor(desc)
+        };
+    }
+
+    void* vecGetPtr(VecInfo info, uint64_t len, uint8_t* fp) {
+        if (!(info.desc.flags & DE_F_DEST)) {
+            return fp + info.dest;
+        }
+        return Arena::push(&vecContext.arena, len, sizeof(vmword));
+    }
+
+    void* vecAlloc(VecInfo info, const int len) {
+        return Arena::push(&vecContext.arena, len, sizeof(vmword));
+    }
+
+    void vecResetMemory() {
+        Arena::clear(&vecContext.arena);
+    }
+
+
 
     Err::Err exec(Function* fcn, Value* out) {
+
+        Arena::clear(&heap);
 
         ExeBlock* block = fcn->exe;
 
         vmword* sp = getFreeStack(); // operand stack pointer
-        uint8_t* ip; // bytecode instruction pointer
-        uint8_t* fp; // current frame on operand stack
+        uint8_t* ip = block->bytecode; // bytecode instruction pointer
 
         // setup 'fake' call with exit
+        // for now assuming only void
         uint8_t trap[] = { OC_HALT };
-        PUSH(sp, (uint64_t) trap);
+        PUSH(sp, (uint64_t) (trap));
         PUSH(sp, 0);
 
-        fp = (uint8_t*) sp;
-        ip = block->bytecode;
+        uint8_t* fp = (uint8_t*) sp; // current frame on operand stack
+        GROW(sp, block->localsSize * sizeof(vmword));
+        memcpy(fp, block->locals, block->localsSize * sizeof(vmword));
 
         while (1) {
 
@@ -209,6 +320,8 @@ namespace Interpreter {
 
                    GROW(sp, size);
                    memcpy(sp, fp + offset, size);
+
+                   break;
                 }
 
                 case OC_SET_I8:
@@ -217,6 +330,8 @@ namespace Interpreter {
 
                     vmword word = POP(sp);
                     memcpy(fp + offset, &word, sizeof(uint8_t));
+
+                    break;
                 }
 
                 case OC_SET_I16:
@@ -225,6 +340,8 @@ namespace Interpreter {
 
                     vmword word = POP(sp);
                     memcpy(fp + offset, &word, sizeof(uint16_t));
+
+                    break;
                 }
 
                 case OC_SET_I32:
@@ -234,15 +351,20 @@ namespace Interpreter {
 
                     vmword word = POP(sp);
                     memcpy(fp + offset, &word, sizeof(uint32_t));
+
+                    break;
                 }
 
                 case OC_SET_I64:
                 case OC_SET_U64:
-                case OC_SET_F64: {
+                case OC_SET_F64:
+                case OC_SET_PTR: {
                     const uint64_t offset = FETCH(ip, uint64_t);
 
                     vmword word = POP(sp);
                     memcpy(fp + offset, &word, sizeof(uint64_t));
+
+                    break;
                 }
 
                 case OC_SET_BLOB: {
@@ -251,37 +373,45 @@ namespace Interpreter {
 
                     DROP(sp, size);
                     memcpy(fp + offset, sp, size);
+
+                    break;
                 }
 
                 case OC_GET_I8: {
                     const uint64_t offset = FETCH(ip, uint64_t);
                     PUSH(sp, *(int8_t*) (fp + offset));
+                    break;
                 }
 
                 case OC_GET_U8: {
                     const uint64_t offset = FETCH(ip, uint64_t);
                     PUSH(sp, *(uint8_t*) (fp + offset));
+                    break;
                 }
 
                 case OC_GET_I16: {
                     const uint64_t offset = FETCH(ip, uint64_t);
                     PUSH(sp, *(int16_t*) (fp + offset));
+                    break;
                 }
 
                 case OC_GET_U16: {
                     const uint64_t offset = FETCH(ip, uint64_t);
                     PUSH(sp, *(uint16_t*) (fp + offset));
+                    break;
                 }
 
                 case OC_GET_I32: {
                     const uint64_t offset = FETCH(ip, uint64_t);
                     PUSH(sp, *(int32_t*) (fp + offset));
+                    break;
                 }
 
                 case OC_GET_U32:
                 case OC_GET_F32: {
                     const uint64_t offset = FETCH(ip, uint64_t);
                     PUSH(sp, *(uint32_t*) (fp + offset));
+                    break;
                 }
 
                 case OC_GET_I64:
@@ -290,6 +420,7 @@ namespace Interpreter {
                 case OC_GET_PTR: {
                     const uint64_t offset = FETCH(ip, uint64_t);
                     PUSH(sp, *(uint64_t*) (fp + offset));
+                    break;
                 }
 
                 case OC_GET_BLOB: {
@@ -299,14 +430,30 @@ namespace Interpreter {
                     vmword* dest = sp;
                     GROW(sp, size);
                     memcpy(dest, fp + offset, size);
+
+                    break;
                 }
 
                 case OC_LEA: {
+                    const uint64_t offset = FETCH(ip, uint64_t);
+                    PUSH(sp, (vmword) (fp + offset));
+                    break;
+                }
 
+                case OC_LEA_CONST: {
+                    const uint64_t offset = FETCH(ip, uint64_t);
+                    PUSH(sp, (vmword) (block->rawData + offset));
+                    break;
                 }
 
                 case OC_PTR_IDX: {
+                    const uint64_t stride = FETCH(ip, uint64_t);
+                    const uint64_t idx = POP(sp);
 
+                    uint8_t* ptr = ((uint8_t*) POP(sp)) + stride * idx;
+                    PUSH(sp, (vmword) ptr);
+
+                    break;
                 }
 
                 // DUMAT: can align > 8 ocure on my operand
@@ -830,17 +977,33 @@ namespace Interpreter {
                 }
 
                 case OC_CALL: {
-                    Function* fcn = (Function*) POP(sp);
+                    Function* fcn = (Function*) FETCH(ip, uint64_t);
+                    FETCH(ip, uint64_t); // vararg count, we dont need here
                     ExeBlock* exe = fcn->exe;
 
-                    PUSH(sp, (uint64_t) ip);
-                    PUSH(sp, (uint64_t) fp);
+                    if (isValidFunctionIdx(fcn->internalIdx)) {
+                        int fSize = internalCall(block, fp, sp, (Internal::FunctionType)fcn->internalIdx);
+                        DROP_IN_WORDS(sp, 2 + fSize);
+                        break;
+                    }
 
-                    fp = (uint8_t*) sp;
+                    // sizes are measured in words
+                    //
+                    const uint64_t fixedSize = exe->fixedSize;
+                    const uint64_t varargSize = exe->isVariadic ? 2 * (*(sp - 1)) + 1 : 0;
 
-                    GROW(sp, exe->localsSize);
-                    memcpy(fp, exe->locals, exe->localsSize);
+                    const uint64_t scopeSize = exe->localsSize - exe->defaultArgsSize;
+                    vmword* scopeLocals = sp - varargSize;
 
+
+                    GROW_IN_WORDS(sp, scopeSize);
+                    memmove(scopeLocals + scopeSize, scopeLocals, varargSize * sizeof(vmword));
+                    memcpy(scopeLocals, exe->locals + exe->defaultArgsSize, scopeSize * sizeof(vmword));
+
+                    *(sp - fixedSize - varargSize - 1) = (vmword) fp;
+                    *(sp - fixedSize - varargSize - 2) = (vmword) ip;
+
+                    fp = (uint8_t*) (sp - fixedSize - varargSize);
                     ip = exe->bytecode;
 
                     break;
@@ -848,6 +1011,11 @@ namespace Interpreter {
 
                 case OC_RET: {
                     uint64_t size = FETCH(ip, uint64_t);
+
+                    const uint64_t avaliableSize = ((sp - (vmword*) fp) + 2) * sizeof(vmword);
+                    if (avaliableSize < size) {
+                        GROW(sp, size - avaliableSize);
+                    }
 
                     DROP(sp, size);
                     void* returnData = sp;
@@ -862,18 +1030,197 @@ namespace Interpreter {
                     break;
                 }
 
-                case OC_HALT: {
+                case OC_GROW: {
+                    GROW(sp, FETCH(ip, uint64_t));
                     break;
                 }
 
+                case OC_HALT: {
+                    goto loopEnd;
+                    break;
+                }
+
+                case OC_VEC_VV: {
+                    uint64_t lenB = POP(sp);
+                    uint64_t ptrB = POP(sp);
+                    uint64_t lenA = POP(sp);
+                    uint64_t ptrA = POP(sp);
+
+                    if (lenA != lenB) {
+                        // TODO
+                    }
+
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, lenA, fp);
+
+                    VecFunctionBinary fcn = vecGetBinary(info.desc.dtype, info.desc.oper);
+                    fcn(out, (void*) ptrA, (void*) ptrB, lenA);
+                    
+                    PUSH(sp, (vmword) out);
+                    PUSH(sp, lenA);
+                    break;
+                }
+
+                case OC_VEC_VS: {
+                    uint64_t val = POP(sp);
+                    uint64_t len = POP(sp);
+                    uint64_t ptr = POP(sp);
+                
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, len, fp);
+
+                    VecFunctionScalar fcn = vecGetScalarR(info.desc.dtype, info.desc.oper);
+                    fcn(out, (void*)ptr, val, len);
+
+                    PUSH(sp, (vmword)out);
+                    PUSH(sp, len);
+                    break;
+                }
+                
+                case OC_VEC_SV: {
+                    uint64_t len = POP(sp);
+                    uint64_t ptr = POP(sp);
+                    uint64_t val = POP(sp);
+
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, len, fp);
+
+                    VecFunctionScalar fcn = vecGetScalarL(info.desc.dtype, info.desc.oper);
+                    fcn(out, (void*) ptr, val, len);
+                    
+                    PUSH(sp, (vmword) out);
+                    PUSH(sp, len);
+                    break;
+                }
+
+                case OC_VEC_UNARY: {
+                    uint64_t len = POP(sp);
+                    uint64_t ptr = POP(sp);
+
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, len, fp);
+
+                    VecFunctionUnary fcn = vecGetUnary(info.desc.dtype, info.desc.oper);
+                    fcn(out, (void*) ptr, len);
+                    
+                    PUSH(sp, (vmword) out);
+                    PUSH(sp, len);
+                    break;
+                }
+
+                case OC_VEC_CAST: {
+                    uint64_t len = POP(sp);
+                    uint64_t ptr = POP(sp);
+
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, len, fp);
+
+                    VecFunctionCast fcn = vecGetCast(info.desc.dtype, info.desc.srcDtype);
+                    fcn(out, (void*) ptr, len);
+
+                    PUSH(sp, (vmword) out);
+                    PUSH(sp, len);
+                    break;
+                }
+
+                case OC_VEC_LOAD_INDIRECT: {
+                    // TODO
+                    break;
+                }
+
+                case OC_VEC_STORE_INDIRECT: {
+                    // TODO
+                    break;
+                }
+
+                case OC_VEC_CAT: {
+                    uint64_t lenB = POP(sp);
+                    uint64_t ptrB = POP(sp);
+                    uint64_t lenA = POP(sp);
+                    uint64_t ptrA = POP(sp);
+
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, lenA + lenB, fp);
+
+                    memcpy(out, (void*) ptrA, lenA);
+                    memcpy(((uint8_t*) out) + lenA, (void*) ptrB, lenB);
+
+                    PUSH(sp, (vmword) out);
+                    PUSH(sp, lenA + lenB);
+                    break;
+                }
+
+                case OC_VEC_COPY: {
+                    uint64_t len = POP(sp);
+                    uint64_t ptr = POP(sp);
+
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, len, fp);
+
+                    int dtypeSize = dataTypes[info.desc.dtype].size;
+                    memcpy(out, (void*) ptr, len * dtypeSize);
+
+                    PUSH(sp, (vmword) out);
+                    PUSH(sp, len);
+                    break;
+                }
+
+                case OC_VEC_FILL: {
+                    uint64_t len = POP(sp);
+                    uint64_t val = POP(sp);
+
+                    VecInfo info = vecFetchInfo(&ip);
+                    void* out = vecGetPtr(info, len, fp);
+
+                    VecFunctionFill fcn = vecGetFill(info.desc.dtype);
+                    fcn(out, val, len);
+                    
+                    PUSH(sp, (vmword) out);
+                    PUSH(sp, len);
+                    break;
+                }
+
+                case OC_VEC_ALLOC: {
+                    uint64_t bytes = POP(sp);
+                    //vecAlloc(bytes);
+                    break;
+                }
+
+                case OC_VEC_TO_REF: {
+                    uint64_t len = POP(sp);
+                    uint64_t ptr = POP(sp);
+
+                    Runtime::_Slice* slot = (Runtime::_Slice*) Arena::push(&vecContext.arena, sizeof(Runtime::_Slice));
+                    slot->ptr = (char*) ptr;
+                    slot->len = len;
+
+                    PUSH(sp, (vmword) slot);
+                    break;
+                }
+
+                case OC_VEC_MEM_RESET: {
+                    vecResetMemory();
+                    break;
+                }
+
+                case OC_VEC_RESET: {
+                    DROP(sp, 2 * sizeof(vmword));
+                    vecResetMemory();
+                    break;
+                }
+
+
                 default: {
-                    Logger::log(logErr, "tmp");
+                    Logger::log(logErr, "Opcode %s (%i) not yet implemented.\n", NULL, toStr(opcode), opcode);
                     return Err::NOT_YET_IMPLEMENTED;
                 }
 
             }
 
         }
+        loopEnd:
+
+        ip = block->bytecode + block->bytecodeSize - sizeof(uint64_t);
 
         uint64_t ansSize = FETCH(ip, uint64_t);
         DROP(sp, ansSize);

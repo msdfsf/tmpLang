@@ -64,6 +64,8 @@ struct Union;
 struct GetLength;
 struct GetSize;
 struct Catch;
+struct Alloc;
+struct Free;
 struct Using;
 
 struct ScopeName;
@@ -115,6 +117,7 @@ struct DArrayReturnStatement     { DArray::Container base; };
 struct DArraySwitchCase          { DArray::Container base; };
 struct DArraySlice               { DArray::Container base; };
 struct DArrayImportStatement     { DArray::Container base; };
+struct DArrayAllocations         { DArray::Container base; };
 
 
 
@@ -162,6 +165,8 @@ enum AllocExType : AllocType {
     AT_EXT_SLICE,
     AT_EXT_CATCH,
     AT_EXT_CAST,
+    AT_EXT_ALLOC,
+    AT_EXT_FREE,
     AT_EXT_GET_LENGTH,
     AT_EXT_GET_SIZE,
     AT_INAMED,
@@ -186,6 +191,13 @@ enum ScopeType {
     SC_COMMON = 0
 };
 
+// to be used within concurrent tasks
+enum TaskStatus {
+    TS_PENDING = 0,
+    TS_RUNNING = 1,
+    TS_READY   = 2
+};
+
 enum ExpressionType {
     EXT_FUNCTION_CALL = AT_EXT_FUNCTION_CALL,
     EXT_OPERATION,
@@ -198,6 +210,8 @@ enum ExpressionType {
     EXT_SLICE,
     EXT_CATCH,
     EXT_CAST,
+    EXT_ALLOC,
+    EXT_FREE,
     EXT_GET_LENGTH,
     EXT_GET_SIZE,
 };
@@ -342,6 +356,29 @@ struct Expression {
     ExpressionType type;
 };
 
+struct OperationExpression {
+    Expression base;
+    OperatorEnum opType;
+};
+
+struct UnaryExpression {
+    OperationExpression base;
+    Variable* operand;
+};
+
+struct BinaryExpression {
+    OperationExpression base;
+    Variable* left;
+    Variable* right;
+};
+
+struct TernaryExpression {
+    OperationExpression base;
+    Variable* condition;
+    Variable* trueExp;
+    Variable* falseExp;
+};
+
 struct TypeInitialization {
     Expression base;
 
@@ -356,21 +393,16 @@ struct TypeInitialization {
 struct StringInitialization {
     Expression base;
 
-    // pointer to start of the string in source file
-    char* rawPtr;
-    int rawPtrLen;
+    String rawStr;
 
-    // already escaped
-    std::string rawStr;
-
-    void* wideStr;
-    DataTypeEnum wideDtype;
-    int wideLen;
+    String wideStr;
+    DataTypeEnum wideDtype; // TODO: make just dtype
 };
 
 struct ArrayInitialization {
     Expression base;
     DArrayVariable attributes;
+    Flags flags;
 };
 
 struct Catch {
@@ -389,15 +421,29 @@ struct Cast {
     Variable* operand;
 };
 
+struct Alloc {
+    Expression base;
+    VariableDefinition* def;
+};
+
+struct Free {
+    Expression base;
+    Variable* var;
+};
+
 struct GetLength {
     Expression base;
-    Array* arr;
+    Variable* arr;
 };
+static_assert(sizeof(GetLength) <= sizeof(BinaryExpression),
+              "GetLength exceeded size of BinaryExpression");
 
 struct GetSize {
     Expression base;
-    Array* arr;
+    Variable* arr;
 };
+static_assert(sizeof(GetSize) <= sizeof(BinaryExpression),
+              "GetLength exceeded size of BinaryExpression");
 
 struct VariableDefinition {
     SyntaxNode base;
@@ -429,8 +475,6 @@ struct VariableAssignment {
     Variable* rvar;
     // Variable* offsetVar; // for arrays and maybe something else
 
-    VariableAssignment();
-    VariableAssignment(Span* span);
 };
 
 struct Variable {
@@ -473,6 +517,7 @@ struct Function {
     QualifiedName* errorSetName;
     ErrorSet* errorSet;
 
+    TaskStatus compilationStatus;
     Interpreter::ExeBlock* exe;
 };
 
@@ -568,29 +613,6 @@ struct Label {
     SyntaxNode base;
     INamedEx name;
     Span* span;
-};
-
-struct OperationExpression {
-    Expression base;
-    OperatorEnum opType;
-};
-
-struct UnaryExpression {
-    OperationExpression base;
-    Variable* operand;
-};
-
-struct BinaryExpression {
-    OperationExpression base;
-    Variable* left;
-    Variable* right;
-};
-
-struct TernaryExpression {
-    OperationExpression base;
-    Variable* condition;
-    Variable* trueExp;
-    Variable* falseExp;
 };
 
 struct TypeDefinition {
@@ -709,7 +731,7 @@ struct _RegMemory {
 
     static void init();
 
-    static constexpr size_t dataSize = 26;
+    static constexpr size_t dataSize = 27;
 
     // contain references to nodes in linear way
     // so validator dont have to traverse tree that much
@@ -745,6 +767,7 @@ struct _RegMemory {
             DArrayTypeDefinition       customDataTypes;
             DArrayEnumerator           enumerators;
             DArrayGotoStatement        gotos;
+            DArrayAllocations          allocations;
         };
 
     };
@@ -785,6 +808,8 @@ struct _RegMemory {
         static void init(Catch* node);
         static void init(Cast* node);
         static void init(Slice* node);
+        static void init(Alloc* node);
+        static void init(Free* node);
 
         static void init(Pointer* node);
         static void init(Array* node);
@@ -828,6 +853,8 @@ struct _RegMemory {
         static Catch*               initCatch();
         static Cast*                initCast();
         static Slice*               initSlice();
+        static Alloc*               initAlloc();
+        static Free*                initFree();
 
         static Pointer*              initPointer();
         static Array*                initArray();
@@ -1026,6 +1053,8 @@ constexpr int nodeTypeSize[AT_COUNT] = {
     sizeof(Slice),
     sizeof(Catch),
     sizeof(Cast),
+    sizeof(Alloc),
+    sizeof(Free),
     sizeof(GetLength),
     sizeof(GetSize),
 
@@ -1065,3 +1094,11 @@ constexpr int nodeTypeSize[AT_COUNT] = {
     }
 
 #endif
+
+
+
+// ======================================
+// MISC
+// ===
+
+Variable* unwrap(Variable* var);

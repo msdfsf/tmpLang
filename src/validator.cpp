@@ -12,10 +12,16 @@
 #include "syntax.h"
 #include "interpreter.h"
 #include "lexer.h"
+#include "supplement/runtime.h"
 #include <cstring>
-#include <ios>
+
+
 
 namespace Validator {
+
+    enum {
+        EXACT_MATCH = 1
+    };
 
     Logger::Type logErr = { .level = Logger::ERROR, .tag = "validator" };
     Logger::Type logWrn = { .level = Logger::WARNING, .tag = "validator" };
@@ -37,11 +43,18 @@ namespace Validator {
         if (err != Err::OK) return err;
 
         // TEST:
+        // TODO before :
+        //  1) resolve types in array lengths
+        //  2) check if function returns
         Interpreter::init();
         Function* fcn = *(Function**) DArray::get(&SyntaxNode::root->fcns.base, 0);
-        Interpreter::ExeBlock block;
-        Interpreter::compile(fcn, &block);
-        Interpreter::print(&block);
+        // fcn->exe = (Interpreter::ExeBlock*) alloc(alc, sizeof(Interpreter::ExeBlock));
+        Interpreter::compile(fcn);
+        Interpreter::print(fcn);
+
+        Value val;
+        Interpreter::exec(fcn, &val);
+        printf("val: %d\n", val.i64);
 
         err = validateFunctionCalls();
         if (err != Err::OK) return err;
@@ -346,7 +359,7 @@ namespace Validator {
 
             }
 
-            Logger::log(logErr, ERR_STR(Err::UNKNOWN_VARIABLE), var->base.span, var->name.len, var->name.len, var->name.buff);
+            Logger::log(logErr, ERR_STR(Err::UNKNOWN_VARIABLE), var->base.span, var->name.len, var->name.buff);
             return Err::UNKNOWN_VARIABLE;
 
         }
@@ -450,8 +463,14 @@ namespace Validator {
     // TYPE RESOLUTION STUFF
 
     Err::Err applyImplicitCast(Value* lval, Variable* rvar) {
-        
-        if (lval->dtypeEnum == rvar->cvalue.dtypeEnum) {
+
+        if (lval->dtypeEnum == DT_MULTIPLE_TYPES) {
+            return Err::OK;
+        }
+
+        if (isBasicDtype(lval->dtypeEnum) && 
+            lval->dtypeEnum == rvar->cvalue.dtypeEnum
+        ) {
             return Err::OK;
         }
 
@@ -461,13 +480,32 @@ namespace Validator {
             return Err::OK;
         }
 
+        // TODO : proper implicit cast validation requaried!!!
+        const int64_t ans = (int64_t) validateImplicitCast(
+            rvar->cvalue.any, lval->any,
+            rvar->cvalue.dtypeEnum, lval->dtypeEnum
+        );
+        
+        if (ans < 0) {
+            // TODO : error
+            Logger::log(logErr, "It was a bad day for an implicit cast :(");
+            return Err::UNEXPECTED_SYMBOL;
+        } else if (ans == EXACT_MATCH) {
+            return Err::OK;
+        }
+
         // clone the current node to preserve also metadata
         // TODO: maybe no need to do a full copy
         Variable* innerOperand = Reg.Node.copy(rvar);
 
         Cast* castEx = Reg.Node.initCast();
         castEx->operand = innerOperand;
-        castEx->target = lval->dtypeEnum;
+
+        if (lval->dtypeEnum != DT_ARRAY) {
+            castEx->target = lval->dtypeEnum;
+        } else {
+            castEx->target = lval->arr->base.pointsToEnum;
+        }
 
         rvar->expression = (Expression*) castEx;
         rvar->cvalue = *lval;
@@ -491,34 +529,64 @@ namespace Validator {
             err = applyImplicitCast(&leftValue, def->var);
             if (err != Err::OK) return err;
 
+            // in case of static array, we may need to infer length
+            // TODO : IS_CMP_TIME to IS_EMBEDED ?
+            if (leftValue.dtypeEnum == DT_ARRAY && leftValue.arr->flags & IS_CMP_TIME) {
+                Variable* len = (Variable*) unwrap(leftValue.arr->length);
+                if (len && !len->cvalue.hasValue) {
+                    continue;
+                }
+            }
+
             def->var->cvalue = leftValue;
 
         }
 
+        // TODO : tobe removed, as it should happens naturaly
         for (int i = 0; i < Reg.fcnCalls.base.size; i++) {
 
             Variable* var = *(Variable**) DArray::get(&Reg.fcnCalls.base, i);
             FunctionCall* call = (FunctionCall*) var->expression;
 
+            int variadic = 0;
             for (int i = 0; i < call->inArgs.base.size; i++) {
-                
+
                 Variable* arg = *(Variable**) DArray::get(&call->inArgs.base, i);
-                Variable* def = *(Variable**) DArray::get(&call->fcn->prototype.inArgs.base, i);
 
                 err = resolveTypes(arg);
                 if (err != Err::OK) return err;
 
-                err = applyImplicitCast(&def->cvalue, arg);
+                if (variadic) continue;
+
+                VariableDefinition* def = *(VariableDefinition**)DArray::get(&call->fcn->prototype.inArgs.base, i);
+                if (def->var->cvalue.dtypeEnum == DT_MULTIPLE_TYPES) {
+                    variadic = 1;
+                }
+
+                err = applyImplicitCast(&def->var->cvalue, arg);
                 if (err != Err::OK) return err;
 
             }
 
         }
 
+        for (int i = 0; i < Reg.returnStatements.base.size; i++) {
+
+            ReturnStatement* ret = *(ReturnStatement**) DArray::get(&Reg.returnStatements.base, i);
+
+            err = resolveTypes(ret->var);
+            if (err != Err::OK) return err;
+
+            err = applyImplicitCast(&ret->fcn->prototype.outArg->var->cvalue, ret->var);
+            if (err != Err::OK) return err;
+
+            // TODO : error?
+        }
+
         for (int i = 0; i < Reg.variableAssignments.base.size; i++) {
 
             VariableAssignment* ass = *(VariableAssignment**) DArray::get(&Reg.variableAssignments.base, i);
-            
+
             err = resolveTypes(ass->lvar);
             if (err != Err::OK) return err;
 
@@ -536,16 +604,134 @@ namespace Validator {
 
     }
 
-    Err::Err resolveResultType(UnaryExpression* uex, Variable* var) {
-        
-        if (uex->base.opType == OP_GET_ADDRESS) {
-            var->cvalue.dtypeEnum = DT_POINTER;
+    inline void inheritType(Variable* dest, Value* source) {
+        if (isPrimitive(source->dtypeEnum)) {
+            dest->cvalue.dtypeEnum = source->dtypeEnum;
         } else {
-            var->cvalue.dtypeEnum = uex->operand->cvalue.dtypeEnum;
+            dest->cvalue = *source;
+        }
+    }
+
+    Err::Err resolveResultType(UnaryExpression* uex, Variable* var) {
+
+        const OperatorEnum op = uex->base.opType;
+        if (op == OP_GET_ADDRESS) {
+
+            // LOOK AT : do we need to create?
+            Pointer* ptr = Reg.Node::initPointer();
+            ptr->pointsToEnum = uex->operand->cvalue.dtypeEnum;
+            ptr->pointsTo = uex->operand->cvalue.any;
+
+            var->cvalue.ptr = ptr;
+            var->cvalue.dtypeEnum = DT_POINTER;
+
+        } else if (op == OP_GET_VALUE) {
+
+            // TODO : view binary version
+            if (!isIndexable(uex->operand->cvalue.dtypeEnum)) {
+                // TODO : eerorr
+            }
+
+            var->cvalue.any = uex->operand->cvalue.ptr->pointsTo;
+            var->cvalue.dtypeEnum = uex->operand->cvalue.ptr->pointsToEnum;
+
+        } else {
+
+            inheritType(var, &uex->operand->cvalue);
+
         }
 
         return Err::OK;
-    
+
+    }
+
+    Err::Err resolveMember(BinaryExpression* bex, Variable* var) {
+
+        Variable* parent = bex->left;
+        Variable* member = bex->right;
+
+        const DataTypeEnum parentType = parent->cvalue.dtypeEnum;
+        const DataTypeEnum memberType = member->cvalue.dtypeEnum;
+
+        String* memberName = (String*) &member->name;
+        // TODO : add validation of members path name, doesnt suppose to have one
+        //  but not sure it should happen here...
+
+        if (parentType == DT_ARRAY) {
+
+            // TODO : for now this way, but think to chenge the operator or
+            //   expression type, a bit of fragmentation, but thats what happens
+            //   with additional alloc/dealloc
+            if (Strings::compare(memberName, String(Lex::KWS_ARRAY_LENGTH))) {
+                bex->base.base.type = EXT_GET_LENGTH;
+                ((GetLength*) bex)->arr = parent;
+            } else if (Strings::compare(memberName, String(Lex::KWS_ARRAY_SIZE))) {
+                bex->base.base.type = EXT_GET_SIZE;
+                ((GetSize*) bex)->arr = parent;
+            } else {
+                Logger::log(logErr, "Unknown member of array!");
+                return Err::UNEXPECTED_SYMBOL;
+            }
+
+            var->cvalue.dtypeEnum = DT_U64;
+            // TODO : I guess we can just alias GetLength and GetSize
+            //  to a BinaryExpression and change the type, so we can
+            //  just keep the data and clean them when the time comes
+            //  as we may need dealloc to work in arena case for the last
+            //  allocated pointer, therefore we cannot free here as we corrupt
+            //  the arena.
+            // dealloc(alc, member);
+
+            return Err::OK;
+
+        }
+
+        return Err::OK;
+
+        /*
+        if (dtypeA == DT_ENUM) {
+
+            Enumerator* en = parent->cvalue.enm;
+            Variable* var = Reg.Find.inArray(&en->vars, memberName);
+            if (!var) {
+                Logger::log(logErr, "Unable to find member of enum!", member->base.span, 0);
+                return Err::UNEXPECTED_SYMBOL;
+            }
+
+            return Err::OK;
+
+        }
+
+        if (dtypeA == DT_POINTER) {
+
+            Variable* var = (Variable*) bex->right;
+            Pointer* ptr = (Pointer*) customDtypeA;
+
+            if (ptr->pointsToEnum != DT_CUSTOM || !ptr->pointsTo) {
+                Logger::log(logErr, "Invalid type of dereferenced pointer for member selection!", var->base.span, var->name.len);
+                return Err::INVALID_TYPE_CONVERSION;
+            }
+
+            bex->base.opType = OP_DEREFERENCE_MEMBER_SELECTION;
+            customDtypeA = (TypeDefinition*)(ptr->pointsTo);
+
+        } else if (dtypeA != DT_CUSTOM) {
+            Logger::log(logErr, "Invalid type for member selection!", bex->right->base.span, bex->right->name.len);
+            return Err::INVALID_TYPE_CONVERSION;
+        }
+
+        Variable* var = (Variable*)bex->right;
+        Variable* ans = Reg.Find.inArray(&customDtypeA->vars, (String*)&var->name);
+        if (!ans) {
+            Logger::log(logErr, ERR_STR(Err::INVALID_ATTRIBUTE_NAME), var->base.span, var->name.len, var->name.len, var->name.buff);
+            return Err::INVALID_ATTRIBUTE_NAME;
+        }
+
+        Reg.Node.copy(var, ans);
+
+        rdtype = ans->cvalue.dtypeEnum;
+        break;
+        */
     }
 
     Err::Err resolveResultType(BinaryExpression* bex, Variable* var) {
@@ -553,13 +739,40 @@ namespace Validator {
         DataTypeEnum lDtype = bex->left->cvalue.dtypeEnum;
         DataTypeEnum rDtype = bex->right->cvalue.dtypeEnum;
 
+        // Usually the result type can be derived from
+        // operands ranks but in few cases operator can
+        // influence the output type (arr[i])
+        if (bex->base.opType == OP_SUBSCRIPT) {
+
+            // TODO : move from this to a direct check, as we
+            //   may need different behavior for each type later
+            if (!isIndexable(lDtype)) {
+                // TODO : throw error
+            }
+
+            Pointer* ptr = bex->left->cvalue.ptr;
+            var->cvalue.any = ptr->pointsTo;
+            var->cvalue.dtypeEnum = ptr->pointsToEnum;
+
+            return Err::OK;
+
+        } else if (bex->base.opType == OP_MEMBER_SELECTION) {
+
+            // we also may want to change the operator to
+            // OP_DEREFERENCE_MEMEBER_SELECTION here if needed,
+            // so its simpler to compile
+            resolveMember(bex, var);
+            return Err::OK;
+
+        }
+
         // TODO:
         // validateImplicitCast(lDtype, rDtype);
 
-        if (dataTypes[lDtype].rank < dataTypes[rDtype].rank) {
-            var->cvalue.dtypeEnum = lDtype;
+        if (dataTypes[lDtype].rank > dataTypes[rDtype].rank) {
+            inheritType(var, &bex->left->cvalue);
         } else {
-            var->cvalue.dtypeEnum = rDtype;
+            inheritType(var, &bex->left->cvalue);
         }
 
         return Err::OK;
@@ -615,11 +828,34 @@ namespace Validator {
 
             case EXT_FUNCTION_CALL: {
 
+                // we lookup the last argument in fcn
+                // and check if we deal with vardic args
+                // if so we lazily compute runtime types
+                // so called 'any'
+                // TODO : grammar
                 FunctionCall* fex = (FunctionCall*) ex;
+                Function* fcn = fex->fcn;
 
-                for (int i = 0; i < fex->inArgs.base.size; i++) {
-                    VariableDefinition* def = (VariableDefinition*) DArray::get(&fex->inArgs.base, i);
-                    err = resolveTypes(def->var);
+                int callArgCount = fex->inArgs.base.size;
+                int fixedCount = fcn->prototype.inArgs.base.size;
+
+                if (fixedCount > 0) {
+                    VariableDefinition* lastArg = *(VariableDefinition**) DArray::get(&fcn->prototype.inArgs.base, fixedCount - 1);
+                    if (lastArg->var->cvalue.dtypeEnum == DT_MULTIPLE_TYPES) {
+                        fixedCount--;
+                    }
+                }
+
+                int i = 0;
+                for (; i < fixedCount && i < callArgCount; i++) {
+                    Variable* var = *(Variable**) DArray::get(&fex->inArgs.base, i);
+                    err = resolveTypes(var);
+                }
+
+                for (; i < callArgCount; i++) {
+                    Variable* var = *(Variable**) DArray::get(&fex->inArgs.base, i);
+                    err = resolveTypes(var);
+                    Runtime::getType(var);
                 }
 
                 resolveResultType(fex, var);
@@ -648,6 +884,78 @@ namespace Validator {
 
                 break;
 
+            }
+
+            case EXT_STRING_INITIALIZATION: {
+
+                StringInitialization* init = (StringInitialization*) ex;
+
+                var->cvalue.dtypeEnum = DT_STRING;
+
+                return Err::OK;
+
+            }
+
+            case EXT_ARRAY_INITIALIZATION: {
+                
+                ArrayInitialization* init = (ArrayInitialization*) ex;
+
+                Value* dominantVal = NULL;
+                int dominantIdx = 0;
+                bool isStatic = true;
+
+                Variable** buffer = (Variable**) init->attributes.base.buffer;
+                
+                for (int i = 0; i < init->attributes.base.size; i++) {
+                    
+                    Variable* arg = *(buffer + i);
+                    err = resolveTypes(arg);
+                    if (err != Err::OK) return err;
+
+                    if (isStatic && !arg->cvalue.hasValue) {
+                        isStatic = false;
+                    }
+
+                    // we want to make array type of the most 'dominant' type
+                    if (!dominantVal || dataTypes[dominantVal->dtypeEnum].rank < dataTypes[arg->cvalue.dtypeEnum].rank) {
+                        dominantVal = &arg->cvalue;
+                        dominantIdx = i;
+                    }
+
+                }
+
+                if (isStatic) {
+                    init->flags |= IS_CMP_TIME;
+                }
+
+                // now we check if we can cast all elments to the 'dominant' one
+                for (int i = 0; i < init->attributes.base.size; i++) {
+                    if (i == dominantIdx) continue;
+                    
+                    Variable* arg = *(buffer + i);
+                    err = applyImplicitCast(dominantVal, arg);
+                    if (err != Err::OK) return err;
+
+                }
+
+                // TODO : for now we allocate new Array for each case
+                var->cvalue.dtypeEnum = DT_ARRAY;
+                var->cvalue.arr = Reg.Node::initArray();
+                var->cvalue.arr->base.pointsToEnum = dominantVal->dtypeEnum;
+                var->cvalue.arr->base.pointsTo = dominantVal->any;
+                var->cvalue.arr->flags = IS_CMP_TIME;
+                if (dominantVal->dtypeEnum == DT_POINTER || dominantVal->dtypeEnum == DT_ARRAY) {
+                    var->cvalue.arr->base.parentPointer = dominantVal->ptr->parentPointer;
+                }
+                
+                Variable* len = Reg.Node.initVariable();
+                len->cvalue.hasValue = 1;
+                len->cvalue.dtypeEnum = DT_U64;
+                len->cvalue.u64 = init->attributes.base.size;
+                var->cvalue.arr->length = len;
+
+                return Err::OK;
+            
             }
 
             default: {
@@ -1647,20 +1955,31 @@ namespace Validator {
         return Err::INVALID_RVALUE;
     }
 
+    // TODO : naming could be better
+    // TODO : use dest/src?
     Err::Err validateImplicitCast(const DataTypeEnum dtype, const DataTypeEnum dtypeRef) {
 
-        const int basicTypes = (dtype != DT_VOID && dtypeRef != DT_VOID) && (dtype < DT_STRING && dtypeRef < DT_STRING);
-        const int arrayToPointer = (dtype == DT_ARRAY && dtypeRef == DT_POINTER);
-        const int pointerToArray = (dtypeRef == DT_ARRAY && dtype == DT_POINTER);
-        const int sliceToArray = dtype == DT_SLICE && dtypeRef == DT_ARRAY;
+        const bool basicTypes = (dtype != DT_VOID && dtypeRef != DT_VOID) && (dtype <= DT_F64 && dtypeRef <= DT_F64);
+        const bool arrayToPointer = (dtype == DT_ARRAY && dtypeRef == DT_POINTER);
+        const bool pointerToArray = (dtypeRef == DT_ARRAY && dtype == DT_POINTER);
+        const bool sliceToArray = dtype == DT_SLICE && dtypeRef == DT_ARRAY;
+        // this case shouldnt ever happen except for 'printf', so we can just check it like this
+        const bool stringToString = dtype == DT_STRING && dtypeRef == DT_STRING;
 
-        return (Err::Err) ((dtype == dtypeRef) || (basicTypes || arrayToPointer || pointerToArray || sliceToArray));
+        if (basicTypes && dtype == dtypeRef ||
+            dtype == DT_POINTER && dtypeRef == DT_POINTER
+        ) {
+            return (Err::Err) EXACT_MATCH;
+        }
+
+        const bool ans = ((basicTypes || arrayToPointer || pointerToArray || sliceToArray || stringToString));
+        return (Err::Err) ((int64_t) ans - 1);
 
     }
 
     Err::Err validateImplicitCast(void* dtype, void* dtypeRef, DataTypeEnum dtypeEnum, DataTypeEnum dtypeEnumRef) {
 
-        if (validateImplicitCast(dtypeEnum, dtypeEnumRef)) {
+        if (validateImplicitCast(dtypeEnum, dtypeEnumRef) >= 0) {
             return Err::OK;
         }
 
@@ -1677,7 +1996,7 @@ namespace Validator {
                 return Err::INVALID_TYPE_CONVERSION;
             }
 
-            if (!validateImplicitCast(arr->base.pointsToEnum, str->wideDtype)) {
+            if (validateImplicitCast(arr->base.pointsToEnum, str->wideDtype) < 0) {
                 Logger::log(logErr, "TODO error: ");
                 return Err::INVALID_TYPE_CONVERSION;
             }
@@ -1920,7 +2239,7 @@ namespace Validator {
         Expression* ex = var->expression;
         if (!ex) {
 
-            if (var->cvalue.dtypeEnum < DT_STRING) {
+            if (var->cvalue.dtypeEnum <= DT_F64) {
                 return Err::OK;
             }
 
@@ -2140,10 +2459,10 @@ namespace Validator {
                 len->cvalue.hasValue = 1;
                 len->cvalue.dtypeEnum = DT_I64;
 
-                if (init->wideStr) {
-                    len->cvalue.i64 = init->wideLen;
+                if (init->wideStr.buff) {
+                    len->cvalue.i64 = init->wideStr.len;
                 } else {
-                    len->cvalue.i64 = init->rawStr.size();
+                    len->cvalue.i64 = init->rawStr.len;
                 }
 
                 return Err::OK;
@@ -2986,8 +3305,8 @@ namespace Validator {
                     break;
                 }
 
-                Variable* fArg = ((VariableDefinition*) DArray::get(&fcn->prototype.inArgs.base, i))->var;
-                Variable* cArg = (Variable*) DArray::get(&call->inArgs.base, k);
+                Variable* fArg = (*(VariableDefinition**) DArray::get(&fcn->prototype.inArgs.base, i))->var;
+                Variable* cArg = *(Variable**) DArray::get(&call->inArgs.base, k);
 
                 k++;
 

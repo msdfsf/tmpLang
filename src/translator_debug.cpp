@@ -165,10 +165,6 @@ void printDataType(const DataTypeEnum dtypeEnum) {
 
         switch (dtypeEnum) {
 
-            case DT_INT :
-                printf("int");
-                break;
-
             case DT_I32 :
                 printf("i32");
                 break;
@@ -226,10 +222,6 @@ void printOperandValue(Variable* op) {
 
     switch (op->cvalue.dtypeEnum) {
 
-        case DT_INT : {
-
-        }
-
         case DT_I32 : {
             printf("%i", op->cvalue.i32);
             break;
@@ -252,7 +244,7 @@ void printOperandValue(Variable* op) {
 
         case DT_STRING : {
             StringInitialization* init = (StringInitialization*) op->cvalue.str;
-            printf("\"%.*s\"", init->rawPtrLen, init->rawPtr);
+            printf("\"%.*s\"", init->rawStr.len, init->rawStr.buff);
             break;
         }
 
@@ -285,10 +277,6 @@ void printDataType(DataType* const dtype, const DataTypeEnum dtypeEnum) {
     }
 
     switch (dtypeEnum) {
-
-    case DT_INT:
-        printf("int");
-        break;
 
     case DT_I8:
         printf("int8_t");

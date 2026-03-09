@@ -32,6 +32,7 @@ namespace DArray {
     void set(Container* arr, size_t index, void* element);
     void get(Container* arr, size_t index, void* out);
     void* get(Container* arr, size_t index);
+    void* getLast(Container* arr);
 
     void shiftRight(Container* arr, size_t idx);
 

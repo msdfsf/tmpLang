@@ -38,7 +38,7 @@ namespace Lex {
     static const char EOL = '\n';
 
     // As there are a lot of long names
-    // groupless literals will be defined without
+    // group-less literals will be defined without
     // prefixes and other identification stuff...
     static const char POINTER = '^';
     static const char ADDRESS = '&';
@@ -363,8 +363,7 @@ namespace Lex {
         TD_DT_I64,
         TD_DT_U64,
         TD_DT_F32,
-        TD_DT_F64,
-
+        TD_DT_F64
     };
 
 
@@ -411,21 +410,28 @@ namespace Lex {
         return Token{ .kind = TK_BINARY_OPERATOR,.detail = val };
     }
 
-    static inline DataTypeEnum toDtype(Token val) {
-
-        switch (val.detail) {
-            case TD_DT_F32: return DT_F32;
-            case TD_DT_F64: return DT_F64;
-            case TD_DT_I64: return DT_I64;
-            case TD_DT_U64: return DT_U64;
-            case TD_KW_FCN: return DT_FUNCTION;
-            default: return DT_VOID;
-        }
-
+    static inline DataTypeEnum toDtype(Keyword val) {
+        if (val == KW_FCN) return DT_FUNCTION;
+        if (val == KW_INT) return DT_I64;
+        return (DataTypeEnum) (val - KW_INT);
     }
 
-    static inline DataTypeEnum toDtype(Keyword val) {
-        return (DataTypeEnum) (val == KW_FCN ? DT_FUNCTION : (val - KW_VOID));
+    // TODO : make keyword work, and move this to separate
+    static inline DataTypeEnum toDtype(Token val) {
+
+        if (val.kind == TK_KEYWORD) {
+            return toDtype((Keyword)val.detail);
+        }
+
+        switch (val.detail) {
+        case TD_DT_F32: return DT_F32;
+        case TD_DT_F64: return DT_F64;
+        case TD_DT_I64: return DT_I64;
+        case TD_DT_U64: return DT_U64;
+        case TD_KW_FCN: return DT_FUNCTION;
+        default: return DT_VOID;
+        }
+
     }
 
     static inline OperatorEnum toOperator(TokenValue val) {

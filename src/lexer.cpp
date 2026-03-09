@@ -4,6 +4,7 @@
 #include "syntax.h"
 #include "logger.h"
 #include "array_list.h"
+#include <cstdint>
 
 
 
@@ -17,8 +18,13 @@ namespace Lex {
     // as we will know their total size in advance.
     DArray::Container qnameStack;
 
+    // for string parsing, as string is identical as in source code as
+    // we need to escape stuff
+    Arena::Container stringStack;
+
     void init() {
         DArray::init(&qnameStack, 32 * 2, sizeof(int));
+        Arena::init(&stringStack, 32 * 2);
     }
 
     const char* toStr(TokenKind token) {
@@ -455,7 +461,7 @@ namespace Lex {
         } else {
 
             *idx += 1;
-        
+
         }
 
         return ch;
@@ -523,45 +529,50 @@ namespace Lex {
 
     int parseStringLiteral(const char* const str, int* len, StringInitialization** initOut) {
 
-        int charCnt = 0;
-        
+        Arena::clear(&stringStack);
+
         while (1) {
 
             const char ch = parseChar(str, len);
             if (ch == STRING_LITERAL) break;
             if (ch == EOS) return Err::UNEXPECTED_END_OF_FILE;
 
-            charCnt++;
+            char* ptr = (char*) Arena::push(&stringStack, 1, 1);
+            *ptr = ch;
 
         }
 
-        const int strLen = charCnt;
         const int rawStringRequired = (str[*len] == RAW_POSTFIX) ? 1 : 0;
 
-        StringInitialization* init = (StringInitialization*) alloc(alc, AT_EXT_STRING_INITIALIZATION);
+        StringInitialization* init = (StringInitialization*) alloc(alc, sizeof(StringInitialization));
         init->base.type = EXT_STRING_INITIALIZATION;
-        init->rawStr = std::string(str, strLen);
-        init->rawPtr = (char*) str;
-        init->rawPtrLen = strLen;
+
+
+        init->rawStr.len = stringStack.logicalPos;
+        init->rawStr.buff = (char*) alloc(alc, init->rawStr.len);
+
+        init->wideStr.buff = NULL;
+        init->wideStr.len = 0;
+        init->wideDtype = DT_U8;
+
+        // TODO : maybe too slow to use generic arena
+        Arena::flatCopy(&stringStack, (uint8_t*) init->rawStr.buff);
 
         // meh but whatever
         if (rawStringRequired) {
-            init->wideStr = NULL;
-            init->wideDtype = DT_U8;
+
             *len += 1;
+
         } else {
 
             int utf8Len;
             int utf8BytesPerChar;
-            char* utf8Str = Strings::encodeUtf8(init->rawStr.c_str(), strLen, &utf8Len, &utf8BytesPerChar, 1);
+            char* utf8Str = Strings::encodeUtf8(init->rawStr.buff, &utf8Len, &utf8BytesPerChar, 0);
 
             if (utf8BytesPerChar != 1) {
-                init->wideStr = utf8Str;
+                init->wideStr.buff = utf8Str;
+                init->wideStr.len = utf8Len;
                 init->wideDtype = (DataTypeEnum) (DT_U8 + utf8BytesPerChar - 1);
-                init->wideLen = utf8Len;
-            } else {
-                init->wideStr = NULL;
-                init->wideDtype = DT_U8;
             }
 
         }

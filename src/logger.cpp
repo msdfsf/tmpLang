@@ -1,24 +1,21 @@
 #include "logger.h"
+#include "ansi_colors.h"
+#include "globals.h"
 #include "utils.h"
 //#include "globals.h"
 
+#include <cstdarg>
 #include <stdio.h>
 #include <stdarg.h>
 
-#define DEFAULT_MESSAGE_LENGTH 256
-#define TAB_SIZE 4
-
-#define RED_ESC         "\033[1;31m"
-#define YELLOW_ESC      "\033[1;33m"
-#define COLOR_RESET_ESC "\033[0m"
-
-#define ERR_ESC     RED_ESC
-#define WARNING_ESC YELLOW_ESC
+constexpr int DEFAULT_MESSAGE_LENGTH = 256;
+constexpr int TAB_SIZE = 4;
 
 namespace Logger {
 
     uint32_t verbosity = PLAIN | HINT | INFO | WARNING | ERROR;
     uint64_t mute = 0;
+
 
     int getEndClosure(const char ch) {
         switch (ch) {
@@ -30,8 +27,46 @@ namespace Logger {
         }
     }
 
+    // TODO : format argument {
+    //  digitsAlign,
+    //  color,
+    //  backgroundColor
+    // }
+    int printSpanStrict(FILE* stream, Span* span) {
+
+        const char* str = span->str;
+        const uint64_t size = span->end.idx - span->start.idx;
+        const uint64_t endIdx = span->end.idx;
+
+        const int maxLineDigits = Utils::countDigits(span->end.ln);
+
+        uint64_t idx = span->start.idx;
+        uint64_t prevIdx = idx;
+        uint64_t lineNum = span->start.ln;
+        while (idx < endIdx) {
+            const char ch = str[idx];
+            if (ch == '\n') {
+                printf(AC_BOLD_CYAN "%*llu | ", maxLineDigits, lineNum);
+                fwrite(str + prevIdx, 1, idx - prevIdx, stream);
+                lineNum++;
+                prevIdx = idx;
+            }
+            idx++;
+        }
+
+        if (idx - prevIdx > 0) {
+            printf(AC_BOLD_CYAN "%*llu | ", maxLineDigits, lineNum);
+            fwrite(str + prevIdx, 1, idx - prevIdx, stream);
+        }
+
+        fprintf(stream, AC_RESET "\n");
+
+        return maxLineDigits;
+
+    }
+
     // messy
-    void log(const Type type, const char* const message, Span* span, ...) {
+    void vlog (const Type type, const char* const message, Span* span, va_list args) {
 
         if (mute || !(verbosity & type.level)) return;
 
@@ -63,14 +98,14 @@ namespace Logger {
             }
 
             case WARNING : {
-                underlineEscColor = WARNING_ESC;
-                printf(WARNING_ESC "\nWARNING" COLOR_RESET_ESC);
+                underlineEscColor = AC_WARNING;
+                printf(AC_WARNING "\nWARNING" AC_RESET);
                 break;
             }
 
             case ERROR : {
-                underlineEscColor = ERR_ESC;
-                printf(ERR_ESC "\nERROR" COLOR_RESET_ESC);
+                underlineEscColor = AC_ERROR;
+                printf(AC_ERROR "\nERROR" AC_RESET);
                 // printf("(%i, %i) : ", span->line, idx - lnStartIdx + 1);
                 break;
             }
@@ -90,10 +125,7 @@ namespace Logger {
             if (type.level != PLAIN) printf(" : ");
         }
 
-        va_list args;
-        va_start(args, span);
         vprintf(message, args);
-        va_end (args);
 
         if (!span) return;
 
@@ -113,7 +145,7 @@ namespace Logger {
         for (; i < idx; i++) putchar(' ');
         printf(underlineEscColor);
         for (; i < idx + underlineLen; i++) putchar('^');
-        printf(COLOR_RESET_ESC);
+        printf(AC_RESET);
         for (; i < lnEndIdx; i++) putchar(' ');
 
         putchar('\n');
@@ -122,6 +154,15 @@ namespace Logger {
 
         putchar('\n');
 
+    }
+
+    void log(const Type type, const char* const message, Span* span, ...) {
+        va_list args;
+        va_start(args, span);
+
+        vlog(type, message, span, args);
+
+        va_end(args);
     }
 
     void log(Type type, const char* const message) {
@@ -142,12 +183,12 @@ namespace Logger {
             }
 
             case WARNING : {
-                printf("WARNING : ");
+                printf(AC_WARNING "WARNING : " AC_RESET);
                 break;
             }
 
             case ERROR : {
-                printf(RED_ESC "\nERROR " COLOR_RESET_ESC);
+                printf(AC_ERROR "\nERROR " AC_RESET);
                 break;
             }
 
@@ -158,6 +199,22 @@ namespace Logger {
 
         printf(message);
 
+    }
+
+    [[noreturn]] void panic(const char* const message, Span* span, ...) {
+        va_list args;
+        va_start(args, span);
+
+        Type type = {.level = ERROR, .tag = "PANIC"};
+        vlog(type, message, span, args);
+
+        va_end(args);
+        exit(1);
+    }
+
+    [[noreturn]] void panic(const char* const message) {
+        Type type = {.level = ERROR, .tag = "PANIC"};
+        log(type, message);
     }
 
 }

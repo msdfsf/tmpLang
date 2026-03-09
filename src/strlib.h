@@ -7,7 +7,7 @@ namespace Strings {
     long toInt(String str, int* endIdx);
     void replace(String str, String rstr, const int idx, const int len);
 
-    char* encodeUtf8(const char* const str, const int strLen, int* lenOut, int* bytesOut, int copyWhenAscii);
+    char* encodeUtf8(String str, int* lenOut, int* bytesOut, int copyWhenAscii);
 
     inline constexpr int compare(const String strA, const String strB) {
 

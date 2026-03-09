@@ -1,6 +1,7 @@
 #pragma once
 
 #include "globals.h"
+#include <cstdint>
 
 struct Operator {
 
@@ -24,7 +25,7 @@ constexpr Operator operators[] {
     { .rank = 7, .flag = IS_BINARY | IS_ONE_CHAR }, // OP_BITWISE_AND
     { .rank = 9, .flag = IS_BINARY | IS_ONE_CHAR }, // OP_BITWISE_OR
     { .rank = 8, .flag = IS_BINARY | IS_ONE_CHAR }, // OP_BITWISE_XOR
-    { .rank = 1, .flag = IS_BINARY | IS_ONE_CHAR }, // OP_BITWISE_NEGATION
+    { .rank = 1, .flag = IS_UNARY | IS_ONE_CHAR }, // OP_BITWISE_NEGATION
     { .rank = 4, .flag = IS_BINARY | IS_TWO_CHAR }, // OP_SHIFT_RIGHT
     { .rank = 4, .flag = IS_BINARY | IS_TWO_CHAR }, // OP_SHIFT_LEFT
     { .rank = 6, .flag = IS_BINARY | IS_ONE_CHAR }, // OP_EQUAL
@@ -34,27 +35,35 @@ constexpr Operator operators[] {
     { .rank = 5, .flag = IS_BINARY | IS_TWO_CHAR }, // OP_LESS_THAN_OR_EQUAL
     { .rank = 5, .flag = IS_BINARY | IS_TWO_CHAR }, // OP_GREATER_THAN_OR_EQUAL
     { .rank = 10, .flag = IS_BINARY | IS_TWO_CHAR }, // OP_BOOL_AND
-    { .rank = 11, .flag = IS_UNARY | IS_TWO_CHAR },  // OP_BOOL_OR
+    { .rank = 11, .flag = IS_BINARY | IS_TWO_CHAR }, // OP_BOOL_OR
     { .rank = 0, .flag = IS_UNARY | IS_TWO_CHAR },  // OP_INCREMENT
     { .rank = 0, .flag = IS_UNARY | IS_TWO_CHAR },  // OP_DECREMENT
     { .rank = 0, .flag = IS_BINARY | IS_ONE_CHAR }, // OP_SUBSCRIPT
     { .rank = 0, .flag = IS_BINARY | IS_ONE_CHAR }, // OP_MEMBER_SELECTION
-    { .rank = 0, .flag = IS_UNARY | IS_ONE_CHAR },  // OP_DEREFERENCE_MEMBER_SELECTION
+    { .rank = 0, .flag = IS_BINARY | IS_ONE_CHAR },  // OP_DEREFERENCE_MEMBER_SELECTION
     { .rank = 1, .flag = IS_UNARY | IS_ONE_CHAR },  // OP_NEGATION
     { .rank = 4, .flag = IS_BINARY | IS_TWO_CHAR }  // OP_CONCATENATION
 };
 
-enum OperatorEnum {
-    OP_NONE = -1,
-    OP_UNARY_PLUS = 0,
+enum OperatorEnum : uint8_t {
+    OP_NONE = (uint8_t) -1,
+
+    OP_UNARY_BEGIN = 0,
+    OP_UNARY_PLUS = OP_UNARY_BEGIN,
     OP_UNARY_MINUS,
-    OP_ADDITION,
+    OP_GET_ADDRESS,
+    OP_GET_VALUE,
+    OP_NEGATION,
+    OP_INCREMENT,
+    OP_DECREMENT,
+    OP_UNARY_END = OP_DECREMENT,
+
+    OP_BINARY_BEGIN,
+    OP_ADDITION = OP_BINARY_BEGIN,
     OP_SUBTRACTION,
     OP_MULTIPLICATION,
     OP_DIVISION,
     OP_MODULO,
-    OP_GET_ADDRESS,
-    OP_GET_VALUE,
     OP_BITWISE_AND,
     OP_BITWISE_OR,
     OP_BITWISE_XOR,
@@ -69,13 +78,12 @@ enum OperatorEnum {
     OP_GREATER_THAN_OR_EQUAL,
     OP_BOOL_AND,
     OP_BOOL_OR,
-    OP_INCREMENT,
-    OP_DECREMENT,
     OP_SUBSCRIPT,
     OP_MEMBER_SELECTION,
     OP_DEREFERENCE_MEMBER_SELECTION,
-    OP_NEGATION,
     OP_CONCATENATION,
+    OP_BINARY_END = OP_CONCATENATION,
+
     // OP_CAST // to tie cast to dtype, not sure about it as operator, but lets see
     OP_COUNT,
     OP_INVALID

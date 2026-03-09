@@ -23,4 +23,18 @@ namespace Utils {
         return alignForward(ptr, align) - ptr;
     }
 
+    inline int countDigits(uint64_t num) {
+        if (num == 0) return 1;
+
+        // pray to unroll (but even so, /= 10 may not endup as cmptime)
+        int count = 0;
+        while (num != 0) {
+            num /= 10;
+            count++;
+        }
+
+        return count;
+
+    }
+
 }

@@ -51,11 +51,15 @@ void Internal::init() {
     fPrintArg1->var = (Variable*) nalloc(alc, NT_VARIABLE);
     fPrintArg1->var->base.scope = SyntaxNode::root;
     fPrintArg1->var->cvalue.dtypeEnum = DT_STRING;
+    fPrintArg1->var->cvalue.any = NULL;
+    fPrintArg1->var->cvalue.hasValue = 0;
 
     VariableDefinition* fPrintArg2 = (VariableDefinition*) nalloc(alc, NT_VARIABLE_DEFINITION);
     fPrintArg2->var = (Variable*) nalloc(alc, NT_VARIABLE);
     fPrintArg2->var->base.scope = SyntaxNode::root;
     fPrintArg2->var->cvalue.dtypeEnum = DT_MULTIPLE_TYPES;
+    fPrintArg2->var->cvalue.any = NULL;
+    fPrintArg2->var->cvalue.hasValue = 0;
 
     DArray::push(&fPrintf->prototype.inArgs.base, &fPrintArg1);
     DArray::push(&fPrintf->prototype.inArgs.base, &fPrintArg2);
@@ -68,11 +72,14 @@ void Internal::init() {
     fAlloc->name.len = sizeof(IFS_ALLOC) - 1;
     fAlloc->internalIdx = IF_ALLOC;
 
-    DArray::init(&fAlloc->prototype.inArgs.base, 2, sizeof(VariableDefinition*));
+    DArray::init(&fAlloc->prototype.inArgs.base, 1, sizeof(VariableDefinition*));
+
     VariableDefinition* fAllocArg1 = (VariableDefinition*) nalloc(alc, NT_VARIABLE_DEFINITION);
     fAllocArg1->var = (Variable*) nalloc(nalc, NT_VARIABLE);
     fAllocArg1->var->base.scope = SyntaxNode::root;
-    fAllocArg1->var->cvalue.dtypeEnum = DT_MULTIPLE_TYPES;
+    fAllocArg1->var->cvalue.dtypeEnum = DT_U64;
+
+    DArray::push(&fAlloc->prototype.inArgs.base, &fAllocArg1);
 
 
 
@@ -83,10 +90,13 @@ void Internal::init() {
     fFree->internalIdx = IF_FREE;
 
     DArray::init(&fFree->prototype.inArgs.base, 2, sizeof(VariableDefinition*));
-    VariableDefinition* fFree1 = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
-    fFree1->var = (Variable*) nalloc(nalc, NT_VARIABLE);
-    fFree1->var->base.scope = SyntaxNode::root;
-    fFree1->var->cvalue.dtypeEnum = DT_POINTER;
+
+    VariableDefinition* fFreeArg1 = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
+    fFreeArg1->var = (Variable*) nalloc(nalc, NT_VARIABLE);
+    fFreeArg1->var->base.scope = SyntaxNode::root;
+    fFreeArg1->var->cvalue.dtypeEnum = DT_POINTER;
+
+    DArray::push(&fFree->prototype.inArgs.base, &fFreeArg1);
 
 
 
@@ -124,6 +134,27 @@ void Internal::init() {
 
     VariableDefinition* vFalseDef = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
     vFalseDef->var = vFalse;
+
+}
+
+
+
+Variable* unwrap(Variable* var) {
+
+    Expression* ex = var->expression;
+    while (ex && ex->type == EXT_UNARY) {
+
+        UnaryExpression* uex = (UnaryExpression*) ex;
+        if (uex->base.opType == OP_NONE) {
+            ex = uex->operand->expression;
+            var = uex->operand;
+        } else {
+            return var;
+        }
+
+    }
+
+    return var;
 
 }
 
@@ -655,12 +686,11 @@ void _RegMemory::Node::init(FunctionPrototype* node) {
 _defineInit(FunctionPrototype, AT_FUNCTION_PROTOTYPE);
 
 void _RegMemory::Node::init(StringInitialization* node) {
-    node->rawPtr = NULL;
-    node->rawPtrLen = 0;
-    node->rawStr = ""; // TODO
+    node->rawStr.buff = NULL;
+    node->rawStr.len = 0;
     node->wideDtype = DT_VOID;
-    node->wideStr = NULL;
-    node->wideLen = 0;
+    node->wideStr.buff = NULL;
+    node->wideStr.len = 0;
     ::init(&node->base);
     node->base.type = EXT_STRING_INITIALIZATION;
 }
@@ -721,6 +751,19 @@ void _RegMemory::Node::init(Cast* node) {
     node->base.type = EXT_CAST;
 }
 _defineInit(Cast, AT_EXT_CAST);
+
+void _RegMemory::Node::init(Alloc* node) {
+    ::init(&node->base);
+    node->base.type = EXT_ALLOC;
+    node->def = initVariableDefinition();
+}
+_defineInit(Alloc, AT_EXT_ALLOC);
+
+void _RegMemory::Node::init(Free* node) {
+    ::init(&node->base);
+    node->var = initVariable();
+}
+_defineInit(Free, AT_EXT_FREE);
 
 #define _defineCopy(T, E) \
 T* _RegMemory::Node::copy(T* node) { \

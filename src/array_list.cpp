@@ -1,6 +1,9 @@
 #include "array_list.h"
+#include "data_types.h"
+#include "dynamic_arena.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <stdio.h>
 #include <stdlib.h>
 #include <cstring>
@@ -77,6 +80,7 @@ void DArray::pushFront(Container* arr, void* element) {
 
 }
 
+// TODO : shouldn it return?
 void DArray::pop(Container* arr) {
 
     if (arr->size > 0) {
@@ -112,13 +116,24 @@ void* DArray::get(Container* arr, size_t idx) {
 
 }
 
+void* DArray::getLast(Container* arr) {
+
+    return DArray::get(arr, arr->size - 1);
+
+}
+
 void DArray::shiftRight(Container* arr, size_t idx) {
 
     if (arr->size + 1 > arr->allocSize) {
         resize(arr, arr->allocSize * arr->constCoef + arr->constTerm);
     }
 
-    memmove((char*) arr->buffer + arr->elementSize * idx, arr->buffer, arr->size * arr->elementSize);
+    memmove(
+        ((uint8_t*) arr->buffer) + arr->elementSize * (idx + 1),
+        ((uint8_t*) arr->buffer) + arr->elementSize * idx,
+        (arr->size - idx) * arr->elementSize
+    );
+
     arr->size++;
 
 }

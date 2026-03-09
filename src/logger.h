@@ -31,4 +31,14 @@ namespace Logger {
     void log(const Type type, const char* const message, Span* loc, ...);
     void log(const Type type, const char* const message);
 
+    // prints span strictly as defined
+    // returns the max digits used for line numbers
+    int printSpanStrict(FILE* stream, Span* span);
+    // normalizes spans to full line boundaries
+    // returns the max digits used for line numbers
+    int printSpan(FILE* stream, Span* span);
+
+    [[noreturn]] void panic(const char* const message, Span* loc, ...);
+    [[noreturn]] void panic(const char* const message);
+
 }

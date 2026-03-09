@@ -8,6 +8,8 @@
 
 
 
+#define min(a, b) ((a) < (b) ? (a) : (b))
+
 // TODO
 typedef float float_t;
 typedef double double_t;
@@ -129,6 +131,7 @@ inline void init(INamedEx* name) {
 }
 
 
+// TODO : change to something like 'IAmAnInternalFunction(Function* fcn)'
 static inline int isValidFunctionIdx(int idx) {
     return idx >= 0;
 }

@@ -52,7 +52,7 @@ namespace Strings {
     // new string should be allocated and data copied.
     // https://en.wikipedia.org/wiki/UTF-8
     // expects valid utf8 string with start at the begining of code point
-    char* encodeUtf8(const char* const str, const int strLen, int* lenOut, int* bytesOut, int copyWhenAscii) {
+    char* encodeUtf8(String str, int* lenOut, int* bytesOut, int copyWhenAscii) {
 
         const int mask1 = 0b01111111;
         const int mask2 = 0b11011111;
@@ -60,9 +60,9 @@ namespace Strings {
 
         int len = 0;
         int bytes = 1;
-        for (int i = 0; i < strLen; i++) {
+        for (int i = 0; i < str.len; i++) {
 
-            const unsigned char ch = str[i];
+            const unsigned char ch = str.buff[i];
             if (ch <= mask1) {
 
             } else if (ch <= mask2) {
@@ -85,8 +85,8 @@ namespace Strings {
         switch (bytes) {
 
             case 1: {
-                if (copyWhenAscii) memcpy(arr, str, len);
-                else arr = (char*) str;
+                if (copyWhenAscii) memcpy(arr, str.buff, len);
+                else arr = (char*) str.buff;
                 break;
             }
 
@@ -94,14 +94,14 @@ namespace Strings {
 
                 uint16_t* arr16 = (uint16_t*)arr;
 
-                for (int i = 0; i < strLen; i++) {
+                for (int i = 0; i < str.len; i++) {
 
-                    const unsigned char ch = str[i];
+                    const unsigned char ch = str.buff[i];
                     if (ch <= mask1) {
                         *arr16 = ch;
                     }
                     else if (ch <= mask2) {
-                        *arr16 = *((uint16_t*)(str + i));
+                        *arr16 = *((uint16_t*)(str.buff + i));
                         i++;
                     }
 
@@ -118,23 +118,23 @@ namespace Strings {
 
                 uint32_t* arr32 = (uint32_t*)arr;
 
-                for (int i = 0; i < strLen; i++) {
+                for (int i = 0; i < str.len; i++) {
 
-                    const unsigned char ch = str[i];
+                    const unsigned char ch = str.buff[i];
                     if (ch <= mask1) {
                         *arr32 = ch;
                     }
                     else if (ch <= mask2) {
-                        *arr32 = *((uint16_t*)(str + i));
+                        *arr32 = *((uint16_t*) (str.buff + i));
                         i++;
                     }
                     else if (ch <= mask3) {
                         *arr32 = 0;
-                        memcpy(arr32, str + i, 3);
+                        memcpy(arr32, str.buff + i, 3);
                         i += 2;
                     }
                     else {
-                        memcpy(arr32, str + i, 4);
+                        memcpy(arr32, str.buff + i, 4);
                         i += 3;
                     }
 

@@ -164,7 +164,6 @@ namespace Interpreter {
             case DT_I8:     value->*M = static_cast<T>(value->i8);  break;
             case DT_I16:    value->*M = static_cast<T>(value->i16); break;
             case DT_I32:    value->*M = static_cast<T>(value->i32); break;
-            case DT_INT:
             case DT_I64:    value->*M = static_cast<T>(value->i64); break;
             case DT_U8:     value->*M = static_cast<T>(value->u8);  break;
             case DT_U16:    value->*M = static_cast<T>(value->u16); break;
@@ -193,7 +192,6 @@ namespace Interpreter {
             case DT_I8 :    cast<DT_I8>(value); return;
             case DT_I16 :   cast<DT_I16>(value); return;
             case DT_I32 :   cast<DT_I32>(value); return;
-            case DT_INT :
             case DT_I64 :   cast<DT_I64>(value); return;
             case DT_U8 :    cast<DT_U8>(value); return;
             case DT_U16 :   cast<DT_U16>(value); return;
