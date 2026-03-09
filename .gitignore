@@ -8,6 +8,8 @@ tmp/*
 *.exe
 *.txt
 
+TODO.md
+
 .clangd
 
 .vscode/
