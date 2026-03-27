@@ -4,10 +4,10 @@
 
 #include "data_types.h"
 #include "dynamic_arena.h"
-#include "error.h"
 #include "operators.h"
 #include "ordered_dict.h"
 #include "syntax.h"
+#include "diagnostic.h"
 
 
 
@@ -391,9 +391,9 @@ namespace Interpreter {
     };
 
     struct VecDescriptor {
-        DataTypeEnum dtype;
+        Type::Kind dtype;
         OperatorEnum oper;
-        DataTypeEnum srcDtype; // for cast
+        Type::Kind srcDtype; // for cast
         uint8_t reserved;
         uint32_t flags;
     };

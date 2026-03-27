@@ -1,76 +1,108 @@
 #pragma once
-#include "../../src/globals.h"
-#include <vector>
 
-namespace Json {
+#ifndef JSON_H
+#define JSON_H
 
-    enum JsonType {
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-        JS_INVALID = -1,
-        JS_NULL,
-        JS_BOOL,
-        JS_NUMBER,
-        JS_STRING,
-        JS_ARRAY,
-        JS_OBJECT
-    
-    };
+#include <stdio.h>
+#include <stdint.h>
+#include <stdbool.h>
 
-    struct Array;
-    struct Object;
 
-    struct Value {
-        
-        JsonType type;
-        union {
-            int boolean;
-            double number;
-            String string;
-            Array* array;
-            Object* object;
-        };
 
-        Value();
-        Value(JsonType t);
-        Value(bool b);
-        Value(int n);
-        Value(double n);
-        Value(const char* s);
-        Value(const String& s);
-        Value(const Array& a);
-        Value(const Object& o);
-    
-    };
+typedef struct JsonString {
+    char*  data;
+    size_t len;
+} JsonString;
 
-    struct Pair {
-        
-        String key;
-        Value value;
 
-        Pair() {};
-        Pair(const char* k, const Value& v) : key(k), value(v) {}
-        Pair(const String& k, const Value& v) : key(k), value(v) {}
-    
-    };
 
-    struct Array {
-        std::vector<Value*> items;
-    };
+// === LEXER ===
+// ==
 
-    struct Object {
-        
-        std::vector<Pair> pairs;
+typedef enum {
+    JSON_NONE = 0,
+    JSON_OBJECT_OPEN,
+    JSON_OBJECT_CLOSE,
+    JSON_ARRAY_OPEN,
+    JSON_ARRAY_CLOSE,
+    JSON_KEY,
+    JSON_STRING,
+    JSON_NUMBER,
+    JSON_BOOL,
+    JSON_NULL,
+    JSON_ERROR,
+    JSON_EOF
+} JsonType;
 
-        Object() {}
-        Object(std::initializer_list<Pair> init) : pairs(init) {}
-    
-    };
+typedef struct JsonLex {
+    JsonString src;
+    size_t     pos;
+    union {
+        JsonString s;
+        double     n;
+        bool       b;
+    } value;
 
-    int parse(String str, Json::Value* root);
-    String dump(Json::Value* val);
-    Json::Value value(Json::Object obj, const char* str);
-    
-    void freeParsedValue(Value val);
-    void freeSyntheticValue(Value val);
+    JsonString fname;
 
+    int errCol;
+    int errRow;
+    int errIdx; // actual index in the buffer
+    int errLen; // length of error segment from errIdx
+
+    uint8_t errExpected;
+    uint8_t errProvided;
+    uint8_t errCode;
+
+    bool errDontResolveSpan;
+} JsonLex;
+
+void     jsonLexInit   (JsonLex* ctx, JsonString src, JsonString fname);
+JsonType jsonNext      (JsonLex* ctx);
+void     jsonSkipValue (JsonLex* ctx, JsonType type);
+void     jsonAssert    (JsonLex* js, JsonType provided, JsonType expected);
+bool     jsonMatch     (JsonLex* ctx, JsonType provided, JsonType expected);
+void     jsonPrintError(JsonLex* ctx, FILE* stream);
+
+const char* jsonTypeName  (JsonType type);
+
+
+
+// === WRITER ===
+// ==
+
+typedef struct {
+    char*  buffer;
+    size_t size;
+    size_t capacity;
+
+    void* (*realloc) (void* ptr, size_t size);
+
+    int      depth;
+    uint32_t firstItemMask; // Bitmask to track commas for 32 levels
+} JsonWriter;
+
+void jsonWriterInit(JsonWriter* ctx, char* buffer, size_t capacity);
+
+void jsonWriteObjectStart(JsonWriter* ctx);
+void jsonWriteObjectEnd  (JsonWriter* ctx);
+void jsonWriteArrayStart (JsonWriter* ctx);
+void jsonWriteArrayEnd   (JsonWriter* ctx);
+void jsonWriteKey        (JsonWriter* ctx, JsonString key);
+void jsonWriteStr        (JsonWriter* ctx, JsonString val);
+void jsonWriteInt        (JsonWriter* ctx, long long val);
+void jsonWriteDouble     (JsonWriter* ctx, double val);
+void jsonWriteBool       (JsonWriter* ctx, bool val);
+void jsonWriteNull       (JsonWriter* ctx);
+
+JsonString jsonWriterCommit(JsonWriter* ctx);
+
+#ifdef __cplusplus
 }
+#endif
+
+#endif

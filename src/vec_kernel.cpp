@@ -102,16 +102,16 @@
 //
 
 #define GEN_VEC_CAST_BY_DEST(dest, name) \
-    GEN_VEC_FCN_C(vecCI8##name##,  dest, int8_t)   \
-    GEN_VEC_FCN_C(vecCI16##name##, dest, int16_t)  \
-    GEN_VEC_FCN_C(vecCI32##name##, dest, int32_t)  \
-    GEN_VEC_FCN_C(vecCI64##name##, dest, int64_t)  \
-    GEN_VEC_FCN_C(vecCU8##name##,  dest, uint8_t)  \
-    GEN_VEC_FCN_C(vecCU16##name##, dest, uint16_t) \
-    GEN_VEC_FCN_C(vecCU32##name##, dest, uint32_t) \
-    GEN_VEC_FCN_C(vecCU64##name##, dest, uint64_t) \
-    GEN_VEC_FCN_C(vecCF32##name##, dest, float)    \
-    GEN_VEC_FCN_C(vecCF64##name##, dest, double)
+    GEN_VEC_FCN_C(vecCI8##name,  dest, int8_t)   \
+    GEN_VEC_FCN_C(vecCI16##name, dest, int16_t)  \
+    GEN_VEC_FCN_C(vecCI32##name, dest, int32_t)  \
+    GEN_VEC_FCN_C(vecCI64##name, dest, int64_t)  \
+    GEN_VEC_FCN_C(vecCU8##name,  dest, uint8_t)  \
+    GEN_VEC_FCN_C(vecCU16##name, dest, uint16_t) \
+    GEN_VEC_FCN_C(vecCU32##name, dest, uint32_t) \
+    GEN_VEC_FCN_C(vecCU64##name, dest, uint64_t) \
+    GEN_VEC_FCN_C(vecCF32##name, dest, float)    \
+    GEN_VEC_FCN_C(vecCF64##name, dest, double)
 
 
 

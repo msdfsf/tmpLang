@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <chrono>
-#include <thread>
 
 #include "compiler.h"
 #include "logger.h"
@@ -49,7 +48,7 @@ int parseArgs(char* argv[], int argc) {
 
 			atLeastOneLangSet = 1;
 			char* const option = argv[i];
-			
+
 			if (!strcmp(option, "c")) {
 				Compiler::outLangs = Compiler::outLangs | Compiler::C_LANG;
 				continue;
@@ -118,9 +117,9 @@ int parseArgs(char* argv[], int argc) {
 
 			Logger::log(logErr, "Unknown option!\n");
 			return -1;
-		
+
 		}
-		
+
 	}
 
 	if (!atLeastOneLangSet) Compiler::outLangs = Compiler::outLangs | Compiler::C_LANG;
@@ -132,7 +131,7 @@ int parseArgs(char* argv[], int argc) {
 int main(int argc, char* argv[]) {
 
 	int atLeastOneLangSet = 0;
-	
+
 	if (argc < 2) {
 		Logger::log(logPln, "You need to specify command!\n");
 		Logger::log(logPln, "There are following commands available: run, build.\n");
@@ -200,18 +199,18 @@ int main(int argc, char* argv[]) {
 	printf("\nCompilation time was: %.2f ms.\n", cmpElapsedTime.count());
 
 	if (Compiler::command == Compiler::RUN) {
-		
+
 		Logger::log(logInf, "Running the executable...\n");
-		
+
 		if (calledFromBat) {
-			return 14;			
+			return 14;
 		}
 
 		if(run() < 0) {
 			Logger::log(logErr, "Creation of new process failed!\n");
-			return -1;	
+			return -1;
 		}
-		
+
 	}
 
 	return 0;
@@ -221,12 +220,12 @@ int main(int argc, char* argv[]) {
 
 
 #ifdef _WIN32
-	#include <iostream>		
+	#include <iostream>
 	#include <windows.h>
 #else
 	#include <unistd.h>
-#endif 
-	
+#endif
+
 int run () {
 	#ifdef _WIN32
 
@@ -253,14 +252,14 @@ int run () {
 			&si,               // STARTUPINFO
 			&pi                // PROCESS_INFORMATION
 		)) {
-			
+
 			//AttachConsole(pi.dwProcessId);
-			
+
 			CloseHandle(pi.hProcess);
 			CloseHandle(pi.hThread);
 
 			ExitProcess(0);
-		
+
 		} else {
 
 			std::cout << "CreateProcess failed. Error: " << GetLastError() << std::endl;
@@ -281,7 +280,7 @@ int run () {
 // 	-ol (output lang):
 //	 options: c
 //	 default: c
-// 	
+//
 //	-of (output file):
 //	 filename without the extension the executable will be saved to
 //
@@ -295,4 +294,4 @@ int run () {
 //	 prints help
 //
 //  -b (bat)
-//	 indicates that program is called run from the bat file 
+//	 indicates that program is called run from the bat file

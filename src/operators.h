@@ -93,3 +93,6 @@ enum OperatorEnum : uint8_t {
 inline int isMemberSelection(OperatorEnum op) {
     return op == OP_MEMBER_SELECTION || op == OP_DEREFERENCE_MEMBER_SELECTION;
 }
+
+// TODO : to namespace
+const char* OperatorToStr(OperatorEnum op);

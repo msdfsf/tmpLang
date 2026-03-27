@@ -6,12 +6,14 @@
 struct Translator {
 
     FILE* mainFile;
-    int debugInfo;
+    int   debugInfo;
 
     void (*init)                        (char* const dirName);
     void (*printNode)                   (FILE* file, int level, SyntaxNode* const node, Variable* lvalue);
     void (*printExpression)             (FILE* file, int level, Expression* const node, Variable* lvalue);
     void (*printForeignCode)            ();
     void (*exit)                        ();
+
+    AstContext* ctx;
 
 };

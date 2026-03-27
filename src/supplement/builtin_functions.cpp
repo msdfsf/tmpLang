@@ -72,7 +72,7 @@ void printU64(uint64_t val) {
 
 void printString(Runtime::_ArrayInfo* str, Runtime::_Slice* slice) {
 
-    if (str->elementType->kind == DT_U8) {
+    if (str->element->kind == Type::DT_U8) {
         fwrite(slice->ptr, 1, slice->len, stdout);
     } else {
         fwrite("TODO", 1, 4, stdout);
@@ -83,14 +83,14 @@ void printString(Runtime::_ArrayInfo* str, Runtime::_Slice* slice) {
 void printArray(Runtime::_ArrayInfo* arr, Runtime::_Slice* slice) {
 
     const uint64_t count = slice->len;
-    const uint64_t stride = arr->elementType->size;
+    const uint64_t stride = arr->element->size;
 
     printf("[");
 
     for (uint64_t i = 0; i < count; i++) {
 
         Runtime::_Any element;
-        element.info = arr->elementType;
+        element.info = arr->element;
 
         uint8_t* elementAddr = (uint8_t*) slice->ptr + (i * stride);
 
@@ -125,7 +125,7 @@ void printStruct(Runtime::_StructInfo* info, uint8_t* data) {
         Runtime::_StructMemberInfo* memberInfo = info->members + i;
 
         Runtime::_Any member;
-        member.info = memberInfo->info;
+        member.info = memberInfo->type;
 
         if (isPrimitive(member.info->kind)) {
             member.u = *(uint64_t*) (basePtr + memberInfo->offset);
@@ -147,38 +147,38 @@ void Runtime::printValue(_Any val) {
 
     switch (val.info->kind) {
 
-        case DT_I8:
-        case DT_I16:
-        case DT_I32:
-        case DT_I64: {
+        case Type::DT_I8:
+        case Type::DT_I16:
+        case Type::DT_I32:
+        case Type::DT_I64: {
             printI64(val.i);
             break;
         }
 
-        case DT_U8:
-        case DT_U16:
-        case DT_U32:
-        case DT_U64: {
+        case Type::DT_U8:
+        case Type::DT_U16:
+        case Type::DT_U32:
+        case Type::DT_U64: {
             printI64(val.u);
             break;
         }
 
-        case DT_CUSTOM: {
+        case Type::DT_CUSTOM: {
             printStruct((_StructInfo*) val.info, val.bp);
             break;
         }
 
-        case DT_POINTER: {
+        case Type::DT_POINTER: {
             printAsHex(val.u);
             break;
         }
 
-        case DT_STRING: {
+        case Type::DT_STRING: {
             printString((_ArrayInfo*) val.info, val.s);
             break;
         }
 
-        case DT_ARRAY: {
+        case Type::DT_ARRAY: {
             printArray((_ArrayInfo*) val.info, val.s);
             break;
         }

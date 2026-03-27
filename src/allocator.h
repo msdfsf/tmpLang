@@ -24,54 +24,53 @@
 // and their allocator would be wasteful.
 //
 
-#include <ranges>
 #if !defined(_CUSTOM_ALLOCATOR_)
 
     #include "dynamic_arena.h"
 
-    constexpr size_t ALLOC_INIT_BUFFER_SIZE = 1024 * 1024 * 32; // 32MB
+    #ifndef ALLOC_INIT_BUFFER_SIZE
+        // 32 MB
+        #define ALLOC_INIT_BUFFER_SIZE (1024 * 1024 * 32)
+    #endif
 
-    inline Arena::Container _allocatorMem;
-    inline Arena::Container* alc; // TODO: not sure about name, but as in Cpp
-                                            // there has to be a cast, using something
-                                            // long makes call too messy
-                                            // maybe just use thread local var and call
-                                            // it a day...
+    typedef Arena::Container* AllocatorHandle;
+    // TODO: not sure about name, but as in Cpp
+    // there has to be a cast, using something
+    // long makes call too messy
+    inline thread_local AllocatorHandle alc = NULL;
 
-    inline void initAlloc(Arena::Container* allocator) {
+
+
+    inline void initAlloc(AllocatorHandle allocator) {
         Arena::init(allocator, ALLOC_INIT_BUFFER_SIZE);
     }
 
-    inline void releaseAlloc(Arena::Container* allocator) {
+    inline void releaseAlloc(AllocatorHandle allocator) {
         Arena::release(allocator);
     }
 
-    inline void* alloc(Arena::Container* allocator, size_t size) {
+
+
+    inline void* alloc(AllocatorHandle allocator, size_t size) {
         return Arena::push(allocator, size);
     }
 
-    inline void* alloc(Arena::Container* allocator, size_t size, size_t align) {
+    inline void* alloc(AllocatorHandle allocator, size_t size, size_t align) {
         return Arena::push(allocator, size, align);
     }
 
-    inline void dealloc(Arena::Container* allocator, void* ptr) {
+    inline void dealloc(AllocatorHandle allocator, void* ptr) {
         // ))
         return Arena::rollback(allocator, ptr);
     }
 
-    // start a transaction
-    inline uint64_t beginScope (Arena::Container* allocator) {
-        return 0; //TODO
-    }
+#else
 
-    // free everything allocated since 'begin'
-    inline void rewindScope (Arena::Container* allocator, uint64_t handle) {
-        // TODO
-    }
+    typedef void* AllocatorHandle;
+    extern thread_local AllocatorHandle alc;
 
-    // keep the data, drop the 'begin' and all asociated data
-    inline void commitScope (Arena::Container* allocator, uint64_t handle) {
-        // TODO
-    }
+    extern void* alloc   (AllocatorHandle allocator, size_t size);
+    extern void* alloc   (AllocatorHandle allocator, size_t size, size_t align);
+    extern void  dealloc (AllocatorHandle allocator, void* ptr);
 
 #endif

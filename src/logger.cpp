@@ -2,11 +2,11 @@
 #include "ansi_colors.h"
 #include "globals.h"
 #include "utils.h"
-//#include "globals.h"
 
 #include <cstdarg>
 #include <stdio.h>
 #include <stdarg.h>
+#include <cstdlib>
 
 constexpr int DEFAULT_MESSAGE_LENGTH = 256;
 constexpr int TAB_SIZE = 4;

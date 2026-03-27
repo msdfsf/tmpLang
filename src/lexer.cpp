@@ -1,9 +1,11 @@
 #include "lexer.h"
+#include "data_types.h"
 #include "strlib.h"
-#include "error.h"
 #include "syntax.h"
 #include "logger.h"
 #include "array_list.h"
+#include "diagnostic.h"
+
 #include <cstdint>
 
 
@@ -13,14 +15,17 @@ namespace Lex {
 
     Logger::Type logErr = { .level = Logger::ERROR, .tag = "lexer" };
 
+    // LOOK AT: for now thread local, as I want to keep interface simple
+    // doesn't seems like a significant cost. But just feels a bit weird.
+
     // We will push the offsets of each qualified name part here while parsing,
     // so we can pack the offsets more tightly in the result object,
     // as we will know their total size in advance.
-    DArray::Container qnameStack;
+    thread_local DArray::Container qnameStack;
 
     // for string parsing, as string is identical as in source code as
     // we need to escape stuff
-    Arena::Container stringStack;
+    thread_local Arena::Container stringStack;
 
     void init() {
         DArray::init(&qnameStack, 32 * 2, sizeof(int));
@@ -553,7 +558,7 @@ namespace Lex {
 
         init->wideStr.buff = NULL;
         init->wideStr.len = 0;
-        init->wideDtype = DT_U8;
+        init->wideType = Type::DT_U8;
 
         // TODO : maybe too slow to use generic arena
         Arena::flatCopy(&stringStack, (uint8_t*) init->rawStr.buff);
@@ -572,7 +577,7 @@ namespace Lex {
             if (utf8BytesPerChar != 1) {
                 init->wideStr.buff = utf8Str;
                 init->wideStr.len = utf8Len;
-                init->wideDtype = (DataTypeEnum) (DT_U8 + utf8BytesPerChar - 1);
+                init->wideType = (Type::Kind) (Type::DT_U8 + utf8BytesPerChar - 1);
             }
 
         }
@@ -1133,10 +1138,13 @@ namespace Lex {
 
     Token peekTokenSkipDecorators(Span* const span, TokenValue* val) {
 
+        Pos posStart = span->start;
+        Pos posEnd = span->end;
+
         const char* const str = span->str;
         int idx = span->end.idx + 1;
 
-        Token token;
+        Token token = toToken(TokenKind::TK_NONE);
         while (1) {
 
             const char ch = str[idx];
@@ -1164,13 +1172,55 @@ namespace Lex {
             if (!isWhitespace(ch)) {
 
                 span->end.idx = idx - 2;
-                return peekToken(span, val);
+                token = peekToken(span, val);
+                break;
 
             }
 
         }
 
-        return toToken(TokenKind::TK_NONE);
+        span->start = posStart;
+        span->end = posEnd;
+        return token;
+
+    }
+
+    // TODO : optimize
+    Token syncToken(Span* const span, Token tokenA, Token tokenB, TokenValue* val) {
+
+        Token token;
+
+        while (true) {
+            token = nextToken(span, val);
+            if (token.kind == tokenA.kind ||
+                token.kind == tokenB.kind ||
+                token.kind == Lex::TK_END
+            ) {
+                break;
+            }
+        }
+
+        return token;
+
+    }
+
+    // TODO : optimize
+    Token syncToken(Span* const span, Token* tokens, uint32_t tokenCount, TokenValue* val) {
+
+        Token token;
+
+        while (true) {
+            token = nextToken(span, val);
+            if (token.kind == Lex::TK_END) break;
+
+            for (uint32_t i = 0; i < tokenCount; i++) {
+                if (token.kind == tokens[i].kind) {
+                    return token;
+                }
+            }
+        }
+
+        return token;
 
     }
 

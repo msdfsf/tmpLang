@@ -1,16 +1,19 @@
 #include "compiler.h"
 
 #include "allocator.h"
+#include "dynamic_arena.h"
 #include "parser.h"
+#include "diagnostic.h"
 #include "syntax.h"
 #include "validator.h"
 #include "logger.h"
-#include "error.h"
 
 #include "translator_debug.h"
 #include "translator_c.h"
 
-#include "../lib/libtcc.h"
+extern "C" {
+    #include "../lib/libtcc.h"
+}
 
 
 
@@ -42,25 +45,26 @@ int build();
 
 int Compiler::compile() {
 
-    alc = &_allocatorMem;
-    initAlloc(alc);
-    initNAlloc(nalc);
+    Err::Err err;
+    AstContext* astCxt;
 
-    Reg.init();
-    Internal::init();
+    Arena::Container arena;
+    alc = &arena;
+    initAlloc(&arena);
+    initNAlloc(&arena);
+
     FileSystem::init();
 
     Logger::log({ Logger::INFO }, "Compilation started...\n");
 
-    int err;
-
-    Parser::init();
-    err = Parser::parse(mainFile);
+    err = Parser::parse(mainFile, &astCxt);
     if (err < 0) return err;
+
+    translatorDebug.printNode(stdout, 0, &astCxt->root->base, NULL);
 
     Logger::log({ Logger::INFO }, "Parsing completed...\n");
 
-    err = Validator::validate();
+    err = Validator::validate(astCxt);
     if (err < 0) return err;
 
     Logger::log({ Logger::INFO }, "Validating completed...\n");
@@ -78,7 +82,7 @@ int Compiler::compile() {
     Logger::log({ Logger::INFO }, "Translation completed...\n");
     if (Compiler::command == TRANSLATE) return 0;
 
-    err = build();
+    err = (Err::Err) build();
     if (err < 0) return err;
 
     Logger::log({ Logger::INFO }, "Binary generation completed...\n");

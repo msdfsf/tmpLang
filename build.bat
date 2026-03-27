@@ -1,7 +1,7 @@
 :: Builds the project for windows
 :: Expetcs the compiler being in the PATH
 ::
-:: $1 choose the compiler ['cl', 'g++']
+:: $1 choose the compiler ['cl', 'clang++', 'g++']
 ::    default: any thats avaliable in the PATH
 ::    in given order
 :: $2 choose the mode ['release', 'debug']
@@ -44,7 +44,7 @@ if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 :: AUTO-DETECTION (DEFAULTS)
 :: =============================================
 
-set "KNOWN_COMPILERS=cl g++ clang"
+set "KNOWN_COMPILERS=cl g++ clang++"
 
 if "%TARGET_MODE%"=="" set "TARGET_MODE=release"
 
@@ -113,12 +113,13 @@ if /i "%TARGET_COMPILER%"=="cl" (
 ) else (
 
     set "FLAGS=-std=c++20 -w -I"..\%LIB_DIR%""
-    set "LIBS=-L"..\%LIB_DIR%"" -ltcc
+    :: set "LIBS=-L"..\%LIB_DIR%\" libtcc.lib"
+    set "LIBS="..\%LIB_DIR%\libtcc.lib"
 
     if /i "%TARGET_MODE%"=="debug" (
-        set "FLAGS=!FLAGS! -g -o "compiler_gcc.exe""
+        set "FLAGS=!FLAGS! -DNOMINMAX -g -o "compiler.exe""
     ) else (
-        set "FLAGS=!FLAGS! -O3 -o "compiler_gcc.exe""
+        set "FLAGS=!FLAGS! -DNOMINMAX -O3 -o "compiler.exe""
     )
 
 )

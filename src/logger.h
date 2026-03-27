@@ -1,7 +1,10 @@
 #pragma once
 
-#include <stdint.h>
 #include "globals.h"
+#include <stdint.h>
+#include <stdio.h>
+
+
 
 namespace Logger {
 

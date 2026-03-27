@@ -2,16 +2,15 @@
 #include "data_types.h"
 #include "dynamic_arena.h"
 #include "interpreter.h"
-#include "operators.h"
 #include "supplement/runtime.h"
 
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
 
-#include "error.h"
 #include "logger.h"
 #include "syntax.h"
+#include "diagnostic.h"
 
 #include "vec_kernel.h"
 
@@ -50,32 +49,31 @@ namespace Interpreter {
     Err::Err toValue(Function* fcn, vmword* buff, uint64_t buffSize, Value* out) {
 
         VariableDefinition* def = fcn->prototype.outArg;
-        Value* val = &def->var->cvalue;
+        Value* val = &def->var->value;
 
-        switch (val->dtypeEnum) {
-            case DT_I8:
-            case DT_U8:
-            case DT_I16:
-            case DT_U16:
-            case DT_I32:
-            case DT_U32:
-            case DT_I64:
-            case DT_U64:
-            case DT_F32:
-            case DT_F64: {
+        switch (val->typeKind) {
+            case Type::DT_I8:
+            case Type::DT_U8:
+            case Type::DT_I16:
+            case Type::DT_U16:
+            case Type::DT_I32:
+            case Type::DT_U32:
+            case Type::DT_I64:
+            case Type::DT_U64:
+            case Type::DT_F32:
+            case Type::DT_F64: {
                 val->u64 = *buff;
                 break;
             }
 
-            case DT_SLICE:
-            case DT_ERROR:
-            case DT_CUSTOM:
-            case DT_POINTER:
-            case DT_FUNCTION:
-            case DT_MEMBER:
-            case DT_COUNT:
-            case DT_MULTIPLE_TYPES:
-            case DT_ARRAY: {
+            case Type::DT_SLICE:
+            case Type::DT_ERROR:
+            case Type::DT_CUSTOM:
+            case Type::DT_POINTER:
+            case Type::DT_FUNCTION:
+            case Type::DT_COUNT:
+            case Type::DT_MULTIPLE_TYPES:
+            case Type::DT_ARRAY: {
                 Logger::log(logErr, "Datatype is not yet supported as output type in compile time context.", fcn->base.span);
                 return Err::NOT_YET_IMPLEMENTED;
             }
@@ -86,7 +84,7 @@ namespace Interpreter {
             }
         }
 
-        out->dtypeEnum = def->var->cvalue.dtypeEnum;
+        out->typeKind = def->var->value.typeKind;
         out->hasValue = 1;
 
         return Err::OK;
@@ -198,15 +196,15 @@ namespace Interpreter {
     }
 
     // returns the size of the stack frame in words
-    int internalCall(ExeBlock* exe, uint8_t* fp, vmword* sp, Internal::FunctionType ft) {
+    int internalCall(ExeBlock* exe, uint8_t* fp, vmword* sp, Ast::Internal::FunctionType ft) {
 
         switch (ft) {
 
-            case Internal::IF_PRINTF: {
+            case Ast::Internal::IF_PRINTF: {
                 return execPrint(exe, fp, sp);
             }
 
-            case Internal::IF_ALLOC: {
+            case Ast::Internal::IF_ALLOC: {
                 return execAlloc(exe, fp, sp);
             }
 
@@ -982,7 +980,7 @@ namespace Interpreter {
                     ExeBlock* exe = fcn->exe;
 
                     if (isValidFunctionIdx(fcn->internalIdx)) {
-                        int fSize = internalCall(block, fp, sp, (Internal::FunctionType)fcn->internalIdx);
+                        int fSize = internalCall(block, fp, sp, (Ast::Internal::FunctionType)fcn->internalIdx);
                         DROP_IN_WORDS(sp, 2 + fSize);
                         break;
                     }
@@ -1055,7 +1053,7 @@ namespace Interpreter {
 
                     VecFunctionBinary fcn = vecGetBinary(info.desc.dtype, info.desc.oper);
                     fcn(out, (void*) ptrA, (void*) ptrB, lenA);
-                    
+
                     PUSH(sp, (vmword) out);
                     PUSH(sp, lenA);
                     break;
@@ -1065,7 +1063,7 @@ namespace Interpreter {
                     uint64_t val = POP(sp);
                     uint64_t len = POP(sp);
                     uint64_t ptr = POP(sp);
-                
+
                     VecInfo info = vecFetchInfo(&ip);
                     void* out = vecGetPtr(info, len, fp);
 
@@ -1076,7 +1074,7 @@ namespace Interpreter {
                     PUSH(sp, len);
                     break;
                 }
-                
+
                 case OC_VEC_SV: {
                     uint64_t len = POP(sp);
                     uint64_t ptr = POP(sp);
@@ -1087,7 +1085,7 @@ namespace Interpreter {
 
                     VecFunctionScalar fcn = vecGetScalarL(info.desc.dtype, info.desc.oper);
                     fcn(out, (void*) ptr, val, len);
-                    
+
                     PUSH(sp, (vmword) out);
                     PUSH(sp, len);
                     break;
@@ -1102,7 +1100,7 @@ namespace Interpreter {
 
                     VecFunctionUnary fcn = vecGetUnary(info.desc.dtype, info.desc.oper);
                     fcn(out, (void*) ptr, len);
-                    
+
                     PUSH(sp, (vmword) out);
                     PUSH(sp, len);
                     break;
@@ -1157,7 +1155,7 @@ namespace Interpreter {
                     VecInfo info = vecFetchInfo(&ip);
                     void* out = vecGetPtr(info, len, fp);
 
-                    int dtypeSize = dataTypes[info.desc.dtype].size;
+                    int dtypeSize = Type::basicTypes[info.desc.dtype].size;
                     memcpy(out, (void*) ptr, len * dtypeSize);
 
                     PUSH(sp, (vmword) out);
@@ -1174,7 +1172,7 @@ namespace Interpreter {
 
                     VecFunctionFill fcn = vecGetFill(info.desc.dtype);
                     fcn(out, val, len);
-                    
+
                     PUSH(sp, (vmword) out);
                     PUSH(sp, len);
                     break;

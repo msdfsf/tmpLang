@@ -20,11 +20,11 @@ namespace Interpreter {
 
     VecDescriptor decodeVecDescriptor(const vmword word) {
         return {
-            .dtype    = (DataTypeEnum)
+            .dtype    = (Type::Kind)
                 ((word & DE_DTYPE_MASK) >> DE_DTYPE_SHIFT),
             .oper     = (OperatorEnum)
                 ((word & DE_OPER_MASK) >> DE_OPER_SHIFT),
-            .srcDtype = (DataTypeEnum)
+            .srcDtype = (Type::Kind)
                 ((word & DE_SRC_DTYPE_MASK) >> DE_SRC_DTYPE_SHIFT),
             .flags    = (uint32_t)
                 ((word & DE_FLAGS_MASK) >> DE_FLAGS_SHIFT)

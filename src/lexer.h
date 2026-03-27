@@ -1,9 +1,15 @@
+// Constrains:
+//  - TokenKind and TokenDetail actual range, one used by
+//    enums should not exceed full range of 31 bit, so
+//    negative encoded value can represent invalid state.
+
 #pragma once
 
 #include "operators.h"
 #include "keywords.h"
 #include "data_types.h"
 #include <array>
+#include <cstdint>
 
 namespace Lex {
 
@@ -173,56 +179,56 @@ namespace Lex {
     constexpr int KW_TABLE_SIZE = 107;
     constexpr std::array<int, KW_TABLE_SIZE> makeKeywordTable() {
 
-            std::array<int, KW_TABLE_SIZE> table = {};
+        std::array<int, KW_TABLE_SIZE> table = {};
 
-            table[7] = KW_IF;
-            table[9] = KW_INT;
-            table[11] = KW_FCN;
-            table[13] = KW_ALLOC;
-            table[16] = KW_NULL;
-            table[17] = KW_IMPORT;
-            table[18] = KW_BREAK;
-            table[19] = KW_CATCH;
-            table[20] = KW_NAMESPACE;
-            table[21] = KW_CONST;
-            table[23] = KW_I64;
-            table[25] = KW_CASE;
-            table[29] = KW_I32;
-            table[31] = KW_DEF;
-            table[32] = KW_STRUCT;
-            table[35] = KW_LOOP;
-            table[36] = KW_U8;
-            table[37] = KW_U64;
-            table[41] = KW_AUTON;
-            table[42] = KW_CONTINUE;
-            table[43] = KW_U32;
-            table[47] = KW_WHEN;
-            table[50] = KW_WHILE;
-            table[52] = KW_TRUE;
-            table[55] = KW_FREE;
-            table[58] = KW_TO;
-            table[60] = KW_GOTO;
-            table[67] = KW_EMBED;
-            table[68] = KW_I8;
-            table[69] = KW_RETURN;
-            table[72] = KW_FROM;
-            table[73] = KW_F64;
-            table[74] = KW_I16;
-            table[77] = KW_AS;
-            table[79] = KW_F32;
-            table[84] = KW_FALSE;
-            table[87] = KW_USING;
-            table[88] = KW_U16;
-            table[90] = KW_FOR;
-            table[93] = KW_MUTON;
-            table[95] = KW_UNION;
-            table[97] = KW_ELSE;
-            table[102] = KW_ENUM;
-            table[103] = KW_VOID;
-            table[104] = KW_SCOPE;
-            table[105] = KW_ERROR;
+        table[7] = KW_IF;
+        table[9] = KW_INT;
+        table[11] = KW_FCN;
+        table[13] = KW_ALLOC;
+        table[16] = KW_NULL;
+        table[17] = KW_IMPORT;
+        table[18] = KW_BREAK;
+        table[19] = KW_CATCH;
+        table[20] = KW_NAMESPACE;
+        table[21] = KW_CONST;
+        table[23] = KW_I64;
+        table[25] = KW_CASE;
+        table[29] = KW_I32;
+        table[31] = KW_DEF;
+        table[32] = KW_STRUCT;
+        table[35] = KW_LOOP;
+        table[36] = KW_U8;
+        table[37] = KW_U64;
+        table[41] = KW_AUTON;
+        table[42] = KW_CONTINUE;
+        table[43] = KW_U32;
+        table[47] = KW_WHEN;
+        table[50] = KW_WHILE;
+        table[52] = KW_TRUE;
+        table[55] = KW_FREE;
+        table[58] = KW_TO;
+        table[60] = KW_GOTO;
+        table[67] = KW_EMBED;
+        table[68] = KW_I8;
+        table[69] = KW_RETURN;
+        table[72] = KW_FROM;
+        table[73] = KW_F64;
+        table[74] = KW_I16;
+        table[77] = KW_AS;
+        table[79] = KW_F32;
+        table[84] = KW_FALSE;
+        table[87] = KW_USING;
+        table[88] = KW_U16;
+        table[90] = KW_FOR;
+        table[93] = KW_MUTON;
+        table[95] = KW_UNION;
+        table[97] = KW_ELSE;
+        table[102] = KW_ENUM;
+        table[103] = KW_VOID;
+        table[104] = KW_SCOPE;
+        table[105] = KW_ERROR;
 
-            return table;
+        return table;
 
     };
     constexpr auto keywordTable = makeKeywordTable();
@@ -368,6 +374,7 @@ namespace Lex {
 
 
 
+    // call in each thread
     void init();
 
     const char* toStr(TokenKind token);
@@ -386,6 +393,12 @@ namespace Lex {
     Token peekToken(Span* const span, TokenValue* val = NULL);
     Token peekNthToken(Span* const span, TokenValue* val, unsigned int n);
     Token peekTokenSkipDecorators(Span* const span, TokenValue* val = NULL);
+
+    // 'sync' functions will search the input stream for the first occurrence
+    // of any specified token. It skips all preceding tokens and commits changes
+    // Order of arguments dictates the priority of the search.
+    Token syncToken(Span* const span, Token tokenA, Token tokenB, TokenValue* val = NULL);
+    Token syncToken(Span* const span, Token* tokens, uint32_t tokenCount, TokenValue* val = NULL);
 
     unsigned int hash(const char* str);
 
@@ -410,26 +423,26 @@ namespace Lex {
         return Token{ .kind = TK_BINARY_OPERATOR,.detail = val };
     }
 
-    static inline DataTypeEnum toDtype(Keyword val) {
-        if (val == KW_FCN) return DT_FUNCTION;
-        if (val == KW_INT) return DT_I64;
-        return (DataTypeEnum) (val - KW_INT);
+    static inline Type::Kind toDtype(Keyword val) {
+        if (val == KW_FCN) return Type::DT_FUNCTION;
+        if (val == KW_INT) return Type::DT_I64;
+        return (Type::Kind) (val - KW_INT);
     }
 
     // TODO : make keyword work, and move this to separate
-    static inline DataTypeEnum toDtype(Token val) {
+    static inline Type::Kind toDtype(Token val) {
 
         if (val.kind == TK_KEYWORD) {
             return toDtype((Keyword)val.detail);
         }
 
         switch (val.detail) {
-        case TD_DT_F32: return DT_F32;
-        case TD_DT_F64: return DT_F64;
-        case TD_DT_I64: return DT_I64;
-        case TD_DT_U64: return DT_U64;
-        case TD_KW_FCN: return DT_FUNCTION;
-        default: return DT_VOID;
+            case TD_DT_F32: return Type::DT_F32;
+            case TD_DT_F64: return Type::DT_F64;
+            case TD_DT_I64: return Type::DT_I64;
+            case TD_DT_U64: return Type::DT_U64;
+            case TD_KW_FCN: return Type::DT_FUNCTION;
+            default: return Type::DT_VOID;
         }
 
     }

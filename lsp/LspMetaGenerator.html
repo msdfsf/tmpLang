@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>LSP Meta-Generator</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cpp.min.js"></script>
+
+    <style>
+        :root {
+            --font-family: system-ui, sans-serif;
+            --font-size-base: 400px;
+            --font-size-xxl: 0.75rem;
+            --font-size-sm:  0.75rem;
+            --font-size-xs:  0.65rem;
+
+            --sidebar-width: clamp(18rem, 24vw, 24rem);
+            --input-width: 8rem;
+
+            --space-1: 0.25rem;
+            --space-2: 0.4rem;
+            --space-3: 0.6rem;
+            --space-4: 0.8rem;
+
+            --radius: 3px;
+
+            /* Colors */
+            --bg-main: #1e1e1e;
+            --bg-sidebar: #252526;
+            --bg-element: #2d2d2d;
+            --bg-hover: #3a3a3a;
+            --bg-list: #1b1b1b;
+
+            --border: #2f2f2f;
+            --border-strong: #3a3a3a;
+
+            --text-main: #d4d4d4;
+            --text-dim: #888;
+            --text-soft: #aaa;
+
+            --accent: #0e639c;
+            --accent-hover: #1177bb;
+
+            --selection: #094771;
+
+            --scrollbar-size: 8px;
+            --scrollbar-bg: #1a1a1a;
+            --scrollbar-thumb: #3a3a3a;
+            --scrollbar-thumb-hover: #4a4a4a;
+
+            --status-bg: #2d2d2d;
+            --status-text: #aaa;
+
+            --status-success: #4caf50;
+            --status-warning: #ffb300;
+            --status-error: #e57373;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            font-family: var(--font-family);
+            font-size: var(--font-size-base);
+            background: var(--bg-main);
+            color: var(--text-main);
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border);
+            padding: var(--space-3);
+            box-sizing: border-box;
+
+            min-height: 0;
+        }
+
+        /* Headings */
+        .sidebar h3 {
+            font-size: var(--font-size-xs);
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            margin: 0 0 var(--space-2);
+            padding-bottom: var(--space-1);
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* Sidebar Section Headers */
+        .config-section {
+            margin-bottom: 2px;
+            border-bottom: 1px solid #333;
+        }
+
+        .config-header {
+            display: flex;
+            align-items: center;
+            padding: 6px 10px;
+            background: #2d2d2d;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .config-header:hover {
+            background: #37373d;
+        }
+
+        .config-header h3 {
+            margin: 0;
+            font-size: var(--font-size-xxl);
+            font-weight: bold;
+            color: #bbb;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border: none;
+            padding: 0;
+        }
+
+
+        .config-header .arrow {
+            font-size: 10px;
+            margin-right: 8px;
+            transition: transform 0.1s;
+            color: #888;
+        }
+
+        .config-header .arrow::before {
+            content: '▼';
+        }
+
+        /* Collapsible Logic */
+        .config-content {
+            padding: 10px;
+            background: #252526;
+        }
+
+        .config-section.collapsed {
+            display: none;
+        }
+
+        .collapsed .arrow {
+            transform: rotate(-90deg);
+        }
+
+        /* Sections */
+        .config-section {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: var(--space-2);
+            margin-bottom: var(--space-3);
+        }
+
+        /* Rows */
+        .config-group {
+            font-size: var(--font-size-sm);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-1);
+            gap: var(--space-2);
+        }
+
+        /* Inputs */
+        .config-group input,
+        .config-group select {
+            background: var(--bg-element);
+            border: 1px solid var(--border-strong);
+            color: var(--text-soft);
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius);
+            font-size: var(--font-size-sm);
+            width: var(--input-width);
+            box-sizing: border-box;
+        }
+
+        .config-group input[type=checkbox] {
+            width: auto;
+        };
+
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none !important;
+            margin: 0 !important;
+        }
+
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield; /* Firefox support */
+        }
+
+        .config-group input[type="number"] {
+            text-align: right;
+        }
+
+        .config-group input:focus,
+        .config-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        /* Buttons */
+        button,
+        .custom-file-upload {
+            background: var(--bg-element);
+            border: 1px solid var(--border-strong);
+            color: var(--text-soft);
+            font-size: var(--font-size-sm);
+            padding: var(--space-1) var(--space-2);
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        button:hover,
+        .custom-file-upload:hover {
+            background: var(--bg-hover);
+            color: var(--text-main);
+        }
+
+        /* List */
+        .list-box {
+            flex: 1;
+            overflow-x: hidden;
+            overflow-y: auto;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            background: var(--bg-list);
+        }
+
+        /* Items */
+        .item {
+            font-size: var(--font-size-sm);
+            padding: var(--space-1) var(--space-2);
+            border-bottom: 1px solid #242424;
+            display: flex;
+            align-items: center;
+        }
+
+        .item:hover {
+            background: var(--bg-hover);
+        }
+
+        .item.selected {
+            background: var(--selection);
+            color: #fff;
+        }
+
+        /* Filter */
+        #filter {
+            font-size: var(--font-size-sm);
+            padding: var(--space-2);
+            margin-bottom: var(--space-2);
+            background: var(--bg-element);
+            border: 1px solid var(--border-strong);
+            color: var(--text-soft);
+            border-radius: var(--radius);
+        }
+
+        /* File input hidden */
+        input[type="file"] {
+            display: none;
+        }
+
+        /* Content */
+        .content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            overflow: hidden;
+        }
+
+        #output-container {
+            overflow-y: scroll;
+        }
+
+        /* Toolbar */
+        .toolbar {
+            padding: var(--space-2) var(--space-4);
+            background: var(--bg-element);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Output */
+        #output-container {
+            flex: 1;
+            overflow: auto;
+        }
+
+        pre {
+            margin: 0;
+            padding: var(--space-4);
+            font-size: 0.8rem;
+            line-height: 1.5;
+            font-family: Consolas, monospace;
+        }
+
+        /* Status Tag */
+        .status-tag {
+            display: inline-flex;
+            align-items: center;
+            height: 1.2rem;
+            padding: 0 var(--space-2);
+
+            font-size: var(--font-size-xs);
+            border-radius: 999px;
+
+            background: var(--status-bg);
+            color: var(--status-text);
+            border: 1px solid var(--border);
+
+            white-space: nowrap;
+        }
+
+        .status-tag.success {
+            color: var(--status-success);
+            border-color: var(--status-success);
+        }
+
+        .status-tag.warning {
+            color: var(--status-warning);
+            border-color: var(--status-warning);
+        }
+
+        .status-tag.error {
+            color: var(--status-error);
+            border-color: var(--status-error);
+        }
+
+        #output {
+            white-space: pre;
+            tab-size: 4;     /* This is the dynamic part */
+            -moz-tab-size: 4;
+        }
+
+        /* Sidebar */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg);
+        }
+
+        *::-webkit-scrollbar {
+            width: var(--scrollbar-size);
+            height: var(--scrollbar-size);
+        }
+
+        *::-webkit-scrollbar-track {
+            background: var(--scrollbar-bg);
+        }
+
+        *::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: var(--radius);
+        }
+
+        *::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover);
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="config-header" onclick="toggleSection(this, 'sec-types')">
+        <span class="arrow"></span>
+        <h3>Data Types</h3>
+    </div>
+    <div class="config-section" id="sec-types">
+        <div class="config-group">
+            <label>Namespace</label>
+            <input type="text" id="ns_name" value="Lsp::T" onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label>String Type</label>
+            <input type="text" id="t_string" value="JsonString" onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label>Int Type</label>
+            <input type="text" id="t_int" value="int32_t" onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label>UInt Type</label>
+            <input type="text" id="t_uint" value="uint32_t" onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label>Bool Type</label>
+            <input type="text" id="t_bool" value="bool" onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label>Decimal Type</label>
+            <input type="text" id="t_decimal" value="double" oninput="generateCode()">
+        </div>
+    </div>
+
+    <div class="config-header" onclick="toggleSection(this, 'sec-hash')">
+        <span class="arrow"></span>
+        <h3>Hash Config</h3>
+    </div>
+    <div class="config-section" id="sec-hash">
+        <div class="config-group">
+            <label>Algorithm</label>
+            <select id="h_algo" onchange="checkCollision()">
+                <option value="fnv1a">FNV-1a (32-bit)</option>
+                <option value="djb2">DJB2 (Classic)</option>
+                <option value="sdbm" selected="selected">SDBM (Linear)</option>
+                <option value="java_str">Java String (31-Multiplier)</option>
+                <option value="jenkins">Jenkins One-at-a-Time</option>
+                <option value="pjw">PJW Hash</option>
+                <option value="dekker">Dekker's (XOR-Rotate)</option>
+            </select>
+        </div>
+        <div class="config-group">
+            <label>Selected Table Size</label>
+            <input type="number" id="h_size" value="256" onchange="checkCollision()">
+        </div>
+        <div class="config-group">
+            <label>Search Strategy</label>
+            <select id="h_strategy">
+                <option value="random">Pure Random</option>
+                <option value="linear">Linear from Random</option>
+            </select>
+        </div>
+        <div class="config-group">
+            <label>Current Seed</label>
+            <input type="number" id="h_seed" value="257348622" onchange="checkCollision()">
+        </div>
+        <div class="config-group">
+            <label>Iteration Count</label>
+            <input type="number" id="h_iter" value="50000">
+        </div>
+        <div style="display: flex; gap: 4px; margin-top: 10px;">
+            <button class="button" style="flex:1" onclick="setRandomSeed()">Random</button>
+            <button class="button" style="flex:1" onclick="setPredefinedSeed()">Predefined</button>
+            <button style="flex:2" onclick="findPerfect()">Find Perfect</button>
+        </div>
+        <div class="config-group" style="margin-top:10px">
+            <label>Status:</label>
+            <span id="hash_status" class="status-tag">Ready</>
+        </div>
+    </div>
+
+    <div class="config-header" onclick="toggleSection(this, 'sec-switch')">
+        <span class="arrow"></span>
+        <h3>Switch</h3>
+    </div>
+    <div class="config-section" id="sec-switch">
+        <div class="config-group">
+            <label title="Generate Schema<T> specializations">Render Schemas</label>
+            <input type="checkbox" id="sw_schema" checked onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label title="Generate Lsp::Namespace::Method typedefs">Method Path Interface</label>
+            <input type="checkbox" id="sw_paths" checked onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label title="Generate RequestMethod enum and toRequestMethod hash function">Hash Router</label>
+            <input type="checkbox" id="sw_hash" checked onchange="generateCode()">
+        </div>
+        <div class="config-group">
+            <label title="Include documentation comments in generated code">Render Documentation</label>
+            <input type="checkbox" id="sw_doc" onchange="generateCode()">
+        </div>
+    </div>
+
+    <div class="config-header" onclick="toggleSection(this, 'sec-disp')">
+        <span class="arrow"></span>
+        <h3>Display</h3>
+    </div>
+    <div class="config-section" style="">
+        <div class="config-group">
+            <label>Tab Display Size</label>
+            <input type="number" id="cfg_tab_size" value="4" onchange="updateTabDisplay(this.value)">
+        </div>
+        <div class="config-group">
+            <label>Copy with Spaces</label>
+            <input type="checkbox" id="cfg_copy_spaces" checked>
+        </div>
+    </div>
+
+    <div class="config-header" onclick="toggleSection(this, 'sec-lsp')">
+        <span class="arrow"></span>
+        <h3>LSP Structures</h3>
+    </div>
+    <div class="config-section" id="sec-lsp">
+        <div class="config-group">
+            <label>Selection</label>
+            <div style="display: flex; gap: 4px;">
+                <button class="button" onclick="selectAll(true)">All</button>
+                <button class="button" onclick="selectAll(false)">None</button>
+            </div>
+        </div>
+        <div class="config-group" style="margin-top: 10px;">
+            <label>Meta Model</label>
+            <label for="fileInput" class="custom-file-upload">
+                Browse JSON...
+            </label>
+            <input type="file" id="fileInput" accept=".json">
+        </div>
+    </div>
+
+    <input type="text" id="filter" placeholder="Search structures..." oninput="renderList()">
+    <div class="list-box" id="list"></div>
+</div>
+
+<div class="content">
+    <div class="toolbar">
+        <span id="stats" style="font-size: 11px; color: #777;">Load metaModel.json</span>
+        <button onclick="copyToClipboard()">Copy Code</button>
+    </div>
+    <div id="output-container">
+        <pre><code id="output" class="language-cpp"></code></pre>
+    </div>
+    <textarea id="raw-output" style="display: none"></textarea>
+</div>
+
+<script>
+    let model = null;
+    let methodCount = 0;
+    let selectedNodes = new Set();
+
+    function validateNumberInput() {
+        if (this.value === '' || isNaN(this.value)) {
+            this.value = 0;
+        }
+    }
+
+    document.querySelectorAll('input[type="number"]').forEach(input => {
+        input.addEventListener('change', validateNumberInput);
+        input.addEventListener('blur', validateNumberInput);
+    });
+
+    function toggleSection(headerEl, id) {
+        const el = document.getElementById(id);
+        el.classList.toggle('collapsed');
+        headerEl.classList.toggle('collapsed');
+    }
+
+    function updateTabDisplay(size) {
+        const output = document.getElementById('output');
+        output.style.tabSize = size;
+        output.style.mozTabSize = size;
+        generateCode();
+    }
+
+    function collectUnionProperties(typeObj, model) {
+        const propMap = new Map();
+
+        const addProps = (item) => {
+            let props = [];
+            if (item.kind === 'literal') {
+                props = item.value.properties;
+            } else if (item.kind === 'reference') {
+                // Check existing structures
+                const ref = model.structures.find(s => s.name === item.name);
+                if (ref) props = ref.properties;
+                else {
+                    // Also check other aliases in case of nested aliasing
+                    const otherAlias = model.typeAliases.find(a => a.name === item.name);
+                    if (otherAlias) props = collectUnionProperties(otherAlias.type, model);
+                }
+            }
+
+            props.forEach(p => {
+                if (!propMap.has(p.name)) propMap.set(p.name, p);
+            });
+        };
+
+        if (typeObj.kind === 'or') {
+            typeObj.items.forEach(addProps);
+        } else {
+            addProps(typeObj);
+        }
+
+        return Array.from(propMap.values());
+    }
+
+    // As we are rendering to Cpp, we have to order structures
+    // so that parents always appear before children.
+    function sortStructuresTopologically(model) {
+        const sorted = [];
+        const visited = new Set();
+        const visiting = new Set();
+
+        function visit(s) {
+            if (visited.has(s.name)) return;
+            if (visiting.has(s.name)) {
+                console.error("Circular inheritance detected:", s.name);
+                return;
+            }
+
+            visiting.add(s.name);
+
+            if (s.extends) {
+                s.extends.forEach(baseRef => {
+                    const baseStruct = model.structures.find(x => x.name === baseRef.name);
+                    if (baseStruct) visit(baseStruct);
+                });
+            }
+
+            visiting.delete(s.name);
+            visited.add(s.name);
+            sorted.push(s);
+        }
+
+        model.structures.forEach(s => visit(s));
+        model.structures = sorted;
+    }
+
+    // Converts 'or' type to a 'reference', so we dont have to
+    // bother rendering it uniquely
+    function preprocessModel(model) {
+        const promoted = [];
+
+        model.typeAliases.forEach(alias => {
+            if (alias.type.kind === 'or') {
+                const props = collectUnionProperties(alias.type, model);
+
+                if (props.length > 0) {
+                    // Create a synthetic structure
+                    promoted.push({
+                        name: alias.name,
+                        properties: props,
+                        extends: [],
+                        documentation: alias.documentation,
+                        since: alias.since
+                    });
+                }
+            }
+        });
+
+        model.structures = [...model.structures, ...promoted];
+
+        // Remove them from aliases so they aren't processed as strings/void*
+        model.typeAliases = model.typeAliases.filter(a =>
+            !promoted.some(p => p.name === a.name)
+        );
+
+        sortStructuresTopologically(model);
+    }
+
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const reader = new FileReader();
+        reader.onload = function() {
+            model = JSON.parse(reader.result);
+            preprocessModel(model);
+
+            const methods = [...model.requests, ...model.notifications].map(m => m.method);
+
+            const count = methods.length;
+            const minPow2 = Math.pow(2, Math.ceil(Math.log2(count)));
+            const recommended = minPow2 * 2;
+
+            document.getElementById('h_size').value = recommended;
+
+            checkCollision();
+            renderList();
+            document.getElementById('stats').innerHTML = e.target.files[0].name;
+        };
+        reader.readAsText(e.target.files[0]);
+    });
+
+    const StatusTag = Object.freeze({
+        PERFECT:   "perfect",
+        COLLISION: "collision",
+        COMPUTING: "computing"
+    });
+
+    function setStatus(tag) {
+        const el = document.getElementById("hash_status");
+        if (!el) return;
+
+        // Reset base class
+        el.className = "status-tag";
+
+        // Determine text and class
+        let text = "";
+        let cls = "";
+
+        if (tag === StatusTag.PERFECT) {
+            text = "Perfect";
+            cls = "success";
+        } else if (tag === StatusTag.COLLISION) {
+            text = "Collision Detected";
+            cls = "warning";
+        } else if (tag === StatusTag.COMPUTING) {
+            text = "Computing...";
+            cls = "computing"; // optional neutral class
+        } else {
+            text = "Unknown";
+            cls = "";
+        }
+
+        // Apply class and text
+        if (cls) el.classList.add(cls);
+        el.textContent = text;
+    }
+
+    const HashAlgos = {
+        fnv1a: {
+            init: 2166136261,
+            calc: (h, c) => Math.imul(h ^ c, 16777619) >>> 0,
+            cpp: `\t\tuint32_t h = 2166136261U;\n\t\tfor (int i = 0; i < val.len; i++) {\n\t\t\th ^= (uint8_t)val.data[i];\n\t\t\th *= 16777619U;\n\t\t}`
+        },
+        djb2: {
+            init: 5381,
+            calc: (h, c) => ((h << 5) + h + c) >>> 0,
+            cpp: `\t\tuint32_t h = 5381U;\n\t\tfor (int i = 0; i < val.len; i++) {\n\t\t\th = ((h << 5) + h) + (uint8_t)val.data[i];\n\t\t}`
+        },
+        sdbm: {
+            init: 0,
+            calc: (h, c) => (c + (h << 6) + (h << 16) - h) >>> 0,
+            cpp: `\t\tuint32_t h = 0;\n\t\tfor (int i = 0; i < val.len; i++) {\n\t\t\th = (uint8_t)val.data[i] + (h << 6) + (h << 16) - h;\n\t\t}`
+        },
+        java_str: {
+            init: 0,
+            calc: (h, c) => (Math.imul(h, 31) + c) >>> 0,
+            cpp: `\t\tuint32_t h = 0;\n\t\tfor (int i = 0; i < val.len; i++) {\n\t\t\th = (31 * h) + (uint8_t)val.data[i];\n\t\t}`
+        },
+        jenkins: {
+            init: 0,
+            calc: (h, c) => {
+                h = (h + c) >>> 0;
+                h = (h + (h << 10)) >>> 0;
+                return (h ^ (h >>> 6)) >>> 0;
+            },
+            cpp: `\t\tuint32_t h = 0;\n\t\tfor (int i = 0; i < val.len; i++) {\n\t\t\th += (uint8_t)val.data[i];\n\t\t\th += (h << 10);\n\t\t\th ^= (h >> 6);\n\t\t}`
+        },
+        pjw: {
+            init: 0,
+            calc: (h, c) => {
+                h = ((h << 4) + c) >>> 0;
+                let g = (h & 0xf0000000) >>> 0;
+                if (g !== 0) h = (h ^ (g >>> 24)) >>> 0;
+                return (h & ~g) >>> 0;
+            },
+            cpp: `\t\tuint32_t h = 0;\n\t\tuint32_t g = 0;\n\t\tfor (int i = 0; i < val.len; i++) {\n\t\t\th = (h << 4) + (uint8_t)val.data[i];\n\t\t\tg = h & 0xf0000000U;\n\t\t\tif (g != 0) h ^= (g >> 24);\n\t\t\th &= ~g;\n\t\t}`
+        },
+        dekker: {
+            init: 0,
+            calc: (h, c) => ( (h << 5) ^ (h >>> 27) ^ c ) >>> 0,
+            cpp: `\t\tuint32_t h = 0;\n\t\tfor (int i = 0; i < val.len; i++) {\n\t\t\th = (h << 5) ^ (h >> 27) ^ (uint8_t)val.data[i];\n\t\t}`
+        }
+    };
+
+    function calculateBaseHash(str, algoKey) {
+        const algo = HashAlgos[algoKey];
+        if (!algo) throw new Error(`Unknown algorithm: ${algoKey}`);
+
+        let h = algo.init >>> 0;
+        for (let i = 0; i < str.length; i++) {
+            h = algo.calc(h, str.charCodeAt(i));
+        }
+        return h >>> 0;
+    }
+
+    function finalMix(h) {
+        let x = h >>> 0;
+        x = Math.imul(x ^ (x >>> 16), 0x85ebca6b);
+        x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+        x = (x ^ (x >>> 16)) >>> 0;
+        return x;
+    }
+
+    function calculateHash(str, algoKey, seed, tableSize) {
+        const base = calculateBaseHash(str, algoKey);
+        const mixed = finalMix(base ^ (seed >>> 0))
+        return mixed % tableSize;
+    }
+
+    function getHashContext() {
+        return {
+            algoKey:   document.getElementById('h_algo').value,
+            tableSize: parseInt(document.getElementById('h_size').value),
+            methods:   [...model.requests, ...model.notifications].map(m => m.method),
+            statusEl:  document.getElementById('hash_status'),
+        }
+    }
+
+    const PREDEFINED_SEEDS = [
+        3136054316, 257348622, 0xabcdef12, 0x7890abcd, 0x11223344,
+        0x55667788, 0x99aabbcc, 0x22334455, 0x66778899, 0xaabbccdd,
+        0xdeadbeef, 0xfeedface, 0x1a2b3c4d, 0x5e6f7a8b, 0x9c8d7e6f,
+        0x3b4c5d6e, 0x7a8b9c0d, 0xe1f2a3b4, 0xc5d6e7f8, 0x0f1e2d3c,
+        0x4a5b6c7d, 0x8e9f0a1b, 0xcafef00d, 0xbadf00d, 0x2c3d4e5f,
+        0x6a7b8c9d, 0xa1b2c3d4, 0xe5f6a7b8, 0x192a3b4c, 0x5d6e7f80,
+        0x9a0b1c2d, 0xd4e5f6a7, 0x0c1d2e3f, 0x40516273, 0x8798a9ba,
+        0xc0d1e2f3, 0xf4a5b6c7, 0x2e3f5061, 0x6879a0b1, 0xa2b3c4d5
+    ];
+    let predefinedIdx = 0;
+
+    function setRandomSeed() {
+        document.getElementById('h_seed').value = Math.floor(Math.random() * 0xFFFFFFFF);
+        generateCode();
+    }
+
+    function setPredefinedSeed() {
+        document.getElementById('h_seed').value = PREDEFINED_SEEDS[predefinedIdx];
+        predefinedIdx = (predefinedIdx + 1) % PREDEFINED_SEEDS.length;
+        generateCode();
+    }
+
+    function findPerfect() {
+        if (!model) return;
+        const algoKey = document.getElementById('h_algo').value;
+        const tableSize = parseInt(document.getElementById('h_size').value);
+        const strategy = document.getElementById('h_strategy').value;
+        const methods = [...model.requests, ...model.notifications].map(m => m.method);
+        const statusEl = document.getElementById('hash_status');
+        const iterCount = document.getElementById('h_iter').valueAsNumber;
+
+        if (methods.length > tableSize) {
+            setStatus(StatusTag.COLLISION);
+            return;
+        }
+
+        setStatus(StatusTag.COMPUTING);
+
+        setTimeout(() => {
+            const baseHashes = methods.map(m => calculateBaseHash(m, algoKey));
+
+            let seed = document.getElementById('h_seed').valueAsNumber;
+            let foundSeed = null;
+            let buckets = new Array(tableSize);
+
+
+            let linear = (strategy === 'linear');
+            for (let i = 0; i < iterCount; i++) {
+                seed = linear ? seed + i : Math.floor(Math.random() * 0xFFFFFFFF);
+
+                buckets.fill(false);
+                let collision = false;
+                for (let j = 0; j < baseHashes.length; j++) {
+                    //const mixed = Math.imul(baseHashes[j] ^ seed, 0x5bd1e995);
+                    //const idx = mixed % tableSize;
+                    let x = baseHashes[j] ^ seed;
+                    x = Math.imul(x ^ (x >>> 16), 0x85ebca6b);
+                    x = Math.imul(x ^ (x >>> 13), 0xc2b2ae35);
+                    x = (x ^ (x >>> 16)) >>> 0;
+                    const idx = x % tableSize;
+                    if (buckets[idx]) { collision = true; break; }
+                    buckets[idx] = true;
+                }
+
+                if (!collision) { foundSeed = seed; break; }
+            }
+
+            updateHashState(foundSeed === null, foundSeed !== null ? foundSeed : seed, statusEl);
+        }, 20);
+    }
+
+    function checkCollision() {
+        if (!model) return;
+
+        let ctx = getHashContext();
+        if (ctx.methods.length > ctx.tableSize) {
+            // TODO : add overflow status
+            setStatus(status.COLLISION);
+            return;
+        }
+
+        setStatus(StatusTag.COMPUTING);
+
+        let buckets = new Array().fill(false);
+        let seed = document.getElementById('h_seed').valueAsNumber;
+        let collision = false;
+        for (let m of ctx.methods) {
+            let idx = calculateHash(m, ctx.algoKey, seed, ctx.tableSize);
+            if (buckets[idx]) { collision = true; break; }
+            buckets[idx] = true;
+        }
+
+        updateHashState(collision, seed, ctx.statusEl);
+    }
+
+    function updateHashState(doesSeedCollide, seed, statusEl) {
+        document.getElementById('h_seed').value = seed;
+        if (!doesSeedCollide) {
+            setStatus(StatusTag.PERFECT);
+        } else {
+            setStatus(StatusTag.COLLISION);
+        }
+       generateCode();
+    }
+
+    function toSnakeCase(str) {
+        return str.replace(/([a-z])([A-Z])/g, '$1_$2').replace(/([A-Z])([A-Z][a-z])/g, '$1_$2').toUpperCase().replace(/[^A-Z0-9]/g, '_');
+    }
+
+    function toPascalCase(str) {
+        if (!str) return "";
+        return str.replace(/(\w)(\w*)/g, function(g0, g1, g2) {
+            return g1.toUpperCase() + g2;
+        });
+    }
+
+    function renderList() {
+        if (!model) return;
+        const filter = document.getElementById('filter').value.toLowerCase();
+        const container = document.getElementById('list');
+        container.innerHTML = '';
+        const items = [...model.structures, ...model.enumerations].sort((a,b)=>a.name.localeCompare(b.name));
+        items.forEach(item => {
+            if (item.name.toLowerCase().includes(filter)) {
+                const div = document.createElement('div');
+                div.className = `item ${selectedNodes.has(item.name) ? 'selected' : ''}`;
+                div.innerHTML = `<input type="checkbox" ${selectedNodes.has(item.name)?'checked':''}>${item.name}`;
+                div.onclick = () => toggleNode(item.name);
+                container.appendChild(div);
+            }
+        });
+    }
+
+    function mapType(typeObj, model) {
+        if (!typeObj) return "LSPAny";
+
+        const name = typeObj.name;
+
+        // Handle Type Aliases
+        if (typeObj.kind === 'reference' && model && model.typeAliases) {
+            const alias = model.typeAliases.find(a => a.name === name);
+            if (alias) {
+                // Recursively resolve the alias to its base type
+                return mapType(alias.type, model);
+            }
+        }
+
+        switch (typeObj.kind) {
+            case 'base':
+                if (['string', 'DocumentUri', 'URI', 'Pattern'].includes(name)) result = 'String';
+                else if (name === 'integer')  result = 'Int';
+                else if (name === 'uinteger') result = 'UInt';
+                else if (name === 'boolean')  result = 'Bool';
+                else if (name === 'decimal')  result = "Double";
+                else result = name;
+                break;
+
+            case 'reference':
+                const isEnum = model && model.enumerations.some(e => e.name === typeObj.name);
+                if (isEnum) {
+                    result = name;
+                } else if (name === 'LSPAny' || name === 'LSPObject') {
+                    result = name;
+                } else {
+                    result = `${typeObj.name}*`;
+                }
+                break;
+
+            case 'array':
+                result = `Slice<${mapType(typeObj.element, model)}>`;
+                break;
+
+            case 'or':
+                const hasStr = typeObj.items.some(i => i.name === 'string' || i.name === 'DocumentUri');
+                result = hasStr ? 'String' : mapType(typeObj.items[0], model);
+                break;
+
+            default:
+                result = "LSPAny";
+        }
+
+        return result || "LSPAny";
+    }
+
+    function generateEnumCode(name, prefix, values, originalStrings = null, noneValue = 0, useSwitch = false) {
+        let code = "";
+        const noneName = `${prefix}_NONE`;
+
+        // Prepare names and find max length for alignment
+        let renderNone = true;
+        let maxLen = noneName.length;
+        const members = values.map((v, i) => {
+            const memberName = `${prefix}_${toSnakeCase(v.name)}`;
+            if (v.value === 0) renderNone = false;
+            if (memberName.length > maxLen) maxLen = memberName.length;
+            return {
+                full: memberName,
+                // Use provided value, or fallback to sequential ID
+                val: (v.value !== undefined && typeof v.value === 'number') ? v.value : (i + 1),
+                raw: v.name
+            };
+        });
+
+        renderNone = renderNone || noneValue < 0;
+
+        const pad = maxLen;
+
+        // Render Enum
+        code += `\tenum ${name} {\n`;
+        if (renderNone) {
+            code += `\t\t${noneName.padEnd(pad)} = ${noneValue},\n`;
+        }
+        members.forEach(m => {
+            code += `\t\t${m.full.padEnd(pad)} = ${m.val},\n`;
+        });
+        code += `\t};\n\n`;
+
+        // Render Strings Array if provided
+        if (originalStrings && originalStrings.length > 0) {
+            if (useSwitch) {
+                code += `\tstatic const char* toString(${name} val) {\n`;
+                code += `\t\tswitch (val) {\n`;
+                members.forEach(m => {
+                    code += `\t\t\tcase ${m.full.padEnd(pad)}: return "${m.raw}";\n`;
+                });
+                code += `\t\t\tdefault: return "";\n`;
+                code += `\t\t}\n`;
+                code += `\t}\n\n`;
+            } else {
+                code += `\tstatic const char* ${name}Strings[] = {\n`;
+                code += `\t\t"", // NONE\n`;
+                originalStrings.forEach(s => {
+                    code += `\t\t"${s}",\n`;
+                });
+                code += `\t};\n\n`;
+            }
+        }
+
+        return code;
+    }
+
+    function getRecursiveProperties(properties, model, sExtends) {
+        let allProps = [];
+        if (sExtends) {
+            sExtends.forEach(baseRef => {
+                const baseStruct = model.structures.find(x => x.name === baseRef.name);
+                if (baseStruct) {
+                    allProps = allProps.concat(getRecursiveProperties(baseStruct.properties, model, baseStruct.extends));
+                }
+            });
+        }
+        return allProps.concat(properties || []);
+    }
+
+    function getStructInfo(structName, properties, model, sExtends = null) {
+        const parents = (sExtends || []).map(e => e.name);
+        const allProperties = getRecursiveProperties(properties, model, sExtends);
+
+        let maxTypeLen = 0;
+        let maxNameLen = 0;
+
+        const mapProps = (props) => props.map(p => {
+            let typeStr;
+            const isLiteral = p.type.kind === 'literal';
+
+            if (isLiteral) {
+                // Predict the name of the nested struct
+                typeStr = "_" + toPascalCase(p.name) + "*";
+            } else {
+                typeStr = mapType(p.type, model);
+            }
+
+            if (typeStr.length > maxTypeLen) maxTypeLen = typeStr.length;
+            if (p.name.length > maxNameLen) maxNameLen = p.name.length;
+
+            return {
+                name: p.name,
+                type: typeStr,
+                isLiteral: isLiteral,
+                literalData: isLiteral ? p.type.value : null
+            };
+        });
+
+        return {
+            name: structName,
+            ownProps: mapProps(properties),
+            allProps: mapProps(allProperties),
+            parents: parents,
+            typePad: maxTypeLen + 1,
+            namePad: maxNameLen + 1
+        };
+    }
+
+    function generateSchema(typeName, props, namePadding, context) {
+        let out = `\ttemplate<> struct Schema<${typeName}> {\n`;
+        out += `\t\tstatic constexpr auto fields = std::make_tuple(\n`;
+        const fLines = props.map(p => {
+            const keyPart = `"${p.name}",`.padEnd(namePadding + 2);
+            return `\t\t\tmake_field(${keyPart} &${context}::${p.name})`;
+        });
+        out += fLines.join(',\n') + `\n\t\t);\n\t};\n\n`;
+        return out;
+    }
+
+    function generateDoc(item, indent = "") {
+        if (!document.getElementById('sw_doc').checked || !item || !item.documentation) return "";
+
+        const lines = item.documentation.split('\n');
+        let out = `${indent}/**\n`;
+
+        lines.forEach(line => {
+            // Clean up common JS/JSON artifacts if any
+            out += `${indent} * ${line.trim()}\n`;
+        });
+
+        // Add @since tag if present in the meta-model
+        if (item.since) {
+            out += `${indent} * @since ${item.since}\n`;
+        }
+
+        out += `${indent} */\n`;
+        return out;
+    }
+
+     // Recursively renders the body of a struct, including nested literals.
+    function generateStructRecursive(properties, model, sw, indent, parentContext) {
+        let bodyCode = "";
+        let nestedSchemas = "";
+
+        // Local alignment calculation
+        let maxTypeLen = 0;
+        let maxNameLen = 0;
+        const processedProps = (properties || []).map(p => {
+            const isLiteral = p.type.kind === 'literal';
+            const typeStr = isLiteral ? ("_" + toPascalCase(p.name) + "*") : mapType(p.type, model);
+
+            if (typeStr.length > maxTypeLen) maxTypeLen = typeStr.length;
+            if (p.name.length > maxNameLen) maxNameLen = p.name.length;
+
+            return { name: p.name, type: typeStr, isLiteral, raw: p };
+        });
+
+        const typePad = maxTypeLen + 1;
+        const namePad = maxNameLen + 1;
+
+        // Rendering
+        processedProps.forEach(p => {
+            bodyCode += generateDoc(p.raw, indent);
+
+            if (p.isLiteral) {
+                const nestedTypeName = p.type.replace('*', '');
+                const fullNestedContext = `${parentContext}::${nestedTypeName}`;
+
+                bodyCode += `${indent}struct ${nestedTypeName} {\n`;
+
+                const result = generateStructRecursive(p.raw.type.value.properties, model, sw, indent + "\t", fullNestedContext);
+                bodyCode += result.code;
+
+                bodyCode += `${indent}}* ${p.name};\n`;
+
+                nestedSchemas += result.schemas;
+                if (sw.schema) {
+                    nestedSchemas += generateSchema(fullNestedContext, result.localProps, result.localNamePad, fullNestedContext);
+                }
+            } else {
+                bodyCode += `${indent}${p.type.padEnd(typePad)} ${p.name};\n`;
+            }
+        });
+
+        return {
+            code: bodyCode,
+            schemas: nestedSchemas,
+            localProps: processedProps,
+            localNamePad: namePad
+        };
+    }
+
+    function generateCode() {
+        if (!model) return;
+
+        const cfg = {
+            string: document.getElementById('t_string').value || "JsonString",
+            int:    document.getElementById('t_int').value    || "int32_t",
+            uint:   document.getElementById('t_uint').value   || "uint32_t",
+            bool:   document.getElementById('t_bool').value   || "bool",
+            double: document.getElementById('t_decimal').value || "double",
+            hSize:  parseInt(document.getElementById('h_size').value),
+            hSeed:  parseInt(document.getElementById('h_seed').value),
+            hAlgo:  document.getElementById('h_algo').value,
+            ns:     document.getElementById('ns_name').value
+        };
+
+        const sw = {
+            schema: document.getElementById('sw_schema').checked,
+            hash:   document.getElementById('sw_hash').checked,
+            paths:  document.getElementById('sw_paths').checked,
+        };
+
+        // Header Comment
+        let code = `// AUTO-GENERATED LSP PROTOCOL DATA STRUCTURES\n`;
+        code += `// ===\n\n`;
+
+        code += `namespace ${cfg.ns} {\n\n`;
+
+        // Typedefs
+        code += `\ttypedef ${cfg.string} String;\n`;
+        code += `\ttypedef ${cfg.int}    Int;\n`;
+        code += `\ttypedef ${cfg.uint}   UInt;\n`;
+        code += `\ttypedef ${cfg.bool}   Bool;\n`;
+        code += `\ttypedef ${cfg.double} Double;\n\n`;
+        code += `\ttypedef void* LSPAny;\n`;
+        code += `\ttypedef void* LSPObject;\n\n`;
+        code += '\ttemplate<typename T>\t\n\tstruct Slice {\n\t\tT*     data;\n\t\tsize_t size;\n\t};\n\n';
+
+        // Schema Definition
+        if (sw.schema) {
+            code += `\ttemplate<typename T>\n`;
+            code += `\tstruct Schema;\n\n`;
+
+            code += `\ttemplate<typename Class, typename Member>\n`;
+            code += `\tstruct Field {\n`;
+            code += `\t\tconst char*    name;\n`;
+            code += `\t\tMember Class::*ptr;\n`;
+            code += `\t};\n\n`;
+
+            code += `\ttemplate<typename Class, typename Member>\n`;
+            code += `\tstatic constexpr Field<Class, Member> make_field(const char* name, Member Class::*ptr) {\n`;
+            code += `\t\treturn { name, ptr };\n\t}\n\n`;
+        }
+
+        if (sw.hash) {
+            const methods = [...model.requests, ...model.notifications].map(m => m.method);
+            const hashValues = methods.map(m => ({
+                name: m,
+                value: calculateHash(m, cfg.hAlgo, cfg.hSeed, cfg.hSize)
+            }));
+
+            code += `\t// Method Count: ${methods.length}\n`;
+            code += `\t// Seed:         ${cfg.hSeed}\n`;
+            code += `\t// Table Size:   ${cfg.hSize}\n`;
+            code += `\t// Algorithm:    ${cfg.hAlgo}\n`;
+
+            code += generateEnumCode("RequestMethod", 'RM', hashValues, methods, -1, true);
+
+            // Lookup function
+            code += `\tstatic RequestMethod toRequestMethod(${cfg.string} val) {\n`;
+            code += `\t\tif (val.len < 0) return RM_NONE;\n`;
+            code += HashAlgos[cfg.hAlgo].cpp + "\n";
+            code += `\t\th ^= ${cfg.hSeed};\n`;
+            code += '\t\th ^= (h >> 16);\n\t\th *= 0x85ebca6bU;\n\t\th ^= (h >> 13);\n\t\th *= 0xc2b2ae35U;\n\t\th ^= (h >> 16);\n'
+            code += `\t\tuint32_t index = h % ${cfg.hSize};\n`;
+            code += `\t\treturn (RequestMethod) (index);\n\t}\n\n`;
+        }
+
+        // Forward Declaration
+        if (selectedNodes.size > 0) {
+            code += `\t// Forward Declarations\n`;
+            code += '\t// ===\n\n'
+            selectedNodes.forEach(nodeName => {
+                const s = model.structures.find(item => item.name === nodeName);
+                if (s) {
+                    code += `\tstruct ${s.name};\n`;
+                }
+            });
+            code += `\n`;
+        }
+
+        // Enums
+        selectedNodes.forEach(nodeName => {
+            const e = model.enumerations.find(item => item.name === nodeName);
+            if (e) {
+                const prefix = toSnakeCase(e.name);
+                const isStringEnum = typeof e.values[0].value === 'string';
+                const originalStrings = isStringEnum ? e.values.map(v => v.value) : null;
+
+                code += generateEnumCode(e.name, prefix, e.values, originalStrings);
+            }
+        });
+
+        // Structs and Schemas Actual Definitions
+
+        selectedNodes.forEach(nodeName => {
+            const s = model.structures.find(item => item.name === nodeName);
+            if (!s) return;
+
+            code += generateDoc(s, "\t");
+
+            // Inheritance
+            const parents = (s.extends || []).map(e => e.name);
+            const inheritance = parents.length > 0 ? " : " + parents.map(p => `public ${p}`).join(", ") : "";
+
+            code += `\tstruct ${s.name}${inheritance} {\n`;
+
+            // Struct body
+            const result = generateStructRecursive(s.properties, model, sw, "\t\t", s.name);
+            code += result.code;
+
+            code += `\t};\n\n`;
+
+            // Render Schemas
+            if (sw.schema) {
+                const allProps = getRecursiveProperties(s.properties, model, s.extends).map(p => {
+                    const isLit = p.type.kind === 'literal';
+                    return { name: p.name, type: isLit ? "_" + toPascalCase(p.name) + "*" : "" };
+                });
+
+                const maxFlattenedNameLen = Math.max(...allProps.map(p => p.name.length)) + 1;
+
+                code += generateSchema(s.name, allProps, maxFlattenedNameLen, s.name);
+                code += result.schemas;
+            }
+
+        });
+
+        code += '}\n\n';
+
+        if (sw.paths) {
+            code += 'namespace Lsp {\n\n';
+
+            // Group methods (requests + notifications) by category (e.g., textDocument)
+            const allMethods = [...model.requests, ...model.notifications];
+            const categories = {};
+            const noCategory = [];
+
+            allMethods.forEach(m => {
+                const parts = m.method.split('/');
+
+                if (!m.params) {
+                    return;
+                }
+
+                if (parts.length < 2) {
+                    noCategory.push(`\ttypedef ${cfg.ns}::${m.params.name.padEnd(30)} ${toPascalCase(parts[0])};\n`);
+                    return;
+                }
+
+                if (parts[0] === '$') parts[0] = 'Root';
+
+                const category = toPascalCase(parts[0]);
+                const methodName = toPascalCase(parts.slice(1).join(''));
+
+                // Only add if the parameters struct for this method is currently selected
+                if (!categories[category]) categories[category] = [];
+                categories[category].push(`\t\ttypedef ${cfg.ns}::${m.params.name.padEnd(30)} ${methodName};`);
+            });
+
+            noCategory.forEach(str => { code += str});
+            code += '\n';
+
+            for (const [cat, typedefs] of Object.entries(categories)) {
+                code += `\tnamespace ${cat} {\n${typedefs.join('\n')}\n\t}\n\n`;
+            }
+
+            code += `}`;
+        }
+
+        // Footer Comment
+        code += `\n\n// ===\n`;
+        code += `// END OF AUTO-GENERATED LSP PROTOCOL\n\n`;
+
+        const out = document.getElementById('output');
+        out.textContent = code;
+
+        delete out.dataset.highlighted;
+        setTimeout(() => {
+            hljs.highlightElement(out);
+        }, 0);
+
+        document.getElementById('raw-output').value = code;
+    }
+
+    function selectWithDependencies(name) {
+        if (selectedNodes.has(name)) return;
+        selectedNodes.add(name);
+
+        const s = model.structures.find(x => x.name === name);
+        if (s && s.extends) {
+            s.extends.forEach(base => {
+                if (base.kind === 'reference') {
+                    // Recording the parent automatically
+                    selectWithDependencies(base.name);
+                }
+            });
+        }
+    }
+
+    function toggleNode(name) {
+        if (selectedNodes.has(name)) {
+            selectedNodes.delete(name);
+        } else {
+            selectWithDependencies(name);
+        }
+        renderList(); // meh
+        generateCode();
+    }
+
+    function selectAll(val) {
+        if(!model) return;
+        selectedNodes.clear();
+        if(val) { model.structures.forEach(s => selectedNodes.add(s.name)); model.enumerations.forEach(e => selectedNodes.add(e.name)); }
+        renderList(); generateCode();
+    }
+
+    async function copyToClipboard() {
+        let code = document.getElementById('raw-output').value;
+
+        try {
+            const shouldConvert = document.getElementById('cfg_copy_spaces').checked;
+            if (shouldConvert) {
+                const spaceCount = parseInt(document.getElementById('cfg_tab_size').value) || 4;
+                const spaces = " ".repeat(spaceCount);
+                code = code.replace(/\t/g, spaces);
+            }
+
+            // 2. Write the string directly to the system clipboard
+            await navigator.clipboard.writeText(code);
+
+            // 3. Visual feedback (Change button text)
+            const btn = document.querySelector('.toolbar button');
+            const originalText = btn.innerText;
+            btn.innerText = "Copied!";
+            btn.style.background = "var(--status-success)";
+            btn.style.color = "white";
+
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.style.background = "";
+                btn.style.color = "";
+            }, 2000);
+
+        } catch (err) {
+            // Fallback for older browsers or non-secure contexts (http vs https)
+            console.error('Clipboard API failed, using fallback', err);
+            const ta = document.getElementById('raw-output');
+            ta.style.display = 'block'; // Must be visible to select
+            ta.select();
+            document.execCommand('copy');
+            ta.style.display = 'none';
+        }
+    }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,8 @@
+id = "vi-lang"
+name = "Vi Language Support"
+version = "0.0.1"
+schema_version = 1
+
+[language_servers.vi-lsp]
+name = "Vi Lang LSP"
+languages = ["ViLang"]

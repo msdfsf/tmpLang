@@ -493,34 +493,33 @@ namespace Interpreter {
 
     }
 
-    const char* toStr(DataTypeEnum dtype) {
+    const char* toStr(Type::Kind dtype) {
         switch (dtype) {
-            case DT_VOID: return "void";
-            case DT_I8:   return "i8";
-            case DT_I16:  return "i16";
-            case DT_I32:  return "i32";
-            case DT_I64:  return "i64";
-            case DT_U8:   return "u8";
-            case DT_U16:  return "u16";
-            case DT_U32:  return "u32";
-            case DT_U64:  return "u64";
-            case DT_F32:  return "f32";
-            case DT_F64:  return "f64";
+            case Type::DT_VOID: return "void";
+            case Type::DT_I8:   return "i8";
+            case Type::DT_I16:  return "i16";
+            case Type::DT_I32:  return "i32";
+            case Type::DT_I64:  return "i64";
+            case Type::DT_U8:   return "u8";
+            case Type::DT_U16:  return "u16";
+            case Type::DT_U32:  return "u32";
+            case Type::DT_U64:  return "u64";
+            case Type::DT_F32:  return "f32";
+            case Type::DT_F64:  return "f64";
 
-            case DT_STRING:  return "string";
-            case DT_POINTER: return "ptr";
-            case DT_ARRAY:   return "array";
-            case DT_SLICE:   return "slice";
-            case DT_CUSTOM:  return "DT_CUSTOM";
-            case DT_UNION:   return "DT_UNION";
-            case DT_ERROR:   return "DT_ERROR";
-            case DT_MEMBER:  return "DT_MEMBER";
-            case DT_ENUM:    return "DT_ENUM";
+            case Type::DT_STRING:  return "string";
+            case Type::DT_POINTER: return "ptr";
+            case Type::DT_ARRAY:   return "array";
+            case Type::DT_SLICE:   return "slice";
+            case Type::DT_CUSTOM:  return "DT_CUSTOM";
+            case Type::DT_UNION:   return "DT_UNION";
+            case Type::DT_ERROR:   return "DT_ERROR";
+            case Type::DT_ENUM:    return "DT_ENUM";
 
-            case DT_FUNCTION: return "DT_FUNCTION";
+            case Type::DT_FUNCTION: return "DT_FUNCTION";
 
-            case DT_UNDEFINED:      return "DT_UNDEFINED";
-            case DT_MULTIPLE_TYPES: return "DT_MULTIPLE_TYPES";
+            case Type::DT_UNDEFINED:      return "DT_UNDEFINED";
+            case Type::DT_MULTIPLE_TYPES: return "DT_MULTIPLE_TYPES";
         }
         return "Unknown";
     }
@@ -571,7 +570,7 @@ namespace Interpreter {
         uint8_t buffer[size];
     };
 
-    void push(DataTypeStack* stack, DataTypeEnum dtype) {
+    void push(DataTypeStack* stack, Type::Kind dtype) {
         if (stack->actualSize < DataTypeStack::size) {
             stack->buffer[stack->actualSize] = dtype;
         }
@@ -581,10 +580,10 @@ namespace Interpreter {
     void push(DataTypeStack* stack, uint64_t size) {
         const uint64_t wordsCnt = BYTES_TO_WORDS(size);
         if (stack->actualSize + wordsCnt <= DataTypeStack::size) {
-            memset(stack->buffer + stack->actualSize, DT_VOID, wordsCnt);
+            memset(stack->buffer + stack->actualSize, Type::DT_VOID, wordsCnt);
             stack->actualSize += wordsCnt;
         } else if (DataTypeStack::size > stack->actualSize) {
-            memset(stack->buffer + stack->actualSize, DT_VOID, DataTypeStack::size - stack->actualSize);
+            memset(stack->buffer + stack->actualSize, Type::DT_VOID, DataTypeStack::size - stack->actualSize);
             stack->actualSize = DataTypeStack::size;
         } else {
             stack->actualSize = DataTypeStack::size;
@@ -619,15 +618,15 @@ namespace Interpreter {
     }
 
     // only definitions
-    void printDtype(const DataTypeEnum dtypeEnum, void* payload) {
+    void printDtype(const Type::Kind dtypeEnum, void* payload) {
 
         switch (dtypeEnum) {
-            case DT_ARRAY: {
+            case Type::DT_ARRAY: {
                 Array* arr = (Array*) payload;
-                printDtype(arr->base.pointsToEnum, arr->base.pointsTo);
+                printDtype(arr->base.pointsToKind, arr->base.pointsTo);
                 fputc('[', stream);
                 if (arr->length) {
-                    fprintf(stream, "%llu", arr->length->cvalue.u64);
+                    fprintf(stream, "%llu", arr->length->value.u64);
                 } else {
                     const uint64_t flags = arr->flags;
                     if (flags & IS_CONST) {
@@ -653,44 +652,43 @@ namespace Interpreter {
 
         FunctionPrototype* fp = &fcn->prototype;
 
-        const int size = fp->inArgs.base.size;
+        const int size = fp->inArgCount;
         for (int i = 0; i < size; i++) {
-            VariableDefinition* def = *(VariableDefinition**) DArray::get(&fp->inArgs.base, i);
-            Value* val = &def->var->cvalue;
-            printDtype(val->dtypeEnum, val->any);
+            VariableDefinition* def = fp->inArgs[i];
+            Value* val = &def->var->value;
+            printDtype(val->typeKind, val->any);
             if (i != size - 1) printf(", ");
             else printf(" ");
         }
 
         fprintf(stream, "-> ");
 
-        Value* outVal = &fp->outArg->var->cvalue;
-        printDtype(outVal->dtypeEnum, outVal->any);
+        Value* outVal = &fp->outArg->var->value;
+        printDtype(outVal->typeKind, outVal->any);
 
     }
 
     // TODO : to a generic file
-    uint32_t getTypeStackSlots(DataTypeEnum dtype) {
+    uint32_t getTypeStackSlots(Type::Kind dtype) {
         switch (dtype) {
-
-            case DT_VOID: return 0;
-            case DT_I8:
-            case DT_U8:
-            case DT_I16:
-            case DT_U16:
-            case DT_I32:
-            case DT_U32:
-            case DT_I64:
-            case DT_U64:
-            case DT_POINTER:
+            case Type::DT_VOID: return 0;
+            case Type::DT_I8:
+            case Type::DT_U8:
+            case Type::DT_I16:
+            case Type::DT_U16:
+            case Type::DT_I32:
+            case Type::DT_U32:
+            case Type::DT_I64:
+            case Type::DT_U64:
+            case Type::DT_POINTER:
                 return 1;
 
-            case DT_ARRAY:
-            case DT_SLICE:
-            case DT_STRING:
+            case Type::DT_ARRAY:
+            case Type::DT_SLICE:
+            case Type::DT_STRING:
                 return 2;
 
-            case DT_MULTIPLE_TYPES:
+            case Type::DT_MULTIPLE_TYPES:
                 return 1; // we account for vararg count
             default: return 1;
         }
@@ -714,10 +712,10 @@ namespace Interpreter {
         FunctionPrototype* fp = &fcn->prototype;
 
         int popSize = 0;
-        const int size = fp->inArgs.base.size;
+        const int size = fp->inArgCount;
         for (int i = 0; i < size; i++) {
-            VariableDefinition* def = *(VariableDefinition**) DArray::get(&fp->inArgs.base, i);
-            popSize += getTypeStackSlots(def->var->cvalue.dtypeEnum);
+            VariableDefinition* def = fp->inArgs[i];
+            popSize += getTypeStackSlots(def->var->value.typeKind);
         }
 
         return popSize;
@@ -793,7 +791,7 @@ namespace Interpreter {
             switch (opcode) {
 
                 case OC_PUSH_I8: {
-                    push(&typeStack, DT_I8);
+                    push(&typeStack, Type::DT_I8);
 
                     int8_t val;
                     memcpy(&val, buffer, 1);
@@ -804,7 +802,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_U8: {
-                    push(&typeStack, DT_U8);
+                    push(&typeStack, Type::DT_U8);
 
                     uint8_t val;
                     memcpy(&val, buffer, 1);
@@ -815,7 +813,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_I16: {
-                    push(&typeStack, DT_I16);
+                    push(&typeStack, Type::DT_I16);
 
                     int16_t val;
                     memcpy(&val, buffer, 2);
@@ -826,7 +824,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_U16: {
-                    push(&typeStack, DT_U16);
+                    push(&typeStack, Type::DT_U16);
 
                     uint16_t val;
                     memcpy(&val, buffer, 2);
@@ -837,7 +835,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_I32: {
-                    push(&typeStack, DT_I32);
+                    push(&typeStack, Type::DT_I32);
 
                     int32_t val;
                     memcpy(&val, buffer, 4);
@@ -848,7 +846,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_U32: {
-                    push(&typeStack, DT_U32);
+                    push(&typeStack, Type::DT_U32);
 
                     uint32_t val;
                     memcpy(&val, buffer, 4);
@@ -859,7 +857,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_I64: {
-                    push(&typeStack, DT_I64);
+                    push(&typeStack, Type::DT_I64);
 
                     int64_t val;
                     memcpy(&val, buffer, 8);
@@ -870,7 +868,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_U64: {
-                    push(&typeStack, DT_U64);
+                    push(&typeStack, Type::DT_U64);
 
                     uint64_t val;
                     memcpy(&val, buffer, 8);
@@ -881,7 +879,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_F32: {
-                    push(&typeStack, DT_F32);
+                    push(&typeStack, Type::DT_F32);
 
                     float val;
                     memcpy(&val, buffer, 4);
@@ -892,7 +890,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_F64: {
-                    push(&typeStack, DT_F64);
+                    push(&typeStack, Type::DT_F64);
 
                     double val;
                     memcpy(&val, buffer, 8);
@@ -903,7 +901,7 @@ namespace Interpreter {
                 }
 
                 case OC_PUSH_PTR: {
-                    push(&typeStack, DT_POINTER);
+                    push(&typeStack, Type::DT_POINTER);
 
                     uint64_t val;
                     memcpy(&val, buffer, 8);
@@ -926,7 +924,7 @@ namespace Interpreter {
                 case OC_SET_PTR: case OC_GET_PTR: {
                     // TODO : to a function isGetOpcode?
                     if (OC_GET_I8 <= opcode && opcode <= OC_GET_PTR) {
-                        DataTypeEnum dtype = (DataTypeEnum) (DT_I8 + (opcode - OC_GET_I8));
+                        Type::Kind dtype = (Type::Kind) (Type::DT_I8 + (opcode - OC_GET_I8));
                         push(&typeStack, dtype);
                     } else {
                         pop(&typeStack);
@@ -988,7 +986,7 @@ namespace Interpreter {
                     Function* fcn = (Function*) target;
                     pop(&typeStack, (computePopSize(fcn) + varargSize + 2) * sizeof(vmword));
                     if (fcn->prototype.outArg) {
-                        push(&typeStack, fcn->prototype.outArg->var->cvalue.dtypeEnum);
+                        push(&typeStack, fcn->prototype.outArg->var->value.typeKind);
                     }
 
                     idealLen = snprintf(operandStr, operandStrSize, AC_MAGENTA "%.*s" AC_RESET, fcn->name.len, fcn->name.buff);
@@ -999,7 +997,7 @@ namespace Interpreter {
 
                 case OC_LEA:
                 case OC_LEA_CONST: {
-                    push(&typeStack, DT_POINTER);
+                    push(&typeStack, Type::DT_POINTER);
 
                     uint64_t offset;
                     memcpy(&offset, buffer, 8);
@@ -1031,7 +1029,7 @@ namespace Interpreter {
                 case OC_PTR_IDX: {
                     pop(&typeStack);
                     pop(&typeStack);
-                    push(&typeStack, DT_POINTER);
+                    push(&typeStack, Type::DT_POINTER);
 
                     uint64_t offset;
                     memcpy(&offset, buffer, 8);
@@ -1074,8 +1072,8 @@ namespace Interpreter {
                     buffer += 8;
 
                     pop(&typeStack, 8 * 4);
-                    push(&typeStack, DT_POINTER);
-                    push(&typeStack, DT_U64);
+                    push(&typeStack, Type::DT_POINTER);
+                    push(&typeStack, Type::DT_U64);
 
                     idealLen = printVecDescriptor(descriptor, operandStr, operandStrSize);
                     idealLen += printLocalName(block, dest, operandStr + idealLen, operandStrSize - idealLen, isDestinationLocal(descriptor));
@@ -1095,8 +1093,8 @@ namespace Interpreter {
                     buffer += 8;
 
                     pop(&typeStack, 8 * 2);
-                    push(&typeStack, DT_POINTER);
-                    push(&typeStack, DT_U64);
+                    push(&typeStack, Type::DT_POINTER);
+                    push(&typeStack, Type::DT_U64);
 
                     idealLen = printVecDescriptor(descriptor, operandStr, operandStrSize);
                     idealLen += printLocalName(block, dest, operandStr + idealLen, operandStrSize - idealLen, isDestinationLocal(descriptor));
@@ -1114,14 +1112,14 @@ namespace Interpreter {
                     buffer += 8;
 
                     pop(&typeStack, 8 * 2);
-                    push(&typeStack, DT_POINTER);
-                    push(&typeStack, DT_U64);
+                    push(&typeStack, Type::DT_POINTER);
+                    push(&typeStack, Type::DT_U64);
 
                     VecDescriptor desc = decodeVecDescriptor(descriptor);
 
                     // idealLen = printVecDescriptor(descriptor, operandStr, operandStrSize);
                     idealLen += printLocalName(block, dest, operandStr + idealLen, operandStrSize - idealLen, isDestinationLocal(descriptor));
-                    idealLen += snprintf(operandStr + idealLen, operandStrSize - idealLen, " %s -> %s", toStr((DataTypeEnum) desc.srcDtype), toStr((DataTypeEnum) desc.dtype));
+                    idealLen += snprintf(operandStr + idealLen, operandStrSize - idealLen, " %s -> %s", toStr((Type::Kind) desc.srcDtype), toStr((Type::Kind) desc.dtype));
 
                     break;
                 }
@@ -1173,9 +1171,9 @@ namespace Interpreter {
                 fprintf(stream, "...+%llu more, ", diff);
             }
 
-            uint64_t visibleCount = min(typeStack.actualSize, DataTypeStack::size);
+            uint64_t visibleCount = std::min(typeStack.actualSize, DataTypeStack::size);
             for (uint64_t i = 0; i < visibleCount; i++) {
-                fprintf(stream, "%s%s", toStr((DataTypeEnum) typeStack.buffer[i]), (i == visibleCount - 1) ? "" : ", ");
+                fprintf(stream, "%s%s", toStr((Type::Kind) typeStack.buffer[i]), (i == visibleCount - 1) ? "" : ", ");
             }
 
             fprintf(stream, " ]" AC_RESET "\n");
@@ -1229,7 +1227,7 @@ namespace Interpreter {
                 info->var->name.buff);
 
             // type
-            printDtype(info->var->cvalue.dtypeEnum, info->var->cvalue.any);
+            printDtype(info->var->value.typeKind, info->var->value.any);
             fputc('\n', stream);
 
             ptr = OrderedDict::getNext(dict);

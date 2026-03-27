@@ -1,165 +1,173 @@
 #include "data_types.h"
-#include "lexer.h"
-DataType dataTypes[] = {
 
-    // DT_VOID
-    {
-        .size  = 0,
-        .rank  = 0,
-        .align = 1,
-        .kind  = DT_VOID
-    },
+namespace Type {
 
-    // DT_I8
-    {
-        .size  = 1,
-        .rank  = 1,
-        .align = 1,
-        .kind  = DT_I8
-    },
+    TypeInfo basicTypes[] = {
 
-    // DT_I16
-    {
-        .size  = 2,
-        .rank  = 2,
-        .align = 2,
-        .kind  = DT_I16
-    },
+        {
+            .kind  = DT_VOID,
+            .rank  = 0,
+            .size  = 0,
+            .align = 1,
+        },
 
-    // DT_I32
-    {
-        .size  = 4,
-        .rank  = 3,
-        .align = 4,
-        .kind  = DT_I32
-    },
+        {
+            .kind  = DT_I8,
+            .rank  = 1,
+            .size  = 1,
+            .align = 1,
+        },
 
-    // DT_I64
-    {
-        .size  = 8,
-        .rank  = 4,
-        .align = 8,
-        .kind  = DT_I64
-    },
+        {
+            .kind  = DT_I16,
+            .rank  = 2,
+            .size  = 2,
+            .align = 2,
+        },
 
-    // DT_U8
-    {
-        .size  = 1,
-        .rank  = 1,
-        .align = 1,
-        .kind  = DT_U8
-    },
+        {
+            .kind  = DT_I32,
+            .rank  = 3,
+            .size  = 4,
+            .align = 4,
+        },
 
-    // DT_U16
-    {
-        .size  = 2,
-        .rank  = 2,
-        .align = 2,
-        .kind  = DT_U16
-    },
+        {
+            .kind  = DT_I64,
+            .rank  = 4,
+            .size  = 8,
+            .align = 8,
+        },
 
-    // DT_U32
-    {
-        .size  = 4,
-        .rank  = 3,
-        .align = 4,
-        .kind  = DT_U32
-    },
+        {
+            .kind  = DT_U8,
+            .rank  = 1,
+            .size  = 1,
+            .align = 1,
+        },
 
-    // DT_U64
-    {
-        .size  = 8,
-        .rank  = 4,
-        .align = 8,
-        .kind  = DT_U64
-    },
+        {
+            .kind  = DT_U16,
+            .rank  = 2,
+            .size  = 2,
+            .align = 2,
+        },
 
-    // DT_F32
-    {
-        .size  = 4,
-        .rank  = 6,
-        .align = 4,
-        .kind  = DT_F32
-    },
+        {
+            .kind  = DT_U32,
+            .rank  = 3,
+            .size  = 4,
+            .align = 4,
+        },
 
-    // DT_F64
-    {
-        .size  = 8,
-        .rank  = 7,
-        .align = 8,
-        .kind  = DT_F64
-    },
+        {
+            .kind  = DT_U64,
+            .rank  = 4,
+            .size  = 8,
+            .align = 8,
+        },
 
-    // DT_STRING (Ptr + Len = 16 bytes)
-    {
-        .size  = 16,
-        .rank  = 5,
-        .align = 8,
-        .kind  = DT_STRING
-    },
+        {
+            .kind  = DT_F32,
+            .rank  = 6,
+            .size  = 4,
+            .align = 4,
+        },
 
-    // DT_POINTER (64-bit Ptr)
-    {
-        .size  = 8,
-        .rank  = 5,
-        .align = 8,
-        .kind  = DT_POINTER
-    },
+        {
+            .kind  = DT_F64,
+            .rank  = 7,
+            .size  = 8,
+            .align = 8,
+        },
 
-    // DT_ARRAY
-    {
-        .size  = 8,
-        .rank  = 5,
-        .align = 8,
-        .kind  = DT_ARRAY
-    },
+        {
+            .kind  = DT_STRING,
+            .rank  = 5,
+            .size  = 16,
+            .align = 8,
+        },
 
-    // DT_SLICE
-    {
-        .size  = 8,
-        .rank  = 5,
-        .align = 8,
-        .kind  = DT_SLICE
-    },
+        {
+            .kind  = DT_POINTER,
+            .rank  = 5,
+            .size  = 8,
+            .align = 8,
+        },
 
-    // DT_MULTIPLE_TYPES
-    {
-        .size  = 0,
-        .rank  = 0,
-        .align = 1,
-        .kind  = DT_MULTIPLE_TYPES
-    },
+        {
+            .kind  = DT_ARRAY,
+            .rank  = 5,
+            .size  = 8,
+            .align = 8,
+        },
 
-    // DT_CUSTOM
-    {
-        .size  = 0,
-        .rank  = 10,
-        .align = 1,
-        .kind  = DT_CUSTOM
-    },
+        {
+            .kind  = DT_SLICE,
+            .rank  = 5,
+            .size  = 8,
+            .align = 8,
+        },
 
-    // DT_MEMBER
-    {
-        .size  = 0,
-        .rank  = 0,
-        .align = 1,
-        .kind  = DT_MEMBER
-    },
+        {
+            .kind  = DT_MULTIPLE_TYPES,
+            .rank  = 0,
+            .size  = 0,
+            .align = 1,
+        },
 
-    // DT_ENUM
-    {
-        .size  = 4,
-        .rank  = 0,
-        .align = 4,
-        .kind  = DT_ENUM
-    },
+        {
+            .kind  = DT_CUSTOM,
+            .rank  = 10,
+            .size  = 0,
+            .align = 1,
+        },
 
-    // DT_UNDEFINED
-    {
-        .size  = 0,
-        .rank  = 0,
-        .align = 1,
-        .kind  = DT_UNDEFINED
+        {
+            .kind  = DT_ENUM,
+            .rank  = 0,
+            .size  = 4,
+            .align = 4,
+        },
+
+        {
+            .kind  = DT_UNDEFINED,
+            .rank  = 0,
+            .size  = 0,
+            .align = 1,
+        }
+
+    };
+
+    const char* str(Kind kind) {
+        switch (kind) {
+            case Type::DT_VOID: return "void";
+            case Type::DT_I8:   return "i8";
+            case Type::DT_I16:  return "i16";
+            case Type::DT_I32:  return "i32";
+            case Type::DT_I64:  return "i64";
+            case Type::DT_U8:   return "u8";
+            case Type::DT_U16:  return "u16";
+            case Type::DT_U32:  return "u32";
+            case Type::DT_U64:  return "u64";
+            case Type::DT_F32:  return "f32";
+            case Type::DT_F64:  return "f64";
+
+            case Type::DT_STRING:  return "string";
+            case Type::DT_POINTER: return "ptr";
+            case Type::DT_ARRAY:   return "array";
+            case Type::DT_SLICE:   return "slice";
+            case Type::DT_CUSTOM:  return "DT_CUSTOM";
+            case Type::DT_UNION:   return "DT_UNION";
+            case Type::DT_ERROR:   return "DT_ERROR";
+            case Type::DT_ENUM:    return "DT_ENUM";
+
+            case Type::DT_FUNCTION: return "DT_FUNCTION";
+
+            case Type::DT_UNDEFINED:      return "DT_UNDEFINED";
+            case Type::DT_MULTIPLE_TYPES: return "DT_MULTIPLE_TYPES";
+        }
+        return "Unknown";
     }
 
 };

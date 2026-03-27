@@ -8,8 +8,6 @@
 
 
 
-#define min(a, b) ((a) < (b) ? (a) : (b))
-
 // TODO
 typedef float float_t;
 typedef double double_t;
@@ -152,7 +150,7 @@ static inline Span* getSpanStamp(Span* span) {
 }
 
 static inline SpanEx markSpanStart(Span* span) {
-    return SpanEx { *span, span->start };
+    return SpanEx { { *span }, span->start };
 }
 
 static inline Span* finalizeSpan(SpanEx* lspan, Span* span) {

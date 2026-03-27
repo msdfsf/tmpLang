@@ -1,111 +1,120 @@
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 
 #include "syntax.h"
+#include "allocator.h"
 #include "array_list.h"
 #include "data_types.h"
-#include "error.h"
 #include "globals.h"
 #include "keywords.h"
 #include "logger.h"
 #include "operators.h"
+#include "string.h"
+#include "diagnostic.h"
 
 
 
 const Logger::Type logErr = { .level = Logger::ERROR, .tag = stageTag };
 
-Variable Internal::variables[Internal::IV_COUNT];
-Function Internal::functions[Internal::IF_COUNT];
-
-uint64_t Internal::functionUsed;
+Variable Ast::Internal::variables[Ast::Internal::IV_COUNT];
+Function Ast::Internal::functions[Ast::Internal::IF_COUNT];
 
 Scope* SyntaxNode::root = NULL;
 INamed SyntaxNode::dir = { NULL, 0 };
 
-_RegMemory Reg = {};
+AstContext* Ast::init() {
 
-void _RegMemory::init() {
+    AstContext* ctx = (AstContext*) alloc(alc, sizeof(AstContext));
+
+
+
+    // === Registry
+    //
 
     constexpr int initSize = 1024;
 
-    for (int i = 0; i < dataSize; i++) {
-        DArray::init(Reg.data + i, initSize, sizeof(void*));
-        (Reg.data + i)->constCoef = 0;
-        (Reg.data + i)->constTerm = (Reg.data + i)->allocSize;
+    ctx->reg = (AstRegistry*) alloc(alc, sizeof(AstRegistry));
+    for (int i = 0; i < AstRegistry::dataSize; i++) {
+        DArray::init(ctx->reg->data + i, initSize, sizeof(void*));
+        (ctx->reg->data + i)->constCoef = 0;
+        (ctx->reg->data + i)->constTerm = (ctx->reg->data + i)->allocSize;
     }
 
-}
 
-void Internal::init() {
 
-    functionUsed = 0;
+    // === Internals
+    //
 
-    Function* fPrintf = functions + IF_PRINTF;
+    ctx->usedFunctionMask = 0;
+
+    Function* fPrintf = Internal::functions + Internal::IF_PRINTF;
     fPrintf->base.scope = SyntaxNode::root;
-    fPrintf->name.buff = (char*) IFS_PRINTF;
-    fPrintf->name.len = sizeof(IFS_PRINTF) - 1;
-    fPrintf->internalIdx = IF_PRINTF;
+    fPrintf->name.buff = (char*) Internal::IFS_PRINTF;
+    fPrintf->name.len = sizeof(Internal::IFS_PRINTF) - 1;
+    fPrintf->internalIdx = Internal::IF_PRINTF;
 
-    DArray::init(&fPrintf->prototype.inArgs.base, 2, sizeof(VariableDefinition*));
+    fPrintf->prototype.inArgs = (VariableDefinition**) alloc(alc, 2 * sizeof(VariableDefinition*));
 
     VariableDefinition* fPrintArg1 = (VariableDefinition*) nalloc(alc, NT_VARIABLE_DEFINITION);
     fPrintArg1->var = (Variable*) nalloc(alc, NT_VARIABLE);
     fPrintArg1->var->base.scope = SyntaxNode::root;
-    fPrintArg1->var->cvalue.dtypeEnum = DT_STRING;
-    fPrintArg1->var->cvalue.any = NULL;
-    fPrintArg1->var->cvalue.hasValue = 0;
+    fPrintArg1->var->value.typeKind = Type::DT_STRING;
+    fPrintArg1->var->value.any = NULL;
+    fPrintArg1->var->value.hasValue = 0;
 
     VariableDefinition* fPrintArg2 = (VariableDefinition*) nalloc(alc, NT_VARIABLE_DEFINITION);
     fPrintArg2->var = (Variable*) nalloc(alc, NT_VARIABLE);
     fPrintArg2->var->base.scope = SyntaxNode::root;
-    fPrintArg2->var->cvalue.dtypeEnum = DT_MULTIPLE_TYPES;
-    fPrintArg2->var->cvalue.any = NULL;
-    fPrintArg2->var->cvalue.hasValue = 0;
+    fPrintArg2->var->value.typeKind = Type::DT_MULTIPLE_TYPES;
+    fPrintArg2->var->value.any = NULL;
+    fPrintArg2->var->value.hasValue = 0;
 
-    DArray::push(&fPrintf->prototype.inArgs.base, &fPrintArg1);
-    DArray::push(&fPrintf->prototype.inArgs.base, &fPrintArg2);
+    fPrintf->prototype.inArgs[0] = fPrintArg1;
+    fPrintf->prototype.inArgs[1] = fPrintArg2;
 
 
 
-    Function* fAlloc = functions + IF_ALLOC;
+    Function* fAlloc = Internal::functions + Internal::IF_ALLOC;
     fAlloc->base.scope = SyntaxNode::root;
-    fAlloc->name.buff = (char*) IFS_ALLOC;
-    fAlloc->name.len = sizeof(IFS_ALLOC) - 1;
-    fAlloc->internalIdx = IF_ALLOC;
+    fAlloc->name.buff = (char*) Internal::IFS_ALLOC;
+    fAlloc->name.len = sizeof(Internal::IFS_ALLOC) - 1;
+    fAlloc->internalIdx = Internal::IF_ALLOC;
 
-    DArray::init(&fAlloc->prototype.inArgs.base, 1, sizeof(VariableDefinition*));
+    fAlloc->prototype.inArgs = (VariableDefinition**) alloc(alc, sizeof(VariableDefinition*));
 
     VariableDefinition* fAllocArg1 = (VariableDefinition*) nalloc(alc, NT_VARIABLE_DEFINITION);
     fAllocArg1->var = (Variable*) nalloc(nalc, NT_VARIABLE);
     fAllocArg1->var->base.scope = SyntaxNode::root;
-    fAllocArg1->var->cvalue.dtypeEnum = DT_U64;
+    fAllocArg1->var->value.typeKind = Type::DT_U64;
 
-    DArray::push(&fAlloc->prototype.inArgs.base, &fAllocArg1);
+    fAlloc->prototype.inArgs[0] = fAllocArg1;
 
 
 
-    Function* fFree = functions + IF_FREE;
+    Function* fFree = Internal::functions + Internal::IF_FREE;
     fFree->base.scope = SyntaxNode::root;
-    fFree->name.buff = (char*) IFS_FREE;
-    fFree->name.len = sizeof(IFS_FREE) - 1;
-    fFree->internalIdx = IF_FREE;
+    fFree->name.buff = (char*) Internal::IFS_FREE;
+    fFree->name.len = sizeof(Internal::IFS_FREE) - 1;
+    fFree->internalIdx = Internal::IF_FREE;
 
-    DArray::init(&fFree->prototype.inArgs.base, 2, sizeof(VariableDefinition*));
+    fFree->prototype.inArgs = (VariableDefinition**) alloc(alc, 2 * sizeof(VariableDefinition*));
 
     VariableDefinition* fFreeArg1 = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
     fFreeArg1->var = (Variable*) nalloc(nalc, NT_VARIABLE);
     fFreeArg1->var->base.scope = SyntaxNode::root;
-    fFreeArg1->var->cvalue.dtypeEnum = DT_POINTER;
+    fFreeArg1->var->value.typeKind = Type::DT_POINTER;
 
-    DArray::push(&fFree->prototype.inArgs.base, &fFreeArg1);
+    fFree->prototype.inArgs[0] = fFreeArg1;
 
 
 
     // internal Variables such as null, true, false etc...
-    Variable* vNull = variables + IV_NULL;
-    vNull->cvalue = { DT_POINTER, 1, 0 };
+    Variable* vNull = Internal::variables + Internal::IV_NULL;
+    vNull->value = { Type::DT_POINTER, 1, 0 };
     vNull->base.scope = SyntaxNode::root;
-    vNull->name.buff = (char*) IVS_NULL;
-    vNull->name.len = sizeof(IVS_NULL) - 1;
+    vNull->name.buff = (char*) Internal::IVS_NULL;
+    vNull->name.len = sizeof(Internal::IVS_NULL) - 1;
     vNull->base.flags = IS_CMP_TIME;
 
     VariableDefinition* vNullDef = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
@@ -113,11 +122,11 @@ void Internal::init() {
 
 
 
-    Variable* vTrue = variables + IV_TRUE;
+    Variable* vTrue = Internal::variables + Internal::IV_TRUE;
     vTrue->base.scope = SyntaxNode::root;
-    vTrue->cvalue = { DT_INT, 1, 1 };
-    vTrue->name.buff = (char*) IVS_TRUE;
-    vTrue->name.len = sizeof(IVS_TRUE) - 1;
+    vTrue->value = { Type::DT_INT, 1, 1 };
+    vTrue->name.buff = (char*) Internal::IVS_TRUE;
+    vTrue->name.len = sizeof(Internal::IVS_TRUE) - 1;
     vTrue->base.flags = IS_CMP_TIME;
 
     VariableDefinition* vTrueDef = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
@@ -125,19 +134,18 @@ void Internal::init() {
 
 
 
-    Variable* vFalse = variables + IV_FALSE;
+    Variable* vFalse = Internal::variables + Internal::IV_FALSE;
     vFalse->base.scope = SyntaxNode::root;
-    vFalse->cvalue = { DT_INT, 1, 1 };
-    vFalse->name.buff = (char*) IVS_FALSE;
-    vFalse->name.len = sizeof(IVS_FALSE) - 1;
+    vFalse->value = { Type::DT_INT, 1, 1 };
+    vFalse->name.buff = (char*) Internal::IVS_FALSE;
+    vFalse->name.len = sizeof(Internal::IVS_FALSE) - 1;
     vFalse->base.flags = IS_CMP_TIME;
 
     VariableDefinition* vFalseDef = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
     vFalseDef->var = vFalse;
+    return ctx;
 
 }
-
-
 
 Variable* unwrap(Variable* var) {
 
@@ -163,34 +171,36 @@ Variable* unwrap(Variable* var) {
 // whatever
 //
 
-// assuming size > 0
-int validateScopeNames(Scope* sc, DArrayINamedLoc* namesContainer, Namespace** nspace, ErrorSet** eset) {
+int validateScopeNames(Scope* sc, INamedLoc** names, uint32_t namesCount, Namespace** nspace, ErrorSet** eset) {
+
+    if (namesCount == 0) return 0;
 
     Namespace* tmpNspace = NULL;
-    INamedLoc* names = (INamedLoc*) namesContainer->base.buffer;
 
     int i = 0;
-    const int len = namesContainer->base.size;
+    const int len = namesCount;
 
     for (; i < len; i++) {
 
         //MemberOffset arrOff = getMemberOffset(Scope, namespaces);
         //MemberOffset nameOff = getMemberOffset(scope);
         String name = *((String*) (names + i));
-        tmpNspace = Reg.Find.inScopeNamespace(sc, &name);
+        tmpNspace = Ast::Find::inScopeNamespace(sc, &name);
 
         if (!tmpNspace) {
 
-            ErrorSet* tmpEset = Reg.Find.inScopeErrorSet(sc, &name);
+            ErrorSet* tmpEset = Ast::Find::inScopeErrorSet(sc, &name);
             if (!tmpEset) {
 
                 // check implicit errors
+                /*
                 if (sc->fcn && sc->fcn->errorSet) {
                     tmpEset = sc->fcn->errorSet;
                 } else {
-                    Logger::log(logErr, ERR_STR(Err::UNKNOWN_NAMESPACE), sc->base.span, name.len, name.buff);
+                    Logger::log(logErr, Err::str(Err::UNKNOWN_NAMESPACE), sc->base.span, name.len, name.buff);
                     return Err::UNKNOWN_NAMESPACE;
                 }
+                */
 
             }
 
@@ -200,16 +210,16 @@ int validateScopeNames(Scope* sc, DArrayINamedLoc* namesContainer, Namespace** n
             i++;
             for (; i < len; i++) {
 
-                Variable* tmp = Reg.Find.inArray(&tmpEset->vars, &name);
+                Variable* tmp = Ast::Find::inArray(tmpEset->vars, tmpEset->varCount, &name);
                 if (!tmp) {
-                    Logger::log(logErr, ERR_STR(Err::UNKNOWN_NAMESPACE));
+                    Logger::log(logErr, Err::str(Err::UNKNOWN_NAMESPACE));
                     return Err::UNKNOWN_NAMESPACE;
                 }
 
-                if (tmp->cvalue.dtypeEnum == DT_ERROR && !(tmp->cvalue.hasValue)) {
-                    tmpEset = tmp->cvalue.err;
+                if (tmp->value.typeKind == Type::DT_ERROR && !(tmp->value.hasValue)) {
+                    tmpEset = tmp->value.err;
                 } else if (i + 1 < len) {
-                    Logger::log(logErr, ERR_STR(Err::UNKNOWN_ERROR_SET), tmp->base.span);
+                    Logger::log(logErr, Err::str(Err::UNKNOWN_ERROR_SET), tmp->base.span);
                     return Err::UNKNOWN_ERROR_SET;
                 }
 
@@ -238,18 +248,16 @@ int findMember(INamed* member, TypeDefinition* dtype) {
 
 
 
-void* _RegMemory::Find::generic(DArray::Container* arr, String* name, MemberOffset mName) {
+template<uintptr_t offset>
+void* _findGeneric(void* arr, uint32_t len, String* name) {
 
-    for (int i = 0; i < arr->size; i++) {
+    for (uint32_t i = 0; i < len; i++) {
 
-        void* item = DArray::get(arr, i);
-        INamed* itemName = (INamed*) getMember(item, mName);
+        char* item = (char*) arr + i;
+        if (!item) continue;
 
-        if (name->len == itemName->len &&
-            !memcmp(name->buff, itemName->buff, name->len)
-        ) {
-            return item;
-        }
+        String* itemName = (String*)(item + offset);
+        if (cstrcmp(itemName, name)) return item;
 
     }
 
@@ -257,16 +265,16 @@ void* _RegMemory::Find::generic(DArray::Container* arr, String* name, MemberOffs
 
 }
 
-void* _RegMemory::Find::generic(Scope* scope, String* name, MemberOffset mName, MemberOffset mArray) {
+template<uintptr_t offset>
+void* _findGeneric(void** arr, uint32_t len, String* name) {
 
-    while (scope) {
+    for (uint32_t i = 0; i < len; i++) {
 
-        DArray::Container* items = (DArray::Container*) getMember(scope, mArray);
+        char* item = (char*) arr[i];
+        if (!item) continue;
 
-        void* item = generic(items, name, mName);
-        if (item) return item;
-
-        scope = scope->base.scope;
+        String* itemName = (String*)(item + offset);
+        if (cstrcmp(itemName, name)) return item;
 
     }
 
@@ -274,18 +282,78 @@ void* _RegMemory::Find::generic(Scope* scope, String* name, MemberOffset mName, 
 
 }
 
-int genericIdx(DArray::Container* arr, String* name, MemberOffset mName, void** out) {
+template<uintptr_t offset>
+void* _findGeneric(DArray::Container* arr, String* name) {
 
     for (int i = 0; i < arr->size; i++) {
 
-        void* item = DArray::get(arr, i);
-        INamed* itemName = (INamed*) getMember(item, mName);
+        char* item = *(char**) DArray::get(arr, i);
+        if (!item) continue;
 
-        if (name->len == itemName->len &&
-            !memcmp(name->buff, itemName->buff, name->len)
-        ) {
-            return i;
+        String* itemName = (String*)(item + offset);
+        if (cstrcmp(itemName, name)) return item;
+
+    }
+
+    return NULL;
+
+}
+
+template<uintptr_t ptrOffset, uintptr_t nameOffset>
+void* _findGenericNestedPtr(void** arr, uint32_t len, String* name) {
+
+    for (int i = 0; i < len; i++) {
+
+        char* item = (char*) arr[i];
+        if (!item) continue;
+
+        char* nestedObj = *(char**)(item + ptrOffset);
+        if (!nestedObj) continue;
+
+        String* itemName = (String*)(nestedObj + nameOffset);
+        if (cstrcmp(itemName, name)) return item;
+
+    }
+
+    return NULL;
+
+}
+
+template<uintptr_t ptrOffset, uintptr_t nameOffset>
+void* _findGenericNestedPtr(DArray::Container* arr, String* name) {
+
+    for (int i = 0; i < arr->size; i++) {
+
+        char* item = *(char**)DArray::get(arr, i);
+        if (!item) continue;
+
+        char* nestedObj = *(char**)(item + ptrOffset);
+        if (!nestedObj) continue;
+
+        String* itemName = (String*)(nestedObj + nameOffset);
+        if (cstrcmp(itemName, name)) return item;
+
+    }
+
+    return NULL;
+
+}
+
+template<uintptr_t ptrOffset, uintptr_t nameOffset>
+int _findGenericIdxNestedPtr(void** arr, uint32_t len, String* name, void** out) {
+
+    for (int i = 0; i < len; i++) {
+
+        char* item = (char*) arr[i];
+        if (!item) continue;
+
+        char* nestedObj = *(char**) (item + ptrOffset);
+        if (!nestedObj) continue;
+
+        String* itemName = (String*) (nestedObj + nameOffset);
+        if (cstrcmp(itemName, name)) {
             if (out) *out = item;
+            return i;
         }
 
     }
@@ -295,39 +363,103 @@ int genericIdx(DArray::Container* arr, String* name, MemberOffset mName, void** 
 
 }
 
-void* genericPreviousOccurrences(Scope* scope, String* name, int idx, MemberOffset mArray) {
+template<uintptr_t ptrOffset, uintptr_t nameOffset>
+int _findGenericIdxNestedPtr(DArray::Container* arr, String* name, void** out) {
+
+    for (int i = 0; i < arr->size; i++) {
+
+        char* item = *(char**) DArray::get(arr, i);
+        if (!item) continue;
+
+        char* nestedObj = *(char**) (item + ptrOffset);
+        if (!nestedObj) continue;
+
+        String* itemName = (String*) (nestedObj + nameOffset);
+        if (cstrcmp(itemName, name)) {
+            if (out) *out = item;
+            return i;
+        }
+
+    }
+
+    if (out) *out = NULL;
+    return -1;
+
+}
+
+template<uintptr_t offset>
+int _findGenericIdx(void** arr, uint32_t len, String* name, void** out) {
+
+    for (uint32_t i = 0; i < len; i++) {
+
+        char* item = (char*) arr[i];
+        if (!item) continue;
+
+        String* itemName = (String*) (item + offset);
+        if (cstrcmp(itemName, name)) {
+            if (out) *out = item;
+            return (int)i;
+        }
+
+    }
+
+    if (out) *out = NULL;
+    return -1;
+
+}
+
+template<uintptr_t offset>
+int _findGenericIdx(DArray::Container* arr, String* name, void** out) {
+
+    for (int i = 0; i < arr->size; i++) {
+
+        char* item = *(char**) DArray::get(arr, i);
+        if (!item) continue;
+
+        String* itemName = (String*) (item + offset);
+        if (cstrcmp(itemName, name)) {
+            if (out) *out = item; // FIXED: Set out BEFORE returning
+            return i;
+        }
+
+    }
+
+    if (out) *out = NULL;
+    return -1;
+
+}
+
+template<uintptr_t arrayOffset, uintptr_t nameOffset>
+void* _findGenericInScope(Scope* scope, String* name) {
 
     while (scope) {
-
-        DArray::Container* items = (DArray::Container*) getMember(scope, mArray);
-
-        for (int i = 0; i < idx; i++) {
-            INamed* item = (INamed*) DArray::get(items, i);
-
-            if (name->len != item->len) continue;
-            if (memcmp(name->buff, item->buff, name->len) == 0)
-                return item;
-        }
-
+        DArray::Container* items = (DArray::Container*)((char*)scope + arrayOffset);
+        void* item = _findGeneric<nameOffset>(items, name);
+        if (item) return item;
         scope = scope->base.scope;
-        if (!scope) break;
-        idx = scope->base.parentIdx;
     }
 
     return NULL;
 
 }
 
-Variable* _RegMemory::Find::inArray(Variable* arr, int arrLen, String* name) {
+// TODO
+SyntaxNode* Ast::Find::inArray(SyntaxNode** arr, uint32_t len, const String* const name) {
 
-    for (int i = 0; i < arrLen; i++) {
+    for (int i = 0; i < len; i++) {
 
-        Variable* item = arr + i;
+        SyntaxNode* node = arr[0];
 
-        if (name->len == item->name.len &&
-            !memcmp(name->buff, item->name.buff, name->len)
-        ) {
-            return item;
+        String* nodeName;
+        switch (node->type) {
+            case NT_VARIABLE: {
+                nodeName = (String*) &((Variable*) node)->name;
+            }
+
+        }
+
+        if (cstrcmp(*name, *nodeName)) {
+            return node;
         }
 
     }
@@ -336,20 +468,32 @@ Variable* _RegMemory::Find::inArray(Variable* arr, int arrLen, String* name) {
 
 }
 
-#define _defineInArray(Type, MemberName) \
-Type* _RegMemory::Find::inArray(DArray##Type* arr, String* name) { \
-    return (Type*) generic((DArray::Container*) arr, name, getMemberOffset(Type, MemberName)); \
+#define _defineInPtr(Type, Member) \
+Type* Ast::Find::inArray(Type* arr, uint32_t len, String* name) { \
+    return (Type*) _findGeneric<offsetof(Type, Member)>((void*) arr, len, name); \
 }
 
-#define _defineInArrayIdx(Type, MemberName) \
-int _RegMemory::Find::inArray(DArray##Type* arr, String* name, Type** out) { \
-    return genericIdx((DArray::Container*) arr, name, getMemberOffset(Type, MemberName), (void**) out); \
+#define _defineInArray(Type, Member) \
+Type* Ast::Find::inArray(Type** arr, uint32_t len, String* name) { \
+    return (Type*) _findGeneric<offsetof(Type, Member)>((void**) arr, len, name); \
 }
 
-#define _defineInScope(Type, MemberName, MemberArray) \
-Type* _RegMemory::Find::inScope##Type(Scope* scope, String* name) { \
-    return (Type*) generic(scope, name, getMemberOffset(Type, MemberName), getMemberOffset(Scope, MemberArray)); \
+#define _defineInArrayIdx(Type, Member) \
+int Ast::Find::inArray(Type** arr, uint32_t len, String* name, Type** out) { \
+    return _findGenericIdx<offsetof(Type, Member)>((void**) arr, len, name, (void**) out); \
 }
+
+#define _defineInArrayIdxPtr(Type, SubType, PtrMember, NameMember) \
+int Ast::Find::inArray(Type** arr, uint32_t len, String* name, Type** out) { \
+    return _findGenericIdxNestedPtr<offsetof(Type, PtrMember), offsetof(SubType, NameMember)>((void**) arr, len, name, (void**) out); \
+}
+
+#define _defineInScope(Type, NameMember, ScopeArrayMember) \
+Type* Ast::Find::inScope##Type(Scope* scope, String* name) { \
+    return NULL; \
+}
+
+_defineInPtr(Variable, name);
 
 _defineInArray(Variable, name);
 _defineInArray(Function, name);
@@ -363,8 +507,6 @@ _defineInArray(GotoStatement, name);
 _defineInArray(ImportStatement, fname);
 _defineInArray(CodeBlock, code.tagStr);
 _defineInArray(ForeignFunction, fcn.name);
-_defineInArray(VariableDefinition, var->name);
-// _defineInArray(LangDef, tag);
 
 _defineInArrayIdx(Variable, name);
 _defineInArrayIdx(Function, name);
@@ -378,8 +520,7 @@ _defineInArrayIdx(GotoStatement, name);
 _defineInArrayIdx(ImportStatement, fname);
 _defineInArrayIdx(CodeBlock, code.tagStr);
 _defineInArrayIdx(ForeignFunction, fcn.name);
-_defineInArrayIdx(VariableDefinition, var->name);
-// _defineInArrayIdx(LangDef, tag)
+_defineInArrayIdxPtr(VariableDefinition, Variable, var, name);
 
 _defineInScope(Variable, name, defs);
 _defineInScope(Function, name, fcns);
@@ -390,11 +531,10 @@ _defineInScope(TypeDefinition, name, customDataTypes);
 _defineInScope(Enumerator, name, enums);
 _defineInScope(Namespace, name, namespaces);
 _defineInScope(GotoStatement, name, gotos);
-// _defineInScope(Using, name, usings)
 
 
 
-#define _defineInit(T, E) T* _RegMemory::Node::init##T() { \
+#define _defineMake(T, E) T* Ast::Node::make##T() { \
     T* node = (T*) nalloc(nalc, E); \
     init(node); \
     return node; \
@@ -402,7 +542,7 @@ _defineInScope(GotoStatement, name, gotos);
 
 void init(SyntaxNode* node) {
     node->ogNode = NULL;
-    node->parentIdx = 0;
+    node->definitionIdx = 0;
     node->scope = NULL;
     node->flags = 0;
     node->span = NULL;
@@ -417,130 +557,135 @@ void init(IForeignCode* node) {
     node->tagStr = String(NULL, 0);
 }
 
-void _RegMemory::Node::init(Scope* node) {
-    OrderedDict::init(&node->defSearch, 8);
-    DArray::init(&node->children.base, 8, sizeof(void*));
-
-    int arraysCount = sizeof(node->arrays) / sizeof(DArray::Container);
-    for (int i = 0; i < arraysCount; i++) {
-        DArray::init(node->arrays + i, 8, sizeof(void*));
-    }
+void Ast::Node::init(Scope* node) {
+    node->definitions = NULL;
+    node->definitionCount = 0;
+    node->children = NULL;
+    node->childrenCount = 0;
 
     ::init(&node->base);
     node->base.type = NT_SCOPE;
 }
-_defineInit(Scope, NT_SCOPE);
+_defineMake(Scope, NT_SCOPE);
 
-void _RegMemory::Node::init(Namespace* node) {
+void Ast::Node::init(Namespace* node) {
     init(&node->scope);
     ::init(&node->name);
     node->scope.base.type = NT_NAMESPACE;
 }
-_defineInit(Namespace, NT_NAMESPACE);
+_defineMake(Namespace, NT_NAMESPACE);
 
-void _RegMemory::Node::init(Using* node) {
+void Ast::Node::init(Using* node) {
     node->var = NULL;
     ::init(&node->base);
     node->base.type = NT_USING;
 }
-_defineInit(Using, NT_USING);
+_defineMake(Using, NT_USING);
 
-void _RegMemory::Node::init(CodeBlock* node) {
+void Ast::Node::init(CodeBlock* node) {
     ::init(&node->code);
     ::init(&node->base);
     node->base.type = NT_CODE_BLOCK;
 }
-_defineInit(CodeBlock, NT_CODE_BLOCK);
+_defineMake(CodeBlock, NT_CODE_BLOCK);
 
-void _RegMemory::Node::init(Enumerator* node) {
-    node->dtype = DT_VOID;
-    DArray::init(&node->vars.base, 8, sizeof(void*));
+void Ast::Node::init(Enumerator* node) {
+    node->dtype = Type::DT_VOID;
+    node->vars = NULL;
+    node->varCount = 0;
+
     ::init(&node->name);
     ::init(&node->base);
     node->base.type = NT_ENUMERATOR;
 }
-_defineInit(Enumerator, NT_ENUMERATOR);
+_defineMake(Enumerator, NT_ENUMERATOR);
 
-void _RegMemory::Node::init(Statement* node) {
+void Ast::Node::init(Statement* node) {
     node->operand = NULL;
     ::init(&node->base);
     node->base.type = NT_STATEMENT;
 }
-_defineInit(Statement, NT_STATEMENT);
+_defineMake(Statement, NT_STATEMENT);
 
-void _RegMemory::Node::init(VariableDefinition* node) {
-    node->var = initVariable();
+void Ast::Node::init(VariableDefinition* node) {
+    node->var = makeVariable();
     node->var->def = node;
     node->lastPtr = NULL;
     node->dtype = NULL;
     ::init(&node->base);
     node->base.type = NT_VARIABLE_DEFINITION;
 }
-_defineInit(VariableDefinition, NT_VARIABLE_DEFINITION);
+_defineMake(VariableDefinition, NT_VARIABLE_DEFINITION);
 
-void _RegMemory::Node::init(VariableAssignment* node) {
+void Ast::Node::init(VariableAssignment* node) {
     node->lvar = NULL;
     node->rvar = NULL;
     ::init(&node->base);
     node->base.type = NT_VARIABLE_ASSIGNMENT;
 }
-_defineInit(VariableAssignment, NT_VARIABLE_ASSIGNMENT);
+_defineMake(VariableAssignment, NT_VARIABLE_ASSIGNMENT);
 
-void _RegMemory::Node::init(Variable* node) {
+void Ast::Node::init(Variable* node) {
     ::init(&node->base);
     node->base.type = NT_VARIABLE;
     // TODO
 }
-_defineInit(Variable, NT_VARIABLE);
+_defineMake(Variable, NT_VARIABLE);
 
-void _RegMemory::Node::init(Function* node) {
+void Ast::Node::init(Function* node) {
     node->bodyScope = NULL;
     node->errorSet = NULL;
     node->errorSetName = NULL;
-    node->icnt = 0;
     node->internalIdx = 0;
-    node->istackIdx = 0;
-    DArray::init(&node->returns.base, 8, sizeof(void*));
+    node->returns = NULL;
+    node->returnCount = 0;
+
     ::init(&node->name);
     init(&node->prototype);
     ::init(&node->base);
     node->base.type = NT_FUNCTION;
 }
-_defineInit(Function, NT_FUNCTION);
+_defineMake(Function, NT_FUNCTION);
 
-void _RegMemory::Node::init(ForeignFunction* node) {
+void Ast::Node::init(ForeignFunction* node) {
     ::init(&node->code);
     init(&node->fcn);
 }
-_defineInit(ForeignFunction, NT_FUNCTION);
+_defineMake(ForeignFunction, NT_FUNCTION);
 
-void _RegMemory::Node::init(Branch* node) {
-    DArray::init(&node->expressions.base, 8, sizeof(void*));
-    DArray::init(&node->scopes.base, 8, sizeof(void*));
+void Ast::Node::init(Branch* node) {
+    node->expressions = NULL;
+    node->expressionCount = 0;
+    node->scopes = NULL;
+    node->scopeCount = 0;
+
     ::init(&node->base);
     node->base.type = NT_BRANCH;
 }
-_defineInit(Branch, NT_BRANCH);
+_defineMake(Branch, NT_BRANCH);
 
-void _RegMemory::Node::init(SwitchCase* node) {
+void Ast::Node::init(SwitchCase* node) {
     node->elseCase = NULL;
     node->switchExp = NULL;
-    DArray::init(&node->cases.base, 8, sizeof(void*));
-    DArray::init(&node->casesExp.base, 8, sizeof(void*));
+    node->cases = NULL;
+    node->casesExp = NULL;
+    node->caseCount = 0;
+    node->caseExpCount = 0;
+
     ::init(&node->base);
     node->base.type = NT_SWITCH_CASE;
 }
-_defineInit(SwitchCase, NT_SWITCH_CASE);
+_defineMake(SwitchCase, NT_SWITCH_CASE);
 
-void _RegMemory::Node::init(WhileLoop* node) {
+void Ast::Node::init(WhileLoop* node) {
     node->bodyScope = NULL;
     node->expression = NULL;
     ::init(&node->base);
     node->base.type = NT_WHILE_LOOP;
 }
-_defineInit(WhileLoop, NT_WHILE_LOOP);
+_defineMake(WhileLoop, NT_WHILE_LOOP);
 
-void _RegMemory::Node::init(ForLoop* node) {
+void Ast::Node::init(ForLoop* node) {
     node->initEx = NULL;
     node->actionEx = NULL;
     node->bodyScope = NULL;
@@ -548,9 +693,9 @@ void _RegMemory::Node::init(ForLoop* node) {
     ::init(&node->base);
     node->base.type = NT_FOR_LOOP;
 }
-_defineInit(ForLoop, NT_FOR_LOOP);
+_defineMake(ForLoop, NT_FOR_LOOP);
 
-void _RegMemory::Node::init(Loop* node) {
+void Ast::Node::init(Loop* node) {
     node->array = NULL;
     node->bodyScope = NULL;
     node->idx = NULL;
@@ -558,9 +703,9 @@ void _RegMemory::Node::init(Loop* node) {
     ::init(&node->base);
     node->base.type = NT_LOOP;
 }
-_defineInit(Loop, NT_LOOP);
+_defineMake(Loop, NT_LOOP);
 
-void _RegMemory::Node::init(ReturnStatement* node) {
+void Ast::Node::init(ReturnStatement* node) {
     node->err = NULL;
     node->fcn = NULL;
     node->var = NULL;
@@ -568,165 +713,174 @@ void _RegMemory::Node::init(ReturnStatement* node) {
     ::init(&node->base);
     node->base.type = NT_RETURN_STATEMENT;
 }
-_defineInit(ReturnStatement, NT_RETURN_STATEMENT);
+_defineMake(ReturnStatement, NT_RETURN_STATEMENT);
 
-void _RegMemory::Node::init(ContinueStatement* node) {
+void Ast::Node::init(ContinueStatement* node) {
     ::init(&node->base);
     node->base.type = NT_CONTINUE_STATEMENT;
 }
-_defineInit(ContinueStatement, NT_CONTINUE_STATEMENT);
+_defineMake(ContinueStatement, NT_CONTINUE_STATEMENT);
 
-void _RegMemory::Node::init(BreakStatement* node) {
+void Ast::Node::init(BreakStatement* node) {
     ::init(&node->base);
     node->base.type = NT_BREAK_STATEMENT;
 }
-_defineInit(BreakStatement, NT_BREAK_STATEMENT);
+_defineMake(BreakStatement, NT_BREAK_STATEMENT);
 
-void _RegMemory::Node::init(GotoStatement* node) {
+void Ast::Node::init(GotoStatement* node) {
     node->label = NULL;
     node->span = NULL;
     node->name = String{ NULL, 0 };
     ::init(&node->base);
     node->base.type = NT_GOTO_STATEMENT;
 }
-_defineInit(GotoStatement, NT_GOTO_STATEMENT);
+_defineMake(GotoStatement, NT_GOTO_STATEMENT);
 
-void _RegMemory::Node::init(Label* node) {
+void Ast::Node::init(Label* node) {
     node->span = NULL;
     ::init(&node->name);
     ::init(&node->base);
     node->base.type = NT_LABEL;
 }
-_defineInit(Label, NT_LABEL);
+_defineMake(Label, NT_LABEL);
 
-void _RegMemory::Node::init(TypeDefinition* node) {
-    node->dtype = { .size = 0, .rank = 0 };
-    DArray::init(&node->vars.base, 8, sizeof(void*));
+void Ast::Node::init(TypeDefinition* node) {
+    node->typeInfo = NULL;
+    node->vars = NULL;
+    node->varCount = 0;
     node->base.type = NT_TYPE_DEFINITION;
     // TODO
 }
-_defineInit(TypeDefinition, NT_TYPE_DEFINITION);
+_defineMake(TypeDefinition, NT_TYPE_DEFINITION);
 
-void _RegMemory::Node::init(Union* node) {
+void Ast::Node::init(Union* node) {
     init(&node->base);
     node->base.base.type = NT_UNION;
 }
-_defineInit(Union, NT_UNION);
+_defineMake(Union, NT_UNION);
 
-void _RegMemory::Node::init(ErrorSet* node) {
+void Ast::Node::init(ErrorSet* node) {
     node->value = 0;
-    DArray::init(&node->vars.base, 8, sizeof(void*));
+    node->vars = NULL;
+    node->varCount = 0;
+
     ::init(&node->name);
     ::init(&node->base);
     node->base.type = NT_ERROR;
 }
-_defineInit(ErrorSet, NT_ERROR);
+_defineMake(ErrorSet, NT_ERROR);
 
-void _RegMemory::Node::init(ImportStatement* node) {
+void Ast::Node::init(ImportStatement* node) {
     node->fname = String(NULL, 0);
     node->keyword = KW_VOID;
     node->param = String(NULL, 0);
     ::init(&node->base);
     node->base.type = NT_IMPORT;
 }
-_defineInit(ImportStatement, NT_IMPORT);
+_defineMake(ImportStatement, NT_IMPORT);
 
-void _RegMemory::Node::init(FunctionCall* node) {
+void Ast::Node::init(FunctionCall* node) {
     node->fcn = NULL;
     node->fptr = NULL;
-    node->inArgsCnt = 0;
+    node->inArgs = NULL;
+    node->inArgCount = 0;
     node->outArg = NULL;
-    DArray::init(&node->inArgs.base, 8, sizeof(void*));
+
     init(&node->name);
     ::init(&node->base);
     node->base.type = EXT_FUNCTION_CALL;
 }
-_defineInit(FunctionCall, AT_EXT_FUNCTION_CALL);
+_defineMake(FunctionCall, AT_EXT_FUNCTION_CALL);
 
-void _RegMemory::Node::init(OperationExpression* node) {
+void Ast::Node::init(OperationExpression* node) {
     node->opType = OP_NONE;
     ::init(&node->base);
     node->base.type = EXT_OPERATION;
 }
-_defineInit(OperationExpression, AT_EXT_OPERATION);
+_defineMake(OperationExpression, AT_EXT_OPERATION);
 
-void _RegMemory::Node::init(UnaryExpression* node) {
+void Ast::Node::init(UnaryExpression* node) {
     node->operand = NULL;
     init(&node->base);
     node->base.base.type = EXT_UNARY;
 }
-_defineInit(UnaryExpression, AT_EXT_UNARY);
+_defineMake(UnaryExpression, AT_EXT_UNARY);
 
-void _RegMemory::Node::init(BinaryExpression* node) {
+void Ast::Node::init(BinaryExpression* node) {
     node->left = NULL;
     node->right = NULL;
     init(&node->base);
     node->base.base.type = EXT_BINARY;
 }
-_defineInit(BinaryExpression, AT_EXT_BINARY);
+_defineMake(BinaryExpression, AT_EXT_BINARY);
 
-void _RegMemory::Node::init(TernaryExpression* node) {
+void Ast::Node::init(TernaryExpression* node) {
     init(&node->base);
     node->base.base.type = EXT_TERNARY;
 }
-_defineInit(TernaryExpression, AT_EXT_TERNARY);
+_defineMake(TernaryExpression, AT_EXT_TERNARY);
 
-void _RegMemory::Node::init(QualifiedName* node) {
+void Ast::Node::init(QualifiedName* node) {
     node->path = NULL;
     node->pathSize = 0;
     ::init((INamedEx*) node);
 }
-_defineInit(QualifiedName, AT_QUALIFIED_NAME);
+_defineMake(QualifiedName, AT_QUALIFIED_NAME);
 
-void _RegMemory::Node::init(FunctionPrototype* node) {
-    node->inArgsCnt = 0;
+void Ast::Node::init(FunctionPrototype* node) {
+    node->inArgCount = 0;
+    node->inArgs = NULL;
     node->outArg = NULL;
-    DArray::init(&node->inArgs.base, 8, sizeof(void*));
 }
-_defineInit(FunctionPrototype, AT_FUNCTION_PROTOTYPE);
+_defineMake(FunctionPrototype, AT_FUNCTION_PROTOTYPE);
 
-void _RegMemory::Node::init(StringInitialization* node) {
+void Ast::Node::init(StringInitialization* node) {
     node->rawStr.buff = NULL;
     node->rawStr.len = 0;
-    node->wideDtype = DT_VOID;
+    node->wideType = Type::DT_VOID;
     node->wideStr.buff = NULL;
     node->wideStr.len = 0;
+
     ::init(&node->base);
     node->base.type = EXT_STRING_INITIALIZATION;
 }
-_defineInit(StringInitialization, AT_EXT_STRING_INITIALIZATION);
+_defineMake(StringInitialization, AT_EXT_STRING_INITIALIZATION);
 
-void _RegMemory::Node::init(ArrayInitialization* node) {
-    DArray::init(&node->attributes.base, 8, sizeof(void*));
+void Ast::Node::init(ArrayInitialization* node) {
+    node->attributes = NULL;
+    node->attributeCount = 0;
+
     ::init(&node->base);
     node->base.type = EXT_ARRAY_INITIALIZATION;
 }
-_defineInit(ArrayInitialization, AT_EXT_ARRAY_INITIALIZATION);
+_defineMake(ArrayInitialization, AT_EXT_ARRAY_INITIALIZATION);
 
-void _RegMemory::Node::init(TypeInitialization* node) {
+void Ast::Node::init(TypeInitialization* node) {
     node->fillVar = NULL;
     node->idxs = NULL;
-    DArray::init(&node->attributes.base, 8, sizeof(void*));
+    node->attributes = NULL;
+    node->attributeCount = 0;
+
     ::init(&node->base);
     node->base.type = EXT_TYPE_INITIALIZATION;
 }
-_defineInit(TypeInitialization, AT_EXT_TYPE_INITIALIZATION);
+_defineMake(TypeInitialization, AT_EXT_TYPE_INITIALIZATION);
 
-void _RegMemory::Node::init(Pointer* node) {
+void Ast::Node::init(Pointer* node) {
    node->parentPointer = NULL;
    node->pointsTo = NULL;
-   node->pointsToEnum = DT_VOID;
+   node->pointsToKind = Type::DT_VOID;
 }
-_defineInit(Pointer, AT_POINTER);
+_defineMake(Pointer, AT_POINTER);
 
-void _RegMemory::Node::init(Array* node) {
+void Ast::Node::init(Array* node) {
     node->flags = 0;
     node->length = NULL;
     init(&node->base);
 }
-_defineInit(Array, AT_ARRAY);
+_defineMake(Array, AT_ARRAY);
 
-void _RegMemory::Node::init(Slice* node) {
+void Ast::Node::init(Slice* node) {
     node->arr = NULL;
     node->bidx = NULL;
     node->eidx = NULL;
@@ -734,39 +888,39 @@ void _RegMemory::Node::init(Slice* node) {
     ::init(&node->base);
     node->base.type = EXT_SLICE;
 }
-_defineInit(Slice, AT_EXT_SLICE);
+_defineMake(Slice, AT_EXT_SLICE);
 
-void _RegMemory::Node::init(Catch* node) {
+void Ast::Node::init(Catch* node) {
     node->call = NULL;
     node->err = NULL;
     node->scope = NULL;
     ::init(&node->base);
     node->base.type = EXT_CATCH;
 }
-_defineInit(Catch, AT_EXT_CATCH);
+_defineMake(Catch, AT_EXT_CATCH);
 
-void _RegMemory::Node::init(Cast* node) {
-    node->target = DT_VOID;
+void Ast::Node::init(Cast* node) {
+    node->target = Type::DT_VOID;
     node->operand = NULL;
     node->base.type = EXT_CAST;
 }
-_defineInit(Cast, AT_EXT_CAST);
+_defineMake(Cast, AT_EXT_CAST);
 
-void _RegMemory::Node::init(Alloc* node) {
+void Ast::Node::init(Alloc* node) {
     ::init(&node->base);
     node->base.type = EXT_ALLOC;
-    node->def = initVariableDefinition();
+    node->def = makeVariableDefinition();
 }
-_defineInit(Alloc, AT_EXT_ALLOC);
+_defineMake(Alloc, AT_EXT_ALLOC);
 
-void _RegMemory::Node::init(Free* node) {
+void Ast::Node::init(Free* node) {
     ::init(&node->base);
-    node->var = initVariable();
+    node->var = makeVariable();
 }
-_defineInit(Free, AT_EXT_FREE);
+_defineMake(Free, AT_EXT_FREE);
 
 #define _defineCopy(T, E) \
-T* _RegMemory::Node::copy(T* node) { \
+T* Ast::Node::copy(T* node) { \
     T* tmp = (T*) nalloc(nalc, E); \
     *tmp = *(node); \
     return tmp; \
@@ -803,7 +957,7 @@ _defineCopy(UnaryExpression,     AT_EXT_UNARY);
 _defineCopy(BinaryExpression,    AT_EXT_BINARY);
 _defineCopy(TernaryExpression,   AT_EXT_TERNARY);
 
-Variable* _RegMemory::Node::copy(Variable* dest, Variable* src) {
+Variable* Ast::Node::copy(Variable* dest, Variable* src) {
 
     if (!src) return NULL;
     if (!dest) {
@@ -812,9 +966,7 @@ Variable* _RegMemory::Node::copy(Variable* dest, Variable* src) {
 
     dest->base = src->base;
     dest->def = src->def;
-    dest->cvalue = src->cvalue;
-    dest->ivalue = src->ivalue;
-    dest->unrollExpression = src->unrollExpression;
+    dest->value = src->value;
     dest->expression = src->expression;
     dest->name = src->name;
 
@@ -837,7 +989,7 @@ Variable* _RegMemory::Node::copy(Variable* dest, Variable* src) {
 // TODO: for now here
 //       quite strange function with wierd name, as
 //       I am not sure if it needs to exist
-Variable* _RegMemory::Node::copyRef(Variable* dest, Variable* src) {
+Variable* Ast::Node::copyRef(Variable* dest, Variable* src) {
 
     if (!src) return NULL;
     if (!dest) {
@@ -845,8 +997,7 @@ Variable* _RegMemory::Node::copyRef(Variable* dest, Variable* src) {
     }
 
     dest->def = src->def;
-    dest->cvalue = src->cvalue;
-    dest->ivalue = src->ivalue;
+    dest->value = src->value;
     dest->name = src->name;
     dest->base.flags = src->base.flags;
 
@@ -865,4 +1016,100 @@ Variable* _RegMemory::Node::copyRef(Variable* dest, Variable* src) {
 
     return dest;
 
+}
+
+const char* Ast::Node::str(NodeType type) {
+    switch (type) {
+        case NT_SCOPE:
+            return "NT_SCOPE";
+        case NT_VARIABLE_DEFINITION:
+            return "NT_VARIABLE_DEFINITION";
+        case NT_VARIABLE_ASSIGNMENT:
+            return "NT_VARIABLE_ASSIGNMENT";
+        case NT_TYPE_DEFINITION:
+            return "NT_TYPE_DEFINITION";
+        case NT_TYPE_INITIALIZATION:
+            return "NT_TYPE_INITIALIZATION";
+        case NT_ENUMERATOR:
+            return "NT_ENUMERATOR";
+        case NT_VARIABLE:
+            return "NT_VARIABLE";
+        case NT_FUNCTION:
+            return "NT_FUNCTION";
+        case NT_BRANCH:
+            return "NT_BRANCH";
+        case NT_SWITCH_CASE:
+            return "NT_SWITCH_CASE";
+        case NT_WHILE_LOOP:
+            return "NT_WHILE_LOOP";
+        case NT_FOR_LOOP:
+            return "NT_FOR_LOOP";
+        case NT_LOOP:
+            return "NT_LOOP";
+        case NT_RETURN_STATEMENT:
+            return "NT_RETURN_STATEMENT";
+        case NT_CONTINUE_STATEMENT:
+            return "NT_CONTINUE_STATEMENT";
+        case NT_BREAK_STATEMENT:
+            return "NT_BREAK_STATEMENT";
+        case NT_GOTO_STATEMENT:
+            return "NT_GOTO_STATEMENT";
+        case NT_LABEL:
+            return "NT_LABEL";
+        case NT_NAMESPACE:
+            return "NT_NAMESPACE";
+        case NT_STATEMENT:
+            return "NT_STATEMENT";
+        case NT_CODE_BLOCK:
+            return "NT_CODE_BLOCK";
+        case NT_ERROR:
+            return "NT_ERROR";
+        case NT_UNION:
+            return "NT_UNION";
+        case NT_USING:
+            return "NT_USING";
+        case NT_IMPORT:
+            return "NT_IMPORT";
+        case NT_COUNT:
+            return "NT_COUNT";
+        default:
+            return "UNKNOWN_NODE_TYPE";
+    }
+}
+
+const char* Ast::Node::str(ExpressionType type) {
+    switch (type) {
+        case EXT_FUNCTION_CALL:
+            return "EXT_FUNCTION_CALL";
+        case EXT_OPERATION:
+            return "EXT_OPERATION";
+        case EXT_UNARY:
+            return "EXT_UNARY";
+        case EXT_BINARY:
+            return "EXT_BINARY";
+        case EXT_TERNARY:
+            return "EXT_TERNARY";
+        case EXT_TYPE_INITIALIZATION:
+            return "EXT_TYPE_INITIALIZATION";
+        case EXT_STRING_INITIALIZATION:
+            return "EXT_STRING_INITIALIZATION";
+        case EXT_ARRAY_INITIALIZATION:
+            return "EXT_ARRAY_INITIALIZATION";
+        case EXT_SLICE:
+            return "EXT_SLICE";
+        case EXT_CATCH:
+            return "EXT_CATCH";
+        case EXT_CAST:
+            return "EXT_CAST";
+        case EXT_ALLOC:
+            return "EXT_ALLOC";
+        case EXT_FREE:
+            return "EXT_FREE";
+        case EXT_GET_LENGTH:
+            return "EXT_GET_LENGTH";
+        case EXT_GET_SIZE:
+            return "EXT_GET_SIZE";
+        default:
+            return "UNKNOWN_EXPRESSION_TYPE";
+    }
 }

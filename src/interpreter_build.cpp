@@ -4,14 +4,13 @@
 #include "array_list.h"
 #include "data_types.h"
 #include "dynamic_arena.h"
-#include "error.h"
 #include "globals.h"
 #include "interpreter.h"
 #include "operators.h"
 #include "supplement/runtime.h"
 #include "syntax.h"
 #include "logger.h"
-
+#include "diagnostic.h"
 
 
 #include <atomic>
@@ -247,7 +246,7 @@ namespace Interpreter {
 
     bool isFixedArray(Array* arr) {
         // in hpes that length will always be pre-unwrapped
-        return arr->length->cvalue.hasValue;
+        return arr->length->value.hasValue;
     }
 
     // LOOK_AT : seems unnecessary
@@ -298,114 +297,114 @@ namespace Interpreter {
     }
 
     // unsigned and signed
-    inline int isI32(DataTypeEnum dtype) {
-        return dtype >= DT_I8 && dtype < DT_I64;
+    inline int isI32(Type::Kind dtype) {
+        return dtype >= Type::DT_I8 && dtype < Type::DT_I64;
     }
 
-    inline int isI64(DataTypeEnum dtype) {
-        return dtype == DT_I64 && dtype == DT_U64;
+    inline int isI64(Type::Kind dtype) {
+        return dtype == Type::DT_I64 && dtype == Type::DT_U64;
     }
 
-    inline int isF32(DataTypeEnum dtype) {
-        return dtype == DT_F32;
+    inline int isF32(Type::Kind dtype) {
+        return dtype == Type::DT_F32;
     }
 
-    inline int isF64(DataTypeEnum dtype) {
-        return dtype == DT_F64;
+    inline int isF64(Type::Kind dtype) {
+        return dtype == Type::DT_F64;
     }
 
-    int getDtypeOffset(DataTypeEnum dtype) {
+    int getDtypeOffset(Type::Kind dtype) {
 
         switch (dtype) {
-            case DT_I8:  return OFF_I8;
-            case DT_U8:  return OFF_U8;
-            case DT_I16: return OFF_I16;
-            case DT_U16: return OFF_U16;
-            case DT_I32: return OFF_I32;
-            case DT_U32: return OFF_U32;
-            case DT_I64: return OFF_I64;
-            case DT_U64: return OFF_U64;
-            case DT_ARRAY:
-            case DT_POINTER: return OFF_PTR;
+            case Type::DT_I8:  return OFF_I8;
+            case Type::DT_U8:  return OFF_U8;
+            case Type::DT_I16: return OFF_I16;
+            case Type::DT_U16: return OFF_U16;
+            case Type::DT_I32: return OFF_I32;
+            case Type::DT_U32: return OFF_U32;
+            case Type::DT_I64: return OFF_I64;
+            case Type::DT_U64: return OFF_U64;
+            case Type::DT_ARRAY:
+            case Type::DT_POINTER: return OFF_PTR;
             default: return OFF_GENERIC;
         }
 
     }
 
-    int getDtypeOffsetNoCast(DataTypeEnum dtype) {
+    int getDtypeOffsetNoCast(Type::Kind dtype) {
 
         switch (dtype) {
-            case DT_I8:  return OFF_I32 - 4;
-            case DT_U8:  return OFF_U32 - 4;
-            case DT_I16: return OFF_I32 - 4;
-            case DT_U16: return OFF_U32 - 4;
-            case DT_I32: return OFF_I32 - 4;
-            case DT_U32: return OFF_U32 - 4;
-            case DT_I64: return OFF_I64 - 4;
-            case DT_U64: return OFF_U64 - 4;
-            case DT_ARRAY:
-            case DT_POINTER: return OFF_PTR - 4;
+            case Type::DT_I8:  return OFF_I32 - 4;
+            case Type::DT_U8:  return OFF_U32 - 4;
+            case Type::DT_I16: return OFF_I32 - 4;
+            case Type::DT_U16: return OFF_U32 - 4;
+            case Type::DT_I32: return OFF_I32 - 4;
+            case Type::DT_U32: return OFF_U32 - 4;
+            case Type::DT_I64: return OFF_I64 - 4;
+            case Type::DT_U64: return OFF_U64 - 4;
+            case Type::DT_ARRAY:
+            case Type::DT_POINTER: return OFF_PTR - 4;
             default: return OFF_GENERIC - 4;
         }
 
     }
 
-    int getDtypeOffsetNoCastArithmetic(DataTypeEnum dtype) {
+    int getDtypeOffsetNoCastArithmetic(Type::Kind dtype) {
 
         switch (dtype) {
-            case DT_I8:  return OFF_I32 - 4;
-            case DT_U8:  return OFF_U32 - 4;
-            case DT_I16: return OFF_I32 - 4;
-            case DT_U16: return OFF_U32 - 4;
-            case DT_I32: return OFF_I32 - 4;
-            case DT_U32: return OFF_U32 - 4;
-            case DT_I64: return OFF_I64 - 4;
-            case DT_ARRAY:
-            case DT_POINTER:
-            case DT_U64: return OFF_U64 - 4;
+            case Type::DT_I8:  return OFF_I32 - 4;
+            case Type::DT_U8:  return OFF_U32 - 4;
+            case Type::DT_I16: return OFF_I32 - 4;
+            case Type::DT_U16: return OFF_U32 - 4;
+            case Type::DT_I32: return OFF_I32 - 4;
+            case Type::DT_U32: return OFF_U32 - 4;
+            case Type::DT_I64: return OFF_I64 - 4;
+            case Type::DT_ARRAY:
+            case Type::DT_POINTER:
+            case Type::DT_U64: return OFF_U64 - 4;
             default: return OFF_GENERIC - 4;
         }
 
     }
 
-    inline DataType* getDtype(void* data, DataTypeEnum dtype) {
+    inline Type::TypeInfo* getDtype(void* data, Type::Kind dtype) {
 
-        if (dtype <= DT_F64) {
-            return dataTypes + dtype;
+        if (dtype <= Type::DT_F64) {
+            return Type::basicTypes + dtype;
         }
 
         switch (dtype) {
 
-            case DT_CUSTOM: {
+            case Type::DT_CUSTOM: {
                 TypeDefinition* def = (TypeDefinition*) data;
-                return &def->dtype;
+                return (Type::TypeInfo*) def->typeInfo;
             }
 
-            case DT_UNION: {
+            case Type::DT_UNION: {
                 break;
             }
 
-            case DT_ENUM: {
-                return dataTypes + ((Enumerator*) data)->dtype;
+            case Type::DT_ENUM: {
+                return Type::basicTypes + ((Enumerator*) data)->dtype;
             }
 
-            case DT_ERROR: {
+            case Type::DT_ERROR: {
                 break;
             }
 
-            case DT_FUNCTION: {
+            case Type::DT_FUNCTION: {
                 break;
             }
 
-            case DT_POINTER: {
-                return dataTypes + dtype;
+            case Type::DT_POINTER: {
+                return Type::basicTypes + dtype;
             }
 
-            case DT_ARRAY: {
-                return dataTypes + dtype;
+            case Type::DT_ARRAY: {
+                return Type::basicTypes + dtype;
             }
 
-            case DT_STRING: {
+            case Type::DT_STRING: {
 
             }
 
@@ -423,13 +422,13 @@ namespace Interpreter {
     inline Value toValue(Pointer* ptr) {
         Value val;
         val.any = ptr->pointsTo;
-        val.dtypeEnum = ptr->pointsToEnum;
+        val.typeKind = ptr->pointsToKind;
         val.hasValue = 0;
         return val;
     }
 
-    inline DataType* getDtype(Value* val) {
-        return getDtype(val->any, val->dtypeEnum);
+    inline Type::TypeInfo* getDtype(Value* val) {
+        return getDtype(val->any, val->typeKind);
     }
 
     // TODO :
@@ -452,16 +451,16 @@ namespace Interpreter {
 
         Err::Err err = Err::OK;
 
-        const DataTypeEnum dtypeEnum = val->dtypeEnum;
+        const Type::Kind dtypeEnum = val->typeKind;
 
-        if (isPrimitive(dtypeEnum) || dtypeEnum == DT_POINTER) {
-            DataType* const dtype = dataTypes + dtypeEnum;
+        if (isPrimitive(dtypeEnum) || dtypeEnum == Type::DT_POINTER) {
+            Type::TypeInfo* const dtype = Type::basicTypes + dtypeEnum;
             *size = dtype->size;
             *align = dtype->align;
             return err;
         }
 
-        if (dtypeEnum == DT_ARRAY) {
+        if (dtypeEnum == Type::DT_ARRAY) {
 
             Array* arr = val->arr;
 
@@ -475,7 +474,7 @@ namespace Interpreter {
             }
 
             arr->length = unwrap(arr->length);
-            const uint64_t len = arr->length->cvalue.u64;
+            const uint64_t len = arr->length->value.u64;
 
             uint64_t elementSize;
             uint64_t elementAlign;
@@ -491,11 +490,11 @@ namespace Interpreter {
 
         }
 
-        if (dtypeEnum == DT_CUSTOM) {
+        if (dtypeEnum == Type::DT_CUSTOM) {
 
             TypeDefinition* const typeDef = val->def;
-            *size = typeDef->dtype.size;
-            *align = typeDef->dtype.align;
+            *size = typeDef->typeInfo->base.size;
+            *align = typeDef->typeInfo->base.align;
 
             return err;
 
@@ -518,7 +517,7 @@ namespace Interpreter {
         return 0;
     }
 
-    int getAlign(DataType* dtype) {
+    int getAlign(Type::TypeInfo* dtype) {
         return sizeof(vmword);
     }
 
@@ -535,7 +534,7 @@ namespace Interpreter {
 
         uint64_t size;
         uint64_t align;
-        Err::Err err = getDtypeInfo(&var->cvalue, &size, &align);
+        Err::Err err = getDtypeInfo(&var->value, &size, &align);
         if (err != Err::OK) return err;
 
         const uint64_t vmwordsCount = BYTES_TO_WORDS(size);
@@ -576,7 +575,7 @@ namespace Interpreter {
         return ptr;
     }
 
-    void pushBoolCast(CompilerState* state, DataTypeEnum dtype) {
+    void pushBoolCast(CompilerState* state, Type::Kind dtype) {
 
         if (isI32(dtype)) {
             pushOpcode(state, OC_BOOL_I32);
@@ -607,9 +606,9 @@ namespace Interpreter {
         Arena::Container* locals = &state->locals;
         Arena::Container* bytecode = &state->bytecode;
 
-        switch (value->dtypeEnum) {
+        switch (value->typeKind) {
 
-            case DT_I8: {
+            case Type::DT_I8: {
                 pushOpcode(state, OC_PUSH_I32);
 
                 int32_t val = (int32_t) value->i8;
@@ -619,7 +618,7 @@ namespace Interpreter {
                 break;
             }
 
-            case DT_I16: {
+            case Type::DT_I16: {
                 pushOpcode(state, OC_PUSH_I32);
 
                 int32_t val = (int32_t) value->i16;
@@ -629,7 +628,7 @@ namespace Interpreter {
                 break;
             }
 
-            case DT_I32: {
+            case Type::DT_I32: {
                 pushOpcode(state, OC_PUSH_I32);
 
                 int32_t* ptr = (int32_t*) Arena::push(bytecode, 4, 1);
@@ -638,7 +637,7 @@ namespace Interpreter {
                 break;
             }
 
-            case DT_I64: {
+            case Type::DT_I64: {
                 pushOpcode(state, OC_PUSH_I64);
 
                 int64_t* ptr = (int64_t*) Arena::push(bytecode, 8, 1);
@@ -647,7 +646,7 @@ namespace Interpreter {
                 break;
             }
 
-            case DT_F32: {
+            case Type::DT_F32: {
                 pushOpcode(state, OC_PUSH_F32);
 
                 float* ptr = (float*) Arena::push(bytecode, 4, 1);
@@ -656,7 +655,7 @@ namespace Interpreter {
                 break;
             }
 
-            case DT_F64: {
+            case Type::DT_F64: {
                 pushOpcode(state, OC_PUSH_F64);
 
                 double* ptr = (double*) Arena::push(bytecode, 8, 1);
@@ -665,7 +664,7 @@ namespace Interpreter {
                 break;
             }
 
-            case DT_STRING: {
+            case Type::DT_STRING: {
                 // TODO: add StringInitialization to Value
                 pushString(state, (StringInitialization*) value->any);
                 break;
@@ -681,107 +680,107 @@ namespace Interpreter {
 
 
 
-    Opcode selectSetOpcode(DataTypeEnum dtype) {
+    Opcode selectSetOpcode(Type::Kind dtype) {
 
         int dtypeOffset = getDtypeOffset(dtype);
         return (Opcode) (OC_SET_I8 + dtypeOffset);
 
     }
 
-    Opcode selectGetOpcode(DataTypeEnum dtype) {
+    Opcode selectGetOpcode(Type::Kind dtype) {
 
         int dtypeOffset = getDtypeOffset(dtype);
         return (Opcode) (OC_GET_I8 + dtypeOffset);
 
     }
 
-    Opcode selectLoadOpcode(DataTypeEnum dtype) {
+    Opcode selectLoadOpcode(Type::Kind dtype) {
 
         int dtypeOffset = getDtypeOffset(dtype);
         return (Opcode) (OC_LOAD_I8 + dtypeOffset);
 
     }
 
-    Opcode selectStoreOpcode(DataTypeEnum dtype) {
+    Opcode selectStoreOpcode(Type::Kind dtype) {
 
         int dtypeOffset = getDtypeOffset(dtype);
         return (Opcode) (OC_STORE_I8 + dtypeOffset);
 
     }
 
-    Opcode selectCastOpcode(DataTypeEnum src, DataTypeEnum dest) {
+    Opcode selectCastOpcode(Type::Kind src, Type::Kind dest) {
 
-        if (dest == DT_I8 || dest == DT_I16) dest = DT_I32;
-        if (dest == DT_U8 || dest == DT_U16) dest = DT_U32;
+        if (dest == Type::DT_I8 || dest == Type::DT_I16) dest = Type::DT_I32;
+        if (dest == Type::DT_U8 || dest == Type::DT_U16) dest = Type::DT_U32;
 
         switch (src) {
 
-            case DT_I8:
-            case DT_I16:
-            case DT_I32: {
+            case Type::DT_I8:
+            case Type::DT_I16:
+            case Type::DT_I32: {
 
-                if (dest == DT_U32) return OC_CAST_I32_TO_U32; // OC_NOP
-                if (dest == DT_I64 || dest == DT_U64) return OC_SEXT_32_TO_64;
-                if (dest == DT_F32) return OC_CAST_I32_TO_F32;
-                if (dest == DT_F64) return OC_CAST_I32_TO_F64;
-
-                break;
-
-            }
-
-            case DT_U8:
-            case DT_U16:
-            case DT_U32: {
-
-                if (dest == DT_I32) return OC_CAST_U32_TO_I32; // OC_NOP
-                if (dest == DT_I64 || dest == DT_U64) return OC_ZEXT_32_TO_64;
-                if (dest == DT_F32) return OC_CAST_U32_TO_F32;
-                if (dest == DT_F64) return OC_CAST_U32_TO_F64;
+                if (dest == Type::DT_U32) return OC_CAST_I32_TO_U32; // OC_NOP
+                if (dest == Type::DT_I64 || dest == Type::DT_U64) return OC_SEXT_32_TO_64;
+                if (dest == Type::DT_F32) return OC_CAST_I32_TO_F32;
+                if (dest == Type::DT_F64) return OC_CAST_I32_TO_F64;
 
                 break;
 
             }
 
-            case DT_I64: {
+            case Type::DT_U8:
+            case Type::DT_U16:
+            case Type::DT_U32: {
 
-                if (dest == DT_I32 || dest == DT_U32) return OC_TRUNC_64_TO_32;
-                if (dest == DT_U64) return OC_CAST_I64_TO_U64;
-                if (dest == DT_F32) return OC_CAST_I64_TO_F32;
-                if (dest == DT_F64) return OC_CAST_I64_TO_F64;
-
-                break;
-
-            }
-            case DT_U64: {
-
-                if (dest == DT_I32 || dest == DT_U32) return OC_TRUNC_64_TO_32;
-                if (dest == DT_I64) return OC_CAST_U64_TO_I64;
-                if (dest == DT_F32) return OC_CAST_U64_TO_F32;
-                if (dest == DT_F64) return OC_CAST_U64_TO_F64;
+                if (dest == Type::DT_I32) return OC_CAST_U32_TO_I32; // OC_NOP
+                if (dest == Type::DT_I64 || dest == Type::DT_U64) return OC_ZEXT_32_TO_64;
+                if (dest == Type::DT_F32) return OC_CAST_U32_TO_F32;
+                if (dest == Type::DT_F64) return OC_CAST_U32_TO_F64;
 
                 break;
 
             }
 
-            case DT_F32: {
+            case Type::DT_I64: {
 
-                if (dest == DT_I32) return OC_CAST_F32_TO_I32;
-                if (dest == DT_I64) return OC_CAST_F32_TO_I64;
-                if (dest == DT_U32) return OC_CAST_F32_TO_U32;
-                if (dest == DT_U64) return OC_CAST_F32_TO_U64;
-                if (dest == DT_F64) return OC_CAST_F32_TO_F64;
+                if (dest == Type::DT_I32 || dest == Type::DT_U32) return OC_TRUNC_64_TO_32;
+                if (dest == Type::DT_U64) return OC_CAST_I64_TO_U64;
+                if (dest == Type::DT_F32) return OC_CAST_I64_TO_F32;
+                if (dest == Type::DT_F64) return OC_CAST_I64_TO_F64;
+
+                break;
+
+            }
+            case Type::DT_U64: {
+
+                if (dest == Type::DT_I32 || dest == Type::DT_U32) return OC_TRUNC_64_TO_32;
+                if (dest == Type::DT_I64) return OC_CAST_U64_TO_I64;
+                if (dest == Type::DT_F32) return OC_CAST_U64_TO_F32;
+                if (dest == Type::DT_F64) return OC_CAST_U64_TO_F64;
 
                 break;
 
             }
 
-            case DT_F64: {
+            case Type::DT_F32: {
 
-                if (dest == DT_I32) return OC_CAST_F64_TO_I32;
-                if (dest == DT_I64) return OC_CAST_F64_TO_I64;
-                if (dest == DT_U32) return OC_CAST_F64_TO_U32;
-                if (dest == DT_U64) return OC_CAST_F64_TO_U64;
-                if (dest == DT_F32) return OC_CAST_F64_TO_F32;
+                if (dest == Type::DT_I32) return OC_CAST_F32_TO_I32;
+                if (dest == Type::DT_I64) return OC_CAST_F32_TO_I64;
+                if (dest == Type::DT_U32) return OC_CAST_F32_TO_U32;
+                if (dest == Type::DT_U64) return OC_CAST_F32_TO_U64;
+                if (dest == Type::DT_F64) return OC_CAST_F32_TO_F64;
+
+                break;
+
+            }
+
+            case Type::DT_F64: {
+
+                if (dest == Type::DT_I32) return OC_CAST_F64_TO_I32;
+                if (dest == Type::DT_I64) return OC_CAST_F64_TO_I64;
+                if (dest == Type::DT_U32) return OC_CAST_F64_TO_U32;
+                if (dest == Type::DT_U64) return OC_CAST_F64_TO_U64;
+                if (dest == Type::DT_F32) return OC_CAST_F64_TO_F32;
 
                 break;
 
@@ -802,12 +801,12 @@ namespace Interpreter {
         switch (op) {
 
         case OP_ADDITION: {
-            int offset = getDtypeOffsetNoCast(uex->operand->cvalue.dtypeEnum);
+            int offset = getDtypeOffsetNoCast(uex->operand->value.typeKind);
             return (Opcode)(OC_ADD_I32 + offset);
         }
 
         case OP_SUBTRACTION: {
-            int offset = getDtypeOffsetNoCast(uex->operand->cvalue.dtypeEnum);
+            int offset = getDtypeOffsetNoCast(uex->operand->value.typeKind);
             return (Opcode)(OC_SUB_I32 + offset);
         }
 
@@ -816,7 +815,7 @@ namespace Interpreter {
         }
 
         case OP_GET_VALUE: {
-            return selectLoadOpcode(uex->operand->cvalue.dtypeEnum);
+            return selectLoadOpcode(uex->operand->value.typeKind);
         }
 
         case OP_NEGATION: {
@@ -840,7 +839,7 @@ namespace Interpreter {
     Opcode selectOperatorOpcode(BinaryExpression* bex) {
 
         OperatorEnum op = bex->base.opType;
-        int dtypeOffset = getDtypeOffsetNoCastArithmetic(bex->left->cvalue.dtypeEnum);
+        int dtypeOffset = getDtypeOffsetNoCastArithmetic(bex->left->value.typeKind);
 
         switch (op) {
         case OP_ADDITION: {
@@ -926,10 +925,10 @@ namespace Interpreter {
         pushOpcode(state, OC_PUSH_PTR);
         pushOperand(state, (uint64_t) runtimeInfo);
 
-        if (isStructLike(var->cvalue.dtypeEnum)) {
+        if (isStructLike(var->value.typeKind)) {
 
             // TODO : move to a function?
-            DataType* dtype = getDtype(&var->cvalue);
+            Type::TypeInfo* dtype = getDtype(&var->value);
 
             uint64_t offset = state->locals.logicalPos;
             push(&state->locals, dtype->size, dtype->align);
@@ -944,7 +943,7 @@ namespace Interpreter {
             pushOpcode(state, OC_LEA);
             pushOperand(state, offset);
 
-        } else if (var->cvalue.dtypeEnum == DT_STRING) {
+        } else if (var->value.typeKind == Type::DT_STRING) {
 
             StringInitialization* init = (StringInitialization*) var->expression;
 
@@ -958,12 +957,12 @@ namespace Interpreter {
             pushOpcode(state, OC_LEA);
             pushOperand(state, offset);
 
-        } else if (var->cvalue.dtypeEnum == DT_ARRAY) {
+        } else if (var->value.typeKind == Type::DT_ARRAY) {
 
             err = compile(state, var, NULL, FORCE_ARRAY_LENGTH | FORCE_VEC_OPCODES);
             if (err != Err::OK) return err;
 
-            if (var->cvalue.dtypeEnum == DT_ARRAY) {
+            if (var->value.typeKind == Type::DT_ARRAY) {
                 pushOpcode(state, OC_VEC_TO_REF);
             }
 
@@ -979,8 +978,8 @@ namespace Interpreter {
 
     Err::Err compile(CompilerState* state, Scope* node) {
 
-        for (int i = 0; i < node->children.base.size; i++) {
-            compile(state, *(SyntaxNode**) DArray::get(&node->children.base, i));
+        for (int i = 0; i < node->childrenCount; i++) {
+            compile(state, node->children[i]);
         }
 
         return Err::OK;
@@ -1005,7 +1004,7 @@ namespace Interpreter {
 
         // do we qualify for initialization?
         if (!node->var ||
-            (!node->var->expression && !node->var->cvalue.hasValue)
+            (!node->var->expression && !node->var->value.hasValue)
         ) {
             return Err::OK;
         }
@@ -1049,7 +1048,7 @@ namespace Interpreter {
         Variable* lvar = (node->lvar->def) ? node->lvar : unwrap(node->lvar);
         Variable* rvar = node->rvar;//unwrap(node->rvar);
 
-        if (lvar->cvalue.dtypeEnum == DT_ARRAY) {
+        if (lvar->value.typeKind == Type::DT_ARRAY) {
             // we want to assign by value -> use of vec ops
 
             err = compile(state, rvar, lvar, FORCE_ARRAY_LENGTH | FORCE_VEC_OPCODES | IS_ROOT);
@@ -1066,7 +1065,7 @@ namespace Interpreter {
             err = compile(state, node->rvar);
             if (err != Err::OK) return err;
 
-            Opcode op = selectSetOpcode(lvar->cvalue.dtypeEnum);
+            Opcode op = selectSetOpcode(lvar->value.typeKind);
             pushOpcode(state, op);
             pushOperand(state, lvar->def->vmOffset);
 
@@ -1083,7 +1082,7 @@ namespace Interpreter {
         err = compile(state, node->rvar, lvar);
         if (err != Err::OK) return err;
 
-        Opcode op = selectStoreOpcode(lvar->cvalue.dtypeEnum);
+        Opcode op = selectStoreOpcode(lvar->value.typeKind);
         pushOpcode(state, op);
 
         return Err::OK;
@@ -1102,21 +1101,21 @@ namespace Interpreter {
 
         if (node->def) {
 
-            Value* val = &node->def->var->cvalue;
+            Value* val = &node->def->var->value;
 
             uint64_t offset = node->def->vmOffset;
             uint64_t dtypeSize = 0;
 
-            const DataTypeEnum dtypeEnum = val->dtypeEnum;
-            if (dtypeEnum == DT_ARRAY && isFixedArray(val->arr)) {
+            const Type::Kind dtypeEnum = val->typeKind;
+            if (dtypeEnum == Type::DT_ARRAY && isFixedArray(val->arr)) {
 
                 // TODO : this is just bullshit
                 uint64_t elementSize;
                 uint64_t elementAlign;
 
                 Value tmpVal;
-                tmpVal.any = node->cvalue.arr->base.pointsTo;
-                tmpVal.dtypeEnum = node->cvalue.arr->base.pointsToEnum;
+                tmpVal.any = node->value.arr->base.pointsTo;
+                tmpVal.typeKind = node->value.arr->base.pointsToKind;
                 getDtypeInfo(&tmpVal, &elementSize, &elementAlign);
 
 
@@ -1135,7 +1134,7 @@ namespace Interpreter {
             pushOpcode(state, op);
 
             if (op == OC_GET_BLOB) {
-                DataType* dtype = getDtype(val); // TODO
+                Type::TypeInfo* dtype = getDtype(val); // TODO
                 pushOperand(state, dtype->size);
             }
 
@@ -1145,7 +1144,7 @@ namespace Interpreter {
 
         }
 
-        pushPushInstruction(state, &node->cvalue);
+        pushPushInstruction(state, &node->value);
 
         return Err::OK;
 
@@ -1164,7 +1163,7 @@ namespace Interpreter {
     }
 
     Function* getInternalFunction(int idx) {
-        return Internal::functions + idx;
+        return Ast::Internal::functions + idx;
     }
 
     Err::Err compileShortCircuit(CompilerState* state, BinaryExpression* bex) {
@@ -1177,7 +1176,7 @@ namespace Interpreter {
         // 5: ...                   5: ...
 
         compile(state, bex->left);
-        pushBoolCast(state, bex->left->cvalue.dtypeEnum);
+        pushBoolCast(state, bex->left->value.typeKind);
 
         pushOpcode(state, OC_DUP);
 
@@ -1192,7 +1191,7 @@ namespace Interpreter {
         pushOpcode(state, OC_POP);
 
         compile(state, bex->right);
-        pushBoolCast(state, bex->left->cvalue.dtypeEnum);
+        pushBoolCast(state, bex->left->value.typeKind);
 
         uint64_t jumpTargetOffset = state->bytecode.logicalPos;
         memcpy(jumpOperandPtr, &jumpTargetOffset, sizeof(uint64_t));
@@ -1204,7 +1203,7 @@ namespace Interpreter {
     Err::Err compileMemberSelection(CompilerState* state, BinaryExpression* bex) {
 
         Variable* parent = bex->left;
-        const DataTypeEnum parentType = parent->cvalue.dtypeEnum;
+        const Type::Kind parentType = parent->value.typeKind;
         // TODO
 
         return Err::OK;
@@ -1215,7 +1214,7 @@ namespace Interpreter {
 
         var = unwrap(var);
 
-        Array* arr = var->cvalue.arr;
+        Array* arr = var->value.arr;
         arr->length = unwrap(arr->length);
 
         if (!arr->length) {
@@ -1226,7 +1225,7 @@ namespace Interpreter {
         Err::Err err = compile(state, arr->length);
         if (err != Err::OK) return err;
 
-        DataType* elemType = getDtype(&arr->length->cvalue);
+        Type::TypeInfo* elemType = getDtype(&arr->length->value);
         if (elemType->size > 1) {
             pushOpcode(state, OC_PUSH_U64);
             pushOperand(state, elemType->size);
@@ -1242,13 +1241,13 @@ namespace Interpreter {
         uint64_t elementSize;
         uint64_t elementAlign;
         Value element;
-        element.any = target->cvalue.arr->base.pointsTo;
-        element.dtypeEnum = target->cvalue.arr->base.pointsToEnum;
+        element.any = target->value.arr->base.pointsTo;
+        element.typeKind = target->value.arr->base.pointsToKind;
         getDtypeInfo(&element, &elementSize, &elementAlign);
 
         const uint64_t offset = target->def->vmOffset;
 
-        for (int i = 0; i < init->attributes.base.size; i++) {
+        for (int i = 0; i < init->attributeCount; i++) {
 
             pushOpcode(state, OC_LEA);
             pushOperand(state, offset);
@@ -1259,11 +1258,11 @@ namespace Interpreter {
             pushOpcode(state, OC_PTR_IDX);
             pushOperand(state, elementSize);
 
-            Variable* var = *(Variable**) DArray::get(&init->attributes.base, i);
+            Variable* var = init->attributes[i];
             Err::Err err = compile(state, var);
             if (err != Err::OK) return err;
 
-            const Opcode storeOpcode = selectStoreOpcode(element.dtypeEnum);
+            const Opcode storeOpcode = selectStoreOpcode(element.typeKind);
             pushOpcode(state, storeOpcode);
 
         }
@@ -1276,11 +1275,11 @@ namespace Interpreter {
     inline bool tryAsPointerArithmetic(CompilerState* state, BinaryExpression* bex) {
 
         Variable* var = NULL;
-        if (bex->left->cvalue.dtypeEnum == DT_POINTER ||
-            bex->left->cvalue.dtypeEnum == DT_ARRAY) {
+        if (bex->left->value.typeKind == Type::DT_POINTER ||
+            bex->left->value.typeKind == Type::DT_ARRAY) {
             var = bex->left;
-        } else if (bex->right->cvalue.dtypeEnum == DT_POINTER ||
-            bex->right->cvalue.dtypeEnum == DT_ARRAY) {
+        } else if (bex->right->value.typeKind == Type::DT_POINTER ||
+            bex->right->value.typeKind == Type::DT_ARRAY) {
             var = bex->right;
         }
 
@@ -1293,7 +1292,7 @@ namespace Interpreter {
 
         uint64_t size;
         uint64_t align;
-        Value val = toValue(var->cvalue.ptr);
+        Value val = toValue(var->value.ptr);
         Err::Err err = getDtypeInfo(&val, &size, &align);
         if (err != Err::OK) return false;
 
@@ -1314,8 +1313,8 @@ namespace Interpreter {
 
     inline bool tryVectorization(CompilerState* state, BinaryExpression* bex, VecResult lRes, VecResult rRes, Variable* target, const bool isRoot) {
 
-        if (bex->left->cvalue.dtypeEnum != DT_ARRAY &&
-            bex->right->cvalue.dtypeEnum != DT_ARRAY
+        if (bex->left->value.typeKind != Type::DT_ARRAY &&
+            bex->right->value.typeKind != Type::DT_ARRAY
         ) {
             return false;
         }
@@ -1330,24 +1329,24 @@ namespace Interpreter {
 
         VecDescriptor desc = {
             .oper = bex->base.opType,
-            .flags = 
-                (((uint32_t) state->vecResult.isTmp) << DE_F_DEST_SHIFT) | 
+            .flags =
+                (((uint32_t) state->vecResult.isTmp) << DE_F_DEST_SHIFT) |
                 (((uint32_t) lRes.isTmp) << DE_F_LEFT_SHIFT) |
                 (((uint32_t) rRes.isTmp) << DE_F_RIGHT_SHIFT)
         };
 
-        if (bex->left->cvalue.dtypeEnum == DT_ARRAY && bex->right->cvalue.dtypeEnum == DT_ARRAY) {
-            desc.dtype = bex->left->cvalue.arr->base.pointsToEnum;
+        if (bex->left->value.typeKind == Type::DT_ARRAY && bex->right->value.typeKind == Type::DT_ARRAY) {
+            desc.dtype = bex->left->value.arr->base.pointsToKind;
             if (bex->base.opType == OP_CONCATENATION) {
                 pushOpcode(state, OC_VEC_CAT);
             } else {
                 pushOpcode(state, OC_VEC_VV);
             }
-        } else if (bex->left->cvalue.dtypeEnum == DT_ARRAY) {
-            desc.dtype = bex->left->cvalue.arr->base.pointsToEnum;
+        } else if (bex->left->value.typeKind == Type::DT_ARRAY) {
+            desc.dtype = bex->left->value.arr->base.pointsToKind;
             pushOpcode(state, OC_VEC_VS);
         } else {
-            desc.dtype = bex->right->cvalue.arr->base.pointsToEnum;
+            desc.dtype = bex->right->value.arr->base.pointsToKind;
             pushOpcode(state, OC_VEC_SV);
         }
 
@@ -1361,7 +1360,7 @@ namespace Interpreter {
     // Unary Version
     bool tryVectorization(CompilerState* state, UnaryExpression* uex, Variable* target, const bool isRoot) {
 
-        if (uex->operand->cvalue.dtypeEnum != DT_ARRAY) return false;
+        if (uex->operand->value.typeKind != Type::DT_ARRAY) return false;
 
         uint64_t dest = 0;
         if (isRoot) {
@@ -1374,7 +1373,7 @@ namespace Interpreter {
         pushOpcode(state, OC_VEC_UNARY);
 
         VecDescriptor desc = {
-            .dtype = uex->operand->cvalue.arr->base.pointsToEnum,
+            .dtype = uex->operand->value.arr->base.pointsToKind,
             .oper = uex->base.opType,
             .flags = ((uint32_t) state->vecResult.isTmp) << DE_F_DEST_SHIFT
         };
@@ -1421,7 +1420,7 @@ namespace Interpreter {
                 if (oc == OC_NOP) break;
 
                 if (oc == OC_NOT_BOOL) {
-                    pushBoolCast(state, uex->operand->cvalue.dtypeEnum);
+                    pushBoolCast(state, uex->operand->value.typeKind);
                 }
 
                 pushOpcode(state, oc);
@@ -1472,12 +1471,12 @@ namespace Interpreter {
                 pushOpcode(state, oc);
 
                 if (oc == OC_PTR_IDX) {
-                    Pointer* ptr = bex->left->cvalue.ptr;
-                    DataType* dtype = getDtype(ptr->pointsTo, ptr->pointsToEnum);
+                    Pointer* ptr = bex->left->value.ptr;
+                    Type::TypeInfo* dtype = getDtype(ptr->pointsTo, ptr->pointsToKind);
                     pushOperand(state, dtype->size);
 
                     if (!(flags & IS_LVALUE)) {
-                        oc = selectLoadOpcode(ptr->pointsToEnum);
+                        oc = selectLoadOpcode(ptr->pointsToKind);
                         pushOpcode(state, oc);
                     }
                 }
@@ -1501,30 +1500,30 @@ namespace Interpreter {
 
                 // predetermine if the last arg is vardic, so we
                 // dont have to lookup in main loop prototype definition
-                int fixedCount = fcn->prototype.inArgs.base.size;
+                int fixedCount = fcn->prototype.inArgCount;
                 int varArgsCount = 0;
                 bool isVariadic = false;
 
                 if (fixedCount > 0) {
-                    VariableDefinition* lastArgPrototype = *(VariableDefinition**) DArray::get(&fcn->prototype.inArgs.base, fixedCount - 1);
-                    if (lastArgPrototype->var->cvalue.dtypeEnum == DT_MULTIPLE_TYPES) {
+                    VariableDefinition* lastArgPrototype = fcn->prototype.inArgs[fixedCount - 1];
+                    if (lastArgPrototype->var->value.typeKind == Type::DT_MULTIPLE_TYPES) {
                         isVariadic = true;
                         fixedCount--;
                     }
                 }
 
                 for (int i = 0; i < fixedCount; i++) {
-                    Variable* arg = *(Variable**) DArray::get(&call->inArgs.base, i);
+                    Variable* arg = call->inArgs[i];
                     err = compile(state, arg, NULL, FORCE_ARRAY_LENGTH);
                     if (err != Err::OK) return err;
                 }
 
                 bool anyVarargIsArray = false;
                 if (isVariadic) {
-                    for (int i = fixedCount; i < call->inArgs.base.size; i++) {
-                        Variable* arg = *(Variable**) DArray::get(&call->inArgs.base, i);
+                    for (int i = fixedCount; i < call->inArgCount; i++) {
+                        Variable* arg = call->inArgs[i];
                         compileAsAny(state, arg);
-                        anyVarargIsArray = arg->cvalue.dtypeEnum == DT_ARRAY;
+                        anyVarargIsArray = arg->value.typeKind == Type::DT_ARRAY;
                         varArgsCount++;
                     }
 
@@ -1562,7 +1561,7 @@ namespace Interpreter {
 
                     VecDescriptor desc = {
                         .dtype = cast->target,
-                        .srcDtype = cast->operand->cvalue.arr->base.pointsToEnum,
+                        .srcDtype = cast->operand->value.arr->base.pointsToKind,
                         .flags = 0
                     };
 
@@ -1581,7 +1580,7 @@ namespace Interpreter {
 
                     compile(state, cast->operand, target);
 
-                    Opcode op = selectCastOpcode(cast->operand->cvalue.dtypeEnum, cast->target);
+                    Opcode op = selectCastOpcode(cast->operand->value.typeKind, cast->target);
                     if (op == OC_NOP) break;
 
                     pushOpcode(state, op);
@@ -1596,9 +1595,9 @@ namespace Interpreter {
 
                 Alloc* alc = (Alloc*) node;
 
-                DataType* dtype = getDtype(&alc->def->var->cvalue);
+                Type::TypeInfo* dtype = getDtype(&alc->def->var->value);
 
-                if (dtype->kind == DT_ARRAY) {
+                if (dtype->kind == Type::DT_ARRAY) {
                     err = compileArraySize(state, alc->def->var);
                     if (err != Err::OK) return err;
                 } else {
@@ -1606,7 +1605,7 @@ namespace Interpreter {
                     pushOperand(state, dtype->size);
                 }
 
-                Function* fcn = Internal::functions + Internal::IF_ALLOC;
+                Function* fcn = Ast::Internal::functions + Ast::Internal::IF_ALLOC;
                 pushOpcode(state, OC_CALL);
                 pushOperand(state, (uint64_t) fcn);
 
@@ -1634,8 +1633,8 @@ namespace Interpreter {
             case EXT_GET_LENGTH: {
 
                 GetLength* ex = (GetLength*) node;
-                if (ex->arr->cvalue.arr->length) {
-                    compile(state, ex->arr->cvalue.arr->length);
+                if (ex->arr->value.arr->length) {
+                    compile(state, ex->arr->value.arr->length);
                 } else {
                     pushOpcode(state, OC_GET_U64);
                     pushOperand(state, ex->arr->def->vmOffset + 8);
@@ -1648,7 +1647,7 @@ namespace Interpreter {
             case EXT_GET_SIZE: {
 
                 GetSize* ex = (GetSize*) node;
-                compile(state, ex->arr->cvalue.arr->length);
+                compile(state, ex->arr->value.arr->length);
                 /*
                 DataType* dtype = getDtype(ex->arr->base.pointsTo, ex->arr->base.pointsToEnum);
                 pushOperand(state, dtype->size);
@@ -1669,7 +1668,7 @@ namespace Interpreter {
 
                 ArrayInitialization* init = (ArrayInitialization*) node;
 
-                const uint64_t elementCount = init->attributes.base.size;
+                const uint64_t elementCount = init->attributeCount;
                 if (elementCount < 0) {
                     // TODO : can we even be there if not error in compiler
                     return Err::UNEXPECTED_ERROR;
@@ -1677,15 +1676,15 @@ namespace Interpreter {
 
                 if (init->flags & IS_CMP_TIME) {
 
-                    Variable* first = *(Variable**)DArray::get(&init->attributes.base, 0);
+                    Variable* first = init->attributes[0];
 
                     uint64_t offset = state->rawData.logicalPos;
-                    uint64_t elementSize = getDtypeSize(&first->cvalue);
+                    uint64_t elementSize = getDtypeSize(&first->value);
 
                     uint8_t* rawDataPtr = (uint8_t*)Arena::push(&state->rawData, elementSize * elementSize, 1);
                     for (int i = 0; i < elementCount; i++) {
-                        Variable* arg = *(Variable**)DArray::get(&init->attributes.base, i);
-                        memcpy(rawDataPtr + (i * elementSize), &arg->cvalue.u64, elementSize);
+                        Variable* arg = init->attributes[i];
+                        memcpy(rawDataPtr + (i * elementSize), &arg->value.u64, elementSize);
                     }
 
                     pushOpcode(state, OC_LEA_CONST);
@@ -1699,7 +1698,7 @@ namespace Interpreter {
 
                     pushOpcode(state, OC_VEC_COPY);
                     VecDescriptor desc = {
-                        .dtype = first->cvalue.dtypeEnum,
+                        .dtype = first->value.typeKind,
                     };
                     if (isRoot) {
                         pushDescriptor(state, desc);
@@ -1715,11 +1714,11 @@ namespace Interpreter {
                     uint64_t elementSize = 0;
 
                     for (int i = 0; i < elementCount; i++) {
-                        Variable* arg = *(Variable**) DArray::get(& init->attributes.base, i);
+                        Variable* arg = init->attributes[i];
                         compile(state, arg);
 
                         if (i == 0) {
-                            elementSize = getDtypeSize(&arg->cvalue);
+                            elementSize = getDtypeSize(&arg->value);
                         }
 
                         if (isRoot) {
@@ -1799,7 +1798,7 @@ namespace Interpreter {
         pushOpcode(state, OC_RET);
 
         // TODO : not the best
-        DataType* dtype = getDtype(&node->var->cvalue); // TODO
+        Type::TypeInfo* dtype = getDtype(&node->var->value); // TODO
         pushOperand(state, dtype->size);
 
         return Err::OK;
@@ -1837,19 +1836,19 @@ namespace Interpreter {
         Err::Err err;
 
         fcn->exe->isVariadic = false;
-        for (int i = 0; i < fcn->prototype.inArgsCnt; i++) {
+        for (int i = 0; i < fcn->prototype.inArgCount; i++) {
 
-            VariableDefinition* def = *(VariableDefinition**) DArray::get(&fcn->prototype.inArgs.base, i);
+            VariableDefinition* def = fcn->prototype.inArgs[i];
 
             if (!state->populateLocals &&
-                (def->var->cvalue.hasValue || def->var->expression)
+                (def->var->value.hasValue || def->var->expression)
             ) {
                 state->populateLocals = true;
                 state->fixedSize = state->locals.logicalPos;
                 state->locals.logicalPos = 0;
             }
 
-            if (def->var->cvalue.dtypeEnum == DT_MULTIPLE_TYPES) {
+            if (def->var->value.typeKind == Type::DT_MULTIPLE_TYPES) {
                 fcn->exe->isVariadic = true;
             }
 

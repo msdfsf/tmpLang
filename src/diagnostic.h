@@ -1,14 +1,10 @@
 #pragma once
+#include "stdint.h"
 
-#include <cstdint>
-
-
-
-#define ERR_STR(e) ((char*) Err::str[-e])
-#define ERR_PSTR(e) ((char**) &(Err::str[-e]))
+struct Span;
+struct AstContext;
 
 namespace Err {
-
     enum Err : int64_t {
         OK                              = 0,
         MALLOC                          = -1,
@@ -71,71 +67,34 @@ namespace Err {
         NOT_YET_IMPLEMENTED             = -58,
         IO_ERROR                        = -59,
         MAX_FILE_PATH_EXCEEDED          = -60,
+        COUNT                           = -61,
     };
+    const char* const str(Err code);
+}
 
-    const char* const str[] = {
-
-        "OK",
-        "Malloc doesn't feel good...",
-        "Unexpected end of file!",
-        "Unexpected end of expression!",
-        "Invalid operator '%.*s'!",
-        "Variable '%.*s' already defined!",
-        "Function already defined!",
-        "Unexpected symbol! %s expected.",
-        "Unknown variable '%.*s'!",
-        "Unknown function '%.*s'!",
-        "Invalid number literal!",
-        "Type conversion between '%s' and '%s' types is invalid!",
-        "Variable name is missing!",
-        "Invalid type '%s' to unary operator '%s'!",
-        "Invalid type '%s' to binary operator '%s'!",
-        "Cannot assign to constant lvalue!",
-        "Unknown data type!",
-        "Invalid data type!",
-        "Compile time known expression required!",
-        "Attributes count mismatch! %i instead of %i given!",
-        "Invalid attribute name '%.*s'!",
-        "Operator '%.*s' cannot act as unary!",
-        "Operator '%.*s' cannot act as binary!",
-        "Cannot get address of address!",
-        "Invalid usage of operator '%.*s'!",
-        "Cannot evaluate expresion at compile time!",
-        "Embed array requires compile time size!",
-        "Unknown qualifier! Valid are 'const' or 'embed'",
-        "Array expected!",
-        "Too many arguments!",
-        "Appropriate tag '%.*s' does not exists!",
-        "Buffer overrun!",
-        "System command execution failed!",
-        "Invalid lvalue!",
-        "Invalid variable name! '%.*s'",
-        "Not enough input arguments in function call!",
-        "%s is declared in invalid place!",
-        "Unknown namespace!",
-        "Invalid number of attributes.",
-        "Unsupported escape sequence!",
-        "Data type size exceeded!",
-        "Unexpected error!",
-        "Array size mismatch!",
-        "No matching function found!",
-        "More than one overload variant match the function call!",
-        "Unexpected rvalue!",
-        "Unknown error set!",
-        "Invalid rvalue!",
-        "Symbol already defined!",
-        "TCC error!",
-        "Unterminated comment!",
-        "Invalid array length!",
-        "Declaration requires global scope!",
-        "Type definition '%.*s' includes type that is defined later! Move its definition before this one! Or may be you meant to use pointer?",
-        "Circular import detected!",
-        "File '%s' does not exists!",
-        "Unknown directive!",
-        "Invalid arguments!",
-        "Not yet implemented!",
-        "IO error!",
-        "Max file path exceeded!"
+namespace Wrn {
+    enum Wrn :int64_t {
+        UNUSED_VARIABLE   = -1,
+        SHADOWED_VARIABLE = -2,
     };
+    const char* const str(Wrn code);
+}
+
+namespace Inf {
+    enum Inf : int64_t {
+        TMP_INFO = -1,
+    };
+    const char* const str(Inf code);
+}
+
+namespace Diag {
+
+    void report(AstContext* ast, Span* span, Err::Err code, ...);
+    void report(AstContext* ast, Span* span, Wrn::Wrn code, ...);
+    void report(AstContext* ast, Span* span, Inf::Inf code, ...);
+
+    void report(AstContext* ast, Span* span, Err::Err code, char* format, ...);
+    void report(AstContext* ast, Span* span, Wrn::Wrn code, char* format, ...);
+    void report(AstContext* ast, Span* span, Inf::Inf code, char* format, ...);
 
 }

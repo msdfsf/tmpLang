@@ -87,6 +87,10 @@ constexpr int cstrcmp(const String strA, const String strB) {
 
 }
 
+constexpr int cstrcmp(String* const strA, String* const strB) {
+    return cstrcmp(*strA, *strB);
+}
+
 // Alphabetically compares strings
 // Returns negative value if strA comes before strB
 // Returns positive value if strA comes after strB

@@ -1,18 +1,9 @@
-#include "../../src/globals.h"
-#include "../../src/error.h"
-
 #include "json.h"
 #include "lsp.h"
 #include "comm_provider.h"
+#include "../../src/dynamic_arena.h"
 
-
-
-enum LogType {
-    LOG_ERROR = 1,
-    LOG_WARNING = 2,
-    LOG_INFO = 3,
-    LOG_LOG = 4
-};
+#include <cstdio>
 
 
 
@@ -20,67 +11,45 @@ CommProvider::Info commInfo = { CommProvider::CT_STD };
 
 
 
-static int hexVal(char c) {
+constexpr JsonString operator ""_js(const char* s, size_t l) {
+    return {(char*) s, l};
+}
 
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
-    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
-    return -1;
+static bool match(JsonString str, const char* lit) {
+    return (str.len == (int) strlen(lit) && strncmp(str.data, lit, str.len) == 0);
+}
+
+template <typename T>
+static JsonString generateResponse(JsonWriter* js, T* result, int id) {
+
+    jsonWriteObjectStart(js);
+    jsonWriteKey(js, "jsonrpc"_js);
+    jsonWriteStr(js, "2.0"_js);
+
+    jsonWriteKey(js, "id"_js);
+    jsonWriteInt(js, id);
+
+    jsonWriteKey(js, "result"_js);
+    jsonWriteObjectStart(js);
+
+    Lsp::serialize(js, result);
+
+    jsonWriteObjectEnd(js);
+    jsonWriteObjectEnd(js);
+
+    return jsonWriterCommit(js);
 
 }
 
-// Convert file:// URI -> filesystem path reusing the input buffer
-// returns the new length of the path
-int uriToPathInplace(String* uri) {
-
-    const char* prefix = "file://";
-    const int prefixLen = 7;
-    int idx = 0;
-
-    if (uri->len >= prefixLen && strncmp(uri->buff, prefix, prefixLen) == 0) {
-        idx = prefixLen;
-    }
-
-    int outIdx = 0;
-    while (idx < uri->len) {
-
-        if (uri->buff[idx] == '%' && 
-            idx + 2 < uri->len &&
-            std::isxdigit((unsigned char) uri->buff[idx + 1]) &&
-            std::isxdigit((unsigned char) uri->buff[idx + 2])
-        ) {
-
-            int high = hexVal(uri->buff[idx + 1]);
-            int low = hexVal(uri->buff[idx + 2]);
-            if (high >= 0 && low >= 0) {
-                uri->buff[outIdx] = (char)((high << 4) | low);
-                outIdx++;
-                idx += 3;
-                continue;
-            }
-        }
-
-        char ch = uri->buff[idx++];
-        #ifdef _WIN32
-            if (ch == '/') ch = '\\';
-        #endif
-        uri->buff[outIdx] = ch;
-        outIdx++;
-
-    }
-
-    uri->buff[outIdx] = '\0';
-    uri->len = outIdx;
-
-    return outIdx;
-
-}
-
-
+Arena::Container lspAllocatorArena;
 
 #include <fcntl.h>
 #include <io.h>
 int main() {
+
+    #ifdef _DEBUG
+    while (!IsDebuggerPresent()) Sleep(100);
+    #endif
 
     if (_setmode(_fileno(stdin), _O_BINARY) == -1) {
         perror("Cannot set stdin to binary mode");
@@ -92,179 +61,204 @@ int main() {
         return 1;
     }
 
-    int beOrNotToBe = false;
-    while (1) {
+    CommProvider::Err err;
+    CommProvider::Info comm;
+    comm.type = CommProvider::CT_STD;
 
-        fprintf(stderr, "\nLOOP\n");
+    Arena::Container requestArena;
+    Arena::init(&requestArena, 1024 * 1024 * 32);
+
+    Arena::init(&lspAllocatorArena, 1024 * 1024 * 32);
+    Lsp::Allocator lspAllocator = {
+        .alloc   =(void* (*)(void*, size_t)) static_cast<void* (*) (Arena::Container*, size_t)>(&Arena::push),
+        .context = &lspAllocatorArena
+    };
+
+    fprintf(stderr, "[LSP] Initialized\n");
+
+    bool beOrNotToBe = true;
+    while (beOrNotToBe) {
+        JsonLex js = { 0 };
+        JsonType token;
 
         CommProvider::Message msg;
-        
-        int err = CommProvider::read(&commInfo, &msg);
-        fprintf(stderr, "msg-err: %s\n", ERR_STR(err));
-        if (err == Err::UNEXPECTED_END_OF_FILE) continue;
-        if (err < 0) break;
+        err = CommProvider::read(&comm, &msg);
 
-        Json::Object root = *msg.body.object;
+        if (err == CommProvider::ERR_CLOSED) break;
+        if (err != CommProvider::OK) continue;
 
-        int id = Json::value(root, "id").number;
-        Lsp::RequestMethod method = Lsp::toRequestMethod(Json::value(root, "method"));
+        Arena::clear(&requestArena);
+        jsonLexInit(&js, msg.body, "lsp_input"_js);
 
+
+
+        // Extract:
+        // "id": <number>
+        // "method": <string>
+        // "params": <array> -> as JsonString which
+        token = jsonNext(&js);
+        if (!jsonMatch(&js, token, JSON_OBJECT_OPEN)) {
+            continue;
+        }
+
+        int id = -1;
+        JsonString methodUri = { 0 };
+        JsonString params;
+
+        while (true) {
+
+            token = jsonNext(&js);
+            if (token == JSON_OBJECT_CLOSE) break;
+            if (!jsonMatch(&js, token, JSON_KEY)) break;
+
+            JsonString key = js.value.s;
+
+            token = jsonNext(&js);
+            if (match(key, "id")) {
+                if (jsonMatch(&js, token, JSON_NUMBER)) {
+                    id = (int) js.value.n;
+                }
+                continue;
+            } else if (match(key, "method")) {
+                if (jsonMatch(&js, token, JSON_STRING)) {
+                    methodUri = js.value.s;
+                }
+                continue;
+            }
+            jsonSkipValue(&js, token);
+
+        }
+
+
+        if (js.errCode != 0) {
+            // TODO
+        }
+
+        // Convert method uri to enum representation
+        Lsp::T::RequestMethod method = Lsp::toRequestMethod(methodUri);
+
+        // Dispatch requested method
+        JsonWriter jsWr;
+        char* buffer = (char*) requestArena.head->data;
+        jsonWriterInit(&jsWr, buffer, requestArena.blockPayloadSize);
+
+        JsonString resp;
         switch (method) {
 
-            case Lsp::RM_INITIALIZE: {
+            case Lsp::T::RM_INITIALIZE: {
 
                 fprintf(stderr, "RM_INITIALIZE\n");
 
-                Json::Value response = { Json::Object {
-                    {"jsonrpc", "2.0"},
-                    {"id", id},
-                    {"result", Json::Object{
-                        {"capabilities", Json::Object{
-                            {"textDocumentSync", Json::Object{
-                                {"openClose", true},
-                                {"change", Lsp::TextDocument::SK_INCREMENTAL}
-                            }},
-                            {"documentSymbolProvider", true}
-                        }},
-                        {"serverInfo", Json::Object{
-                            {"name", "vi-lsp"},
-                            {"version", "1.0.0"}
-                        }}
-                    }}
-                }};
+                Lsp::Initialize* params = Lsp::parse<Lsp::Initialize>(&js, &lspAllocator);
+                Lsp::T::InitializeResult result = { 0 };
 
-                CommProvider::write(&commInfo, response);
-                Json::freeSyntheticValue(response);
+                // Sync Options
+                auto* sync = Lsp::alloc<Lsp::T::TextDocumentSyncOptions>(&lspAllocator);
+                sync->openClose = true;
+                sync->change    = Lsp::T::TEXT_DOCUMENT_SYNC_KIND_INCREMENTAL;
 
+                // Capabilities
+                auto* caps = Lsp::alloc<Lsp::T::ServerCapabilities>(&lspAllocator);
+                caps->textDocumentSync = sync;
+
+                // Features
+                caps->hoverProvider          = true;
+                caps->definitionProvider     = true;
+                caps->documentSymbolProvider = true;
+                caps->declarationProvider    = true;
+                caps->implementationProvider = true;
+
+                // Server Info
+                result.serverInfo = Lsp::alloc<Lsp::T::InitializeResult::_ServerInfo>(&lspAllocator);
+                result.serverInfo->name    = "MyLspServer";
+                result.serverInfo->version = "0.1.0";
+
+                result.capabilities = caps;
+
+                generateResponse(&jsWr, &result, id);
                 break;
-            
+
             }
 
-            case Lsp::RM_TEXT_DOCUMENT_DID_OPEN: {
+            case Lsp::T::RM_TEXT_DOCUMENT_DID_OPEN: {
 
                 fprintf(stderr, "RM_TEXT_DOCUMENT_DID_OPEN\n");
 
-                Json::Value paramVal = Json::value(root, "params");
-                if (paramVal.type != Json::JS_OBJECT) break;
-
-                Json::Value docVal = Json::value(*paramVal.object, "textDocument");
-                if (docVal.type != Json::JS_OBJECT) break;
-
-                Json::Value uriVal = Json::value(*docVal.object, "uri");
-                if (uriVal.type != Json::JS_STRING) break;
-
-                Json::Value textVal = Json::value(*docVal.object, "text");
-                if (textVal.type != Json::JS_STRING) break;
-
-                Lsp::TextDocument::didOpen(uriVal.string, textVal.string);
-                if (err < 0) break;
+                using namespace Lsp::TextDocument;
+                Lsp::handle(Lsp::parse<DidOpen>(&js, &lspAllocator));
 
                 break;
 
             }
 
-            case Lsp::RM_TEXT_DOCUMENT_DID_CHANGE: {
-                
+            case Lsp::T::RM_TEXT_DOCUMENT_DID_CHANGE: {
+
                 fprintf(stderr, "RM_TEXT_DOCUMENT_DID_CHANGE\n");
 
-                Json::Value paramVal = Json::value(root, "params");
-                if (paramVal.type != Json::JS_OBJECT) break;
-
-                Json::Value docVal = Json::value(*paramVal.object, "textDocument");
-                if (docVal.type != Json::JS_OBJECT) break;
-
-                Json::Value uriVal = Json::value(*docVal.object, "uri");
-                if (uriVal.type != Json::JS_STRING) break;
-
-                Json::Value arrVal = Json::value(root, "contentChanges");
-                if (arrVal.type != Json::JS_ARRAY) break;
-
-                const int err = Lsp::TextDocument::didChange(uriVal.string, *arrVal.array);
-                if (err < 0) break;
+                using namespace Lsp::TextDocument;
+                Lsp::handle(Lsp::parse<DidChange>(&js, &lspAllocator));
 
                 break;
 
             }
 
-            case Lsp::RM_TEXT_DOCUMENT_DID_CLOSE: {
-                
+            case Lsp::T::RM_TEXT_DOCUMENT_DID_CLOSE: {
+
                 fprintf(stderr, "RM_TEXT_DOCUMENT_DID_CLOSE\n");
 
-                Json::Value paramVal = Json::value(root, "params");
-                if (paramVal.type != Json::JS_OBJECT) break;
-
-                Json::Value docVal = Json::value(*paramVal.object, "textDocument");
-                if (docVal.type != Json::JS_OBJECT) break;
-
-                Json::Value uriVal = Json::value(*docVal.object, "uri");
-                if (uriVal.type != Json::JS_STRING) break;
-
-                const int err = Lsp::TextDocument::didClose(uriVal.string);
-                if (err < 0) break;
+                using namespace Lsp::TextDocument;
+                Lsp::handle(Lsp::parse<DidClose>(&js, &lspAllocator));
 
                 break;
 
             }
 
-            case Lsp::RM_TEXT_DOCUMENT_DOCUMENT_SYMBOL: {
+            case Lsp::T::RM_TEXT_DOCUMENT_DOCUMENT_SYMBOL: {
 
                 fprintf(stderr, "RM_TEXT_DOCUMENT_DOCUMENT_SYMBOL\n");
 
-                Json::Value paramVal = Json::value(root, "params");
-                if (paramVal.type != Json::JS_OBJECT) break;
-
-                Json::Value docVal = Json::value(*paramVal.object, "textDocument");
-                if (docVal.type != Json::JS_OBJECT) break;
-
-                Json::Value uriVal = Json::value(*docVal.object, "uri");
-                if (uriVal.type != Json::JS_STRING) break;
-
-                fprintf(stderr, "URI: %.*s\n", (int) uriVal.string.len, uriVal.string.buff);
-
-                Lsp::TextDocument::documentSymbol(uriVal.string, &commInfo);
-
                 break;
 
             }
 
-            case Lsp::RM_INITIALIZED: {
+            case Lsp::T::RM_INITIALIZED: {
+                Lsp::State::initialized = true;
                 break;
             }
 
-            case Lsp::RM_TEXT_DOCUMENT_HOVER: {
+            case Lsp::T::RM_TEXT_DOCUMENT_HOVER: {
                 fprintf(stderr, "RM_TEXT_DOCUMENT_HOVER\n");
                 break;
             }
 
-            case Lsp::RM_TEXT_DOCUMENT_DEFINITION: {
+            case Lsp::T::RM_TEXT_DOCUMENT_DEFINITION: {
                 fprintf(stderr, "RM_TEXT_DOCUMENT_DEFINITION\n");
                 break;
             }
 
-            case Lsp::RM_SHUTDOWN: {
-                
+            case Lsp::T::RM_SHUTDOWN: {
+
                 beOrNotToBe = 0;
 
-                Json::Value response = {{
-                    {"jsonrpc", "2.0"},
-                    {"id", id},
-                    {"result", Json::Value()}
-                }};
+                jsonWriteObjectStart(&jsWr);
+                    jsonWriteKey(&jsWr, "jsonrpc"_js); jsonWriteStr(&jsWr, "2.0"_js);
+                    jsonWriteKey(&jsWr, "id"_js);      jsonWriteInt(&jsWr, id);
+                    jsonWriteKey(&jsWr, "result"_js);  jsonWriteNull(&jsWr);
+                jsonWriteObjectEnd(&jsWr);
 
-                CommProvider::write(&commInfo, response);
-                Json::freeSyntheticValue(response);
-
+                JsonString resp = jsonWriterCommit(&jsWr);
                 break;
-            
+
             }
 
-            case Lsp::RM_EXIT: {
-                return beOrNotToBe ? 0 : 1;    
+            case Lsp::T::RM_EXIT: {
+                return beOrNotToBe ? 0 : 1;
             }
-            
+
             default:
                 break;
         }
+        CommProvider::write(&commInfo, resp);
 
     }
 

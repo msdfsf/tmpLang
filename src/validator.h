@@ -1,7 +1,9 @@
 #pragma once
 #include "data_types.h"
-#include "error.h"
 #include "syntax.h"
+#include "diagnostic.h"
+
+
 
 namespace Validator {
 
@@ -22,45 +24,41 @@ namespace Validator {
 
 
 
-    Err::Err validate();
+    Err::Err validate(AstContext* astCtx);
 
-    Err::Err linkAll();
-    Err::Err linkDataTypes();
-    Err::Err linkErrorSets();
-    Err::Err linkVariables();
-    Err::Err linkGotos();
-    Err::Err linkFunctionCalls();
+    Err::Err linkAll(AstContext* ctx);
+    Err::Err linkDataTypes(AstContext* ctx);
+    Err::Err linkErrorSets(AstContext* ctx);
+    Err::Err linkVariables(AstContext* ctx);
+    Err::Err linkGotos(AstContext* ctx);
+    Err::Err linkFunctionCalls(AstContext* ctx);
 
-    Err::Err resolveTypes();
-    Err::Err resolveTypes(Variable* var);
+    Err::Err resolveTypes(AstContext* ctx);
+    Err::Err resolveTypes(Variable* var, Variable* target);
 
-    Err::Err validateTypeDefinitions();
-    Err::Err validateErrorSets();
-    Err::Err verifyFunctionsAreGlobal();
-    Err::Err evaluateEnums();
-    Err::Err evaluateCompileTimeVariables();
-    Err::Err validateReturns();
-    Err::Err validateAssignments();
-    Err::Err validateLoops();
-    Err::Err validateInitializations();
-    Err::Err validateBranches();
-    Err::Err validateStatements();
-    Err::Err validateFunctionCalls();
+    Err::Err computeTypesInfo(AstContext* ctx);
 
-    Err::Err validateImplicitCast(const DataTypeEnum dtype, const DataTypeEnum dtypeRef);
-    Err::Err validateImplicitCast(void* dtype, void* dtypeRef, DataTypeEnum dtypeEnum, DataTypeEnum dtypeEnumRef);
+    Err::Err validateTypeDefinitions(AstContext* ctx);
+    Err::Err validateErrorSets(AstContext* ctx);
+    Err::Err verifyFunctionsAreGlobal(AstContext* ctx);
+    Err::Err evaluateEnums(AstContext* ctx);
+    Err::Err evaluateCompileTimeVariables(AstContext* ctx);
+    Err::Err validateReturns(AstContext* ctx);
+    Err::Err validateAssignments(AstContext* ctx);
+    Err::Err validateLoops(AstContext* ctx);
+    Err::Err validateInitializations(AstContext* ctx);
+    Err::Err validateBranches(AstContext* ctx);
+    Err::Err validateStatements(AstContext* ctx);
+    Err::Err validateFunctionCalls(AstContext* ctx);
+
+    Err::Err validateImplicitCast(const Type::Kind dtype, const Type::Kind dtypeRef);
+    Err::Err validateImplicitCast(void* dtype, void* dtypeRef, Type::Kind dtypeEnum, Type::Kind dtypeEnumRef);
     Err::Err validateAttributeCast(Variable* var, Variable* attribute);
     Err::Err validateTypeInitialization(TypeDefinition* dtype, TypeInitialization* dtypeInit);
     Err::Err validateTypeInitializations(TypeDefinition* dtype, Variable* var);
     Err::Err validateFunctionCall(Variable* fcnCallOp);
     Err::Err validatePointerAssignment(const Value* const val);
     Err::Err validateQualifiedName(Scope* scope, QualifiedName* name, Namespace** nspaceOut, ErrorSet** esetOut);
-
-    Err::Err evaluateArrayLength(Variable* var, uint64_t flag = IS_LENGTH);
-    Err::Err evaluateArrayLength(Variable* var, Variable* len, uint64_t flag = IS_LENGTH);
-    Err::Err evaluateTypeInitialization(Variable* op, int attributesCount, TypeInitialization** tinitOut);
-    // Err::Err evaluateDataTypes(Variable* op, TypeDefinition** customDtype = NULL, DataTypeEnum lvalueType = DT_UNDEFINED, TypeDefinition* lvalueTypeDef = NULL);
-    Err::Err evaluate(Variable* op, TypeDefinition** customDtype = NULL);
 
     Err::Err verifyFunctionsAreGlobal();
 
@@ -73,7 +71,7 @@ namespace Validator {
     int getFirstNonArrayDtype(Array* arr, int maxLevel = -1, int* level = NULL);
     int match(FunctionPrototype* const fptrA, FunctionPrototype* const fptrB);
 
-    bool isBasicDtype(DataTypeEnum dtype);
-    void castLiteral(Value* val, DataTypeEnum toDtype);
+    bool isBasicDtype(Type::Kind dtype);
+    void castLiteral(Value* val, Type::Kind toDtype);
 
 }

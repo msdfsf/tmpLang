@@ -9,49 +9,20 @@ struct Variable;
 
 namespace Runtime {
 
-    typedef DataTypeEnum _TypeKind;
+    // We basically just alias types for most parts
+    // so we can reuse them
+    typedef Type::Kind             _TypeKind;
+    typedef Type::_String          _String;
+    typedef Type::TypeInfo         _TypeInfo;
+    typedef Type::TypeInfoEx       _TypeInfoEx;
+    typedef Type::StructInfo       _StructInfo;
+    typedef Type::ArrayInfo        _ArrayInfo;
+    typedef Type::PointerInfo      _PointerInfo;
+    typedef Type::StructMemberInfo _StructMemberInfo;
 
     struct _Slice {
         char* ptr;
         uint64_t len;
-    };
-
-    struct _String {
-        char* buff;
-        uint64_t len;
-    };
-
-    struct _TypeInfo {
-        _TypeKind kind;
-        uint64_t size;
-        uint64_t align;
-    };
-
-    struct _StructMemberInfo {
-        _String name;
-        _TypeInfo* info;
-        uint64_t offset;
-    };
-
-    struct _StructInfo {
-        _TypeInfo base;
-
-        _String name;
-
-        uint64_t memberCount;
-        _StructMemberInfo* members;
-    };
-
-    struct _ArrayInfo {
-        _TypeInfo base;
-
-        _TypeInfo* elementType; // TODO : rename to element info?
-        // uint64_t elementCount;
-    };
-
-    struct _PointerInfo {
-        _TypeInfo base;
-        _TypeInfo* elementType;
     };
 
     struct _Any {
@@ -69,7 +40,7 @@ namespace Runtime {
     extern _TypeInfo primitives[];
     extern _ArrayInfo primitiveArrayTemplates[];
 
-    _TypeInfo* resolve(DataType* astType, void* payload);
+    _TypeInfo* resolve(Type::TypeInfoEx* astType, void* payload);
     _TypeInfo* getType(Variable* var);
 
     void print(char* fmt, int fmtLen, int argsCnt, _Any* args);

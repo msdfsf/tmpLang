@@ -1,7 +1,10 @@
 // interpreter related code that focuses
 // on 'ast' walking evaluation
 
+#include "array_list.h"
+#include "data_types.h"
 #include "interpreter.h"
+#include "syntax.h"
 
 
 
@@ -9,174 +12,92 @@
 
 namespace Interpreter {
 
-    // TODO : for now global
-    uint64_t contextId = 1;
-    uint64_t stackIdx = 1;
-
-    // RR_RETURN has to be last, it defines offset of the
-    // index of the return statement that triggered early
-    // return in children nodes of calling node
-    // hope make sense
-    enum EarlyReturnReason {
-        RR_BREAK = 1,
-        RR_RETURN
-    };
-
-
-
-    void initEval() {
-
-    }
-
-
-
-
-
-    int applyOperator(OperatorEnum oper, Value* value) {
-        return 0;
-    }
-
-    int applyOperator(OperatorEnum oper, Value* valueA, Value* valueB) {
-        return 0;
-    }
-
-
-
-
-    inline void insertValue(Variable* op, Value value, const int idx) {
-        if (op->istack.base.size < idx + 1) {
-            // op->istack.resize(idx + 1);
-        }
-        // op->istack[idx] = value;
-    }
-
-    // BUG : instad of push_back make sure to insert new value to aproprate index!!!
-    inline void writeValue(Variable* op, Value value, int stackIdx) {
-        if (stackIdx >= 2) {
-            const int idx = stackIdx - 2;
-            if (op->istack.base.size <= idx) {
-                //op->istack.resize(idx + 1);
-            }
-            //op->istack[idx] = value;
-        } else {
-            op->ivalue = value;
-        }
-
-    }
-
-    inline void writeValue(Variable* op, Value value) {
-        if (stackIdx >= 2) {
-            const int idx = stackIdx - 2;
-            if (op->istack.base.size <= idx) {
-                // op->istack.resize(idx + 1);
-            }
-            // op->istack[idx] = value;
-        } else {
-            op->ivalue = value;
-        }
-
-    }
-
-    inline Value* readValue(Variable* op) {
-        // return (stackIdx >= 2) ? &(op->istack[stackIdx - 2]) : &(op->ivalue);
-        return NULL;
-    }
-
-    inline int readHasValue(Variable* op) {
-        // return (stackIdx >= 2) ? op->istack[stackIdx - 2].hasValue : op->ivalue.hasValue;
-        return NULL;
-    }
-
-
-
-    // CPP CPP CPP :)
-
-    template<DataTypeEnum>
+    template<Type::Kind>
     struct DataTypeToCppType;
 
     template<>
-    struct DataTypeToCppType<DT_I8> {
+    struct DataTypeToCppType<Type::DT_I8> {
         using type = int8_t;
         static constexpr auto member = &Value::i8;
     };
 
     template<>
-    struct DataTypeToCppType<DT_I16> {
+    struct DataTypeToCppType<Type::DT_I16> {
         using type = int16_t;
         static constexpr auto member = &Value::i16;
     };
 
     template<>
-    struct DataTypeToCppType<DT_I32> {
+    struct DataTypeToCppType<Type::DT_I32> {
         using type = int32_t;
         static constexpr auto member = &Value::i32;
     };
 
     template<>
-    struct DataTypeToCppType<DT_I64> {
+    struct DataTypeToCppType<Type::DT_I64> {
         using type = int64_t;
         static constexpr auto member = &Value::i64;
     };
 
     template<>
-    struct DataTypeToCppType<DT_U8> {
+    struct DataTypeToCppType<Type::DT_U8> {
         using type = uint8_t;
         static constexpr auto member = &Value::u8;
     };
 
     template<>
-    struct DataTypeToCppType<DT_U16> {
+    struct DataTypeToCppType<Type::DT_U16> {
         using type = uint16_t;
         static constexpr auto member = &Value::u16;
     };
 
     template<>
-    struct DataTypeToCppType<DT_U32> {
+    struct DataTypeToCppType<Type::DT_U32> {
         using type = uint32_t;
         static constexpr auto member = &Value::u32;
     };
 
     template<>
-    struct DataTypeToCppType<DT_U64> {
+    struct DataTypeToCppType<Type::DT_U64> {
         using type = uint64_t;
         static constexpr auto member = &Value::u64;
     };
 
     template<>
-    struct DataTypeToCppType<DT_F32> {
+    struct DataTypeToCppType<Type::DT_F32> {
         using type = float;
         static constexpr auto member = &Value::f32;
     };
 
     template<>
-    struct DataTypeToCppType<DT_F64> {
+    struct DataTypeToCppType<Type::DT_F64> {
         using type = double;
         static constexpr auto member = &Value::f64;
     };
 
-    template<DataTypeEnum TargetType>
+    template<Type::Kind TargetType>
     inline void cast(Value* value) {
 
         using T = typename DataTypeToCppType<TargetType>::type;
         auto M = DataTypeToCppType<TargetType>::member;
 
-        switch (value->dtypeEnum) {
-            case DT_I8:     value->*M = static_cast<T>(value->i8);  break;
-            case DT_I16:    value->*M = static_cast<T>(value->i16); break;
-            case DT_I32:    value->*M = static_cast<T>(value->i32); break;
-            case DT_I64:    value->*M = static_cast<T>(value->i64); break;
-            case DT_U8:     value->*M = static_cast<T>(value->u8);  break;
-            case DT_U16:    value->*M = static_cast<T>(value->u16); break;
-            case DT_U32:    value->*M = static_cast<T>(value->u32); break;
-            case DT_U64:    value->*M = static_cast<T>(value->u64); break;
-            case DT_F32:    value->*M = static_cast<T>(value->f32); break;
-            case DT_F64:    value->*M = static_cast<T>(value->f64); break;
+        switch (value->typeKind) {
+            case Type::DT_I8:     value->*M = static_cast<T>(value->i8);  break;
+            case Type::DT_I16:    value->*M = static_cast<T>(value->i16); break;
+            case Type::DT_I32:    value->*M = static_cast<T>(value->i32); break;
+            case Type::DT_I64:    value->*M = static_cast<T>(value->i64); break;
+            case Type::DT_U8:     value->*M = static_cast<T>(value->u8);  break;
+            case Type::DT_U16:    value->*M = static_cast<T>(value->u16); break;
+            case Type::DT_U32:    value->*M = static_cast<T>(value->u32); break;
+            case Type::DT_U64:    value->*M = static_cast<T>(value->u64); break;
+            case Type::DT_F32:    value->*M = static_cast<T>(value->f32); break;
+            case Type::DT_F64:    value->*M = static_cast<T>(value->f64); break;
             default:
                 return; // TODO
 
         }
 
-        value->dtypeEnum = TargetType;
+        value->typeKind = TargetType;
 
     }
 
@@ -185,28 +106,27 @@ namespace Interpreter {
     // So we're going with a straightforward double look-up approach.
     // A single look-up would be faster, but it's less readable and modular.
     // This way, we can still use specific cast functions in 'known-context'.
-    void cast(Value* value, DataTypeEnum dtype) {
+    void cast(Value* value, Type::Kind dtype) {
 
         switch (dtype) {
 
-            case DT_I8 :    cast<DT_I8>(value); return;
-            case DT_I16 :   cast<DT_I16>(value); return;
-            case DT_I32 :   cast<DT_I32>(value); return;
-            case DT_I64 :   cast<DT_I64>(value); return;
-            case DT_U8 :    cast<DT_U8>(value); return;
-            case DT_U16 :   cast<DT_U16>(value); return;
-            case DT_U32 :   cast<DT_U32>(value); return;
-            case DT_U64 :   cast<DT_U64>(value); return;
-            case DT_F32 :   cast<DT_F32>(value); return;
-            case DT_F64 :   cast<DT_F64>(value); return;
-            case DT_STRING :    /* TODO */ return;
-            case DT_POINTER :   /* TODO */ return;
-            case DT_ARRAY :     /* TODO */ return;
-            case DT_SLICE :     /* TODO */ return;
-            case DT_CUSTOM :    /* TODO */ return;
-            case DT_ENUM :      /* TODO */ return;
-            case DT_MEMBER :    /* TODO */ return;
-            case DT_UNION :     /* TODO */ return;
+            case Type::DT_I8 :    cast<Type::DT_I8>(value); return;
+            case Type::DT_I16 :   cast<Type::DT_I16>(value); return;
+            case Type::DT_I32 :   cast<Type::DT_I32>(value); return;
+            case Type::DT_I64 :   cast<Type::DT_I64>(value); return;
+            case Type::DT_U8 :    cast<Type::DT_U8>(value); return;
+            case Type::DT_U16 :   cast<Type::DT_U16>(value); return;
+            case Type::DT_U32 :   cast<Type::DT_U32>(value); return;
+            case Type::DT_U64 :   cast<Type::DT_U64>(value); return;
+            case Type::DT_F32 :   cast<Type::DT_F32>(value); return;
+            case Type::DT_F64 :   cast<Type::DT_F64>(value); return;
+            case Type::DT_STRING :    /* TODO */ return;
+            case Type::DT_POINTER :   /* TODO */ return;
+            case Type::DT_ARRAY :     /* TODO */ return;
+            case Type::DT_SLICE :     /* TODO */ return;
+            case Type::DT_CUSTOM :    /* TODO */ return;
+            case Type::DT_ENUM :      /* TODO */ return;
+            case Type::DT_UNION :     /* TODO */ return;
             default: return; // TODO
 
         }
@@ -241,22 +161,22 @@ namespace Interpreter {
 
 
     inline void applyBinaryOperatorAdditionI32(Value* a, Value* b) {
-        cast<DT_I32>(b);
+        cast<Type::DT_I32>(b);
         a->i32 = a->i32 + b->i32;
     }
 
     inline void applyBinaryOperatorAdditionI64(Value* a, Value* b) {
-        cast<DT_I64>(b);
+        cast<Type::DT_I64>(b);
         a->i64 = a->i64 + b->i64;
     }
 
     inline void applyBinaryOperatorAdditionF32(Value* a, Value* b) {
-        cast<DT_F32>(b);
+        cast<Type::DT_F32>(b);
         a->f32 = a->f32 + b->f32;
     }
 
     inline void applyBinaryOperatorAdditionF64(Value* a, Value* b) {
-        cast<DT_F64>(b);
+        cast<Type::DT_F64>(b);
         a->f64 = a->f64 + b->f64;
     }
 
@@ -269,77 +189,77 @@ namespace Interpreter {
 
 
     inline void applyBinaryOperatorSubtractionI32(Value* a, Value* b) {
-        cast<DT_I32>(b);
+        cast<Type::DT_I32>(b);
         a->i32 = a->i32 - b->i32;
     }
 
     inline void applyBinaryOperatorSubtractionI64(Value* a, Value* b) {
-        cast<DT_I64>(b);
+        cast<Type::DT_I64>(b);
         a->i64 = a->i64 - b->i64;
     }
 
     inline void applyBinaryOperatorSubtractionF32(Value* a, Value* b) {
-        cast<DT_F32>(b);
+        cast<Type::DT_F32>(b);
         a->f32 = a->f32 - b->f32;
     }
 
     inline void applyBinaryOperatorSubtractionF64(Value* a, Value* b) {
-        cast<DT_F64>(b);
+        cast<Type::DT_F64>(b);
         a->f64 = a->f64 - b->f64;
     }
 
 
     inline void applyBinaryOperatorMultiplicationI32(Value* a, Value* b) {
-        cast<DT_I32>(b);
+        cast<Type::DT_I32>(b);
         a->i32 = a->i32 * b->i32;
     }
 
     inline void applyBinaryOperatorMultiplicationI64(Value* a, Value* b) {
-        cast<DT_I64>(b);
+        cast<Type::DT_I64>(b);
         a->i64 = a->i64 * b->i64;
     }
 
     inline void applyBinaryOperatorMultiplicationF32(Value* a, Value* b) {
-        cast<DT_F32>(b);
+        cast<Type::DT_F32>(b);
         a->f32 = a->f32 * b->f32;
     }
 
     inline void applyBinaryOperatorMultiplicationF64(Value* a, Value* b) {
-        cast<DT_F64>(b);
+        cast<Type::DT_F64>(b);
         a->f64 = a->f64 * b->f64;
     }
 
 
 
     inline void applyBinaryOperatorDivisionI32(Value* a, Value* b) {
-        cast<DT_I32>(b);
+        cast<Type::DT_I32>(b);
         a->i32 = a->i32 / b->i32;
     }
 
     inline void applyBinaryOperatorDivisionI64(Value* a, Value* b) {
-        cast<DT_I64>(b);
+        cast<Type::DT_I64>(b);
         a->i64 = a->i64 / b->i64;
     }
 
     inline void applyBinaryOperatorDivisionF32(Value* a, Value* b) {
-        cast<DT_F32>(b);
+        cast<Type::DT_F32>(b);
         a->f32 = a->f32 / b->f32;
     }
 
     inline void applyBinaryOperatorDivisionF64(Value* a, Value* b) {
-        cast<DT_F64>(b);
+        cast<Type::DT_F64>(b);
         a->f64 = a->f64 / b->f64;
     }
 
 
 
     inline void applyBinaryOperatorModuloI32(Value* a, Value* b) {
-        cast<DT_I32>(b);
+        cast<Type::DT_I32>(b);
         a->i32 = a->i32 % b->i32;
     }
 
     inline void applyBinaryOperatorModuloI64(Value* a, Value* b) {
-        cast<DT_I64>(b);
+        cast<Type::DT_I64>(b);
         a->i64 = a->i64 % b->i64;
     }
 
@@ -429,7 +349,7 @@ namespace Interpreter {
             case EXT_FUNCTION_CALL : {
                 FunctionCall* fex = (FunctionCall*) ex;
                 Function* const fcn = fex->fcn;
-                for (int i = 0; i < fcn->prototype.inArgs.base.size; i++) {
+                for (int i = 0; i < fcn->prototype.inArgCount; i++) {
 
                     //evaluate(fex->inArgs[i]);
 
@@ -470,14 +390,14 @@ namespace Interpreter {
 
     inline int execBranch(Branch* node) {
 
-        for (int i = 0; i < node->expressions.base.size; i++){
+        for (int i = 0; i < node->expressionCount; i++){
             // evaluate(node->expressions[i]);
             //if (readValue(node->expressions[i])->i32) {
             //    return execScope(node->scopes[i]);
             //}
         }
 
-        if (node->scopes.base.size > node->expressions.base.size) {
+        if (node->scopeCount > node->expressionCount) {
             //return execScope(node->scopes[node->scopes.size - 1]);;
         }
 
@@ -494,7 +414,7 @@ namespace Interpreter {
     inline int execVariableAssignment(VariableAssignment* node) {
 
         evaluate(node->rvar);
-        node->lvar->ivalue = node->rvar->ivalue;
+        node->lvar->value = node->rvar->value;
         return Err::OK;
 
     }
@@ -502,16 +422,16 @@ namespace Interpreter {
     inline int execReturnStatement(ReturnStatement* node) {
 
         evaluate(node->var);
-        return RR_RETURN + node->idx;
+        return 0;//RR_RETURN + node->idx;
 
     }
 
-    inline int execScope(Scope* node) {
+    inline int execScope(Scope* scope) {
 
-        DArraySyntaxNode nodes = node->children;
-        for (int i = 0; i < nodes.base.size; i++) {
+        SyntaxNode** nodes = scope->children;
+        for (int i = 0; i < scope->childrenCount; i++) {
 
-            SyntaxNode* const node = ((SyntaxNode*) nodes.base.buffer) + i;
+            SyntaxNode* const node = nodes[i];
 
             int err = Err::OK;
             switch (node->type) {
@@ -546,33 +466,10 @@ namespace Interpreter {
     }
 
     int execFunction(Function* fcn, Variable* ans) {
+        return 0;
+    }
 
-        fcn->icnt++;
-        fcn->istackIdx++;
-
-        contextId = fcn->icnt;
-        stackIdx = fcn->istackIdx;
-
-        const int idx = execScope(fcn->bodyScope);
-        if (idx < 0) return idx;
-
-        if (idx >= RR_RETURN) {
-            // ReturnStatement* const rt = (ReturnStatement*) fcn->returns[idx - RR_RETURN];
-            if (stackIdx > 2) {
-                // insertValue(ans, rt->var->istack[stackIdx - 2], stackIdx - 3);
-            } else if (stackIdx == 2) {
-                // ans->ivalue = rt->var->istack[stackIdx - 2];
-            } else {
-                // ans->cvalue = rt->var->ivalue;
-            }
-            // ans->dtypeEnum = rt->vars[0]->dtypeEnum;
-        }
-
-        fcn->istackIdx--;
-        stackIdx = fcn->istackIdx;
-
-        return ans->cvalue.dtypeEnum;
-
+    void initEval() {
     }
 
 }

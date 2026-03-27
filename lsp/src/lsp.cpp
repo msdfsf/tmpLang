@@ -1,280 +1,192 @@
 #include "lsp.h"
-#include "../../src/globals.h"
-#include "../../src/error.h"
-#include "../../src/file_driver.h"
-#include "../../src/parser.h"
-#include "../../src/syntax.h"
-#include "translator.h"
-#include "json.h"
 
+#include <cctype>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 
+FileSystem::Handle hnd;
 
-Lsp::RequestMethod Lsp::toRequestMethod(Json::Value val) {
+struct LineOffsets {
+    uint32_t* data;
+    uint32_t  size;
+    uint32_t  capacity;
+};
 
-    if (val.type != Json::JS_STRING) return RM_UNKNOWN;
+struct FileData {
+    String      data;
+    uint64_t    version;
+    LineOffsets lineOffsets;
+};
 
-    auto it = methodMap.find(std::string(val.string.buff, val.string.len));
-    if (it != methodMap.end()) return it->second;
-    
-    return RM_UNKNOWN;
+static int hexVal(char c) {
+
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'F') return 10 + (c - 'A');
+    return -1;
 
 }
 
-Lsp::FileInfo* Lsp::getFileInfo(uint64_t id) {    
-    return openedFilesLookup[id];
-}
+// Convert file:// URI -> filesystem path reusing the input buffer
+// returns the new length of the path
+int uriToPathInplace(String* uri) {
 
-int insertFileInfo(Lsp::FileInfo* const info) {
-    const uint64_t id = Lsp::openedFilesLookup.size();
-    info->file.fpId = id;
-    Lsp::openedFilesLookup.push_back(info);
-    return Err::OK;
-}
+    const char prefix[] = "file://";
+    const int prefixLen = sizeof(prefix) - 1;
+    int idx = 0;
 
-// replace slice in 'array' std::vector denoted by 'start' and 'end' idxs with 'slice' std::vector
-void replaceSlice(
-    std::vector<uint64_t>& array,
-    int start,
-    int end,
-    const std::vector<uint64_t>& slice
-) {
-
-    end += 1;
-
-    const int oldCnt = end - start;
-    const int newCnt = slice.size();
-
-    if (oldCnt > newCnt) {
-        array.erase(array.begin() + start + newCnt, array.begin() + start + oldCnt);
-    } else {
-        const int addup = newCnt - oldCnt;
-        array.resize(array.size() + addup);
-        std::copy(array.begin() + end, array.end() - addup, array.begin() + end + addup);
+    if (uri->len >= prefixLen &&
+        strncmp(uri->buff, prefix, prefixLen) == 0
+    ) {
+        idx = prefixLen;
     }
 
-    std::copy(slice.begin(), slice.end(), array.begin() + start);
+    int outIdx = 0;
+    while (idx < uri->len) {
 
-}
+        if (uri->buff[idx] == '%' &&
+            idx + 2 < uri->len &&
+            std::isxdigit((unsigned char) uri->buff[idx + 1]) &&
+            std::isxdigit((unsigned char) uri->buff[idx + 2])
+        ) {
 
-int toMyRange(Span* myRange, Json::Value range) {
-
-    if (range.type != Json::JS_OBJECT) return Err::INVALID_ATTRIBUTE_NAME;
-
-    Json::Value start = Json::value(*range.object, "start");
-    Json::Value end = Json::value(*range.object, "end");
-    if (start.type != Json::JS_OBJECT || end.type != Json::JS_OBJECT) {
-        return Err::INVALID_ATTRIBUTE_NAME;
-    }
-
-    Json::Value startLine = Json::value(*start.object, "line");
-    Json::Value startChar = Json::value(*start.object, "character");
-    Json::Value endLine = Json::value(*end.object, "line");
-    Json::Value endChar = Json::value(*end.object, "character");
-    if (startLine.type != Json::JS_NUMBER || startChar.type != Json::JS_NUMBER ||
-        endLine.type != Json::JS_NUMBER || endChar.type != Json::JS_NUMBER) {
-        return Err::INVALID_ATTRIBUTE_NAME;
-    }
-
-    myRange->start.ln = (int) startLine.number;
-    myRange->start.idx = (int) startChar.number;
-    myRange->end.ln = (int) endLine.number;
-    myRange->end.idx = (int) endChar.number;
-
-    return Err::OK;
-
-}
-
-int computeLineOffsets(std::vector<uint64_t>& lineOffsets, String text) {
-
-    lineOffsets.clear();
-    lineOffsets.push_back(0);
-
-    for (uint64_t idx = 0; idx < text.len; idx++) {
-        if (text[idx] == '\n') {
-            lineOffsets.push_back(idx + 1);
-        }
-    }
-
-    return Err::OK;
-
-}
-
-int computeLineOffsets(Lsp::FileInfo* const info) {
-
-    return computeLineOffsets(info->lineOffsets, { info->file.buff, info->file.buffLen });
-
-}
-
-int updateLineOffsets(Lsp::FileInfo* const info, Span* const span, String newText) {
-
-    std::vector<uint64_t> newLineOffsets;
-    computeLineOffsets(newLineOffsets, newText);
-
-    const int oldLnCnt = span->end.ln - span->start.ln;
-    const int newLnCnt = newLineOffsets.size() - 1;
-
-    uint64_t startOffset = info->lineOffsets[span->start.ln] + span->start.idx;
-    uint64_t endOffset = info->lineOffsets[span->end.ln] + span->end.idx;
-    int64_t delta = newText.len - (endOffset - startOffset);
-
-    for (int i = 0; i < newLineOffsets.size(); i++) {
-        newLineOffsets[i] += startOffset;
-    }
-
-    for (int i = span->end.ln + 1; i < info->lineOffsets.size(); i++) {
-        info->lineOffsets[i] += delta;
-    }
-
-    replaceSlice(info->lineOffsets, span->start.ln + 1, span->end.ln, newLineOffsets);
-    
-    return Err::OK;
-
-}
-
-
-
-int Lsp::TextDocument::didOpen(String uri, String text) {
-
-    char* uriBuff = (char*) malloc(uri.len + 1);
-    if (!uriBuff) return Err::MALLOC;
-    memcpy(uriBuff, uri.buff, uri.len);
-    uriBuff[uri.len] = '\0';
-
-    char* fileBuff = (char*) malloc(text.len + 1);
-    if (!fileBuff) {
-        free(uriBuff);
-        return Err::MALLOC;
-    }
-    memcpy(fileBuff, text.buff, text.len);
-    fileBuff[text.len] = '\0';
-    
-    String id = { uriBuff, uri.len };
-
-    FileInfo* info = new FileInfo();
-
-    info->id = id;
-    info->file.buff = fileBuff;
-    info->file.buffLen = text.len;
-    
-    computeLineOffsets(info);
-
-    openedFiles[id] = info;
-
-    return Err::OK;
-
-}
-
-int Lsp::TextDocument::didClose(String uri) {
-
-    auto it = openedFiles.find(uri);
-    if (it == openedFiles.end()) {
-        return Err::FILE_DOES_NOT_EXISTS;
-    }
-
-    FileInfo* info = it->second;
-    free(info->file.buff);
-    free(info->id.buff);
-    delete info;
-
-    openedFiles.erase(it);
-
-    return Err::OK;
-
-}
-
-int Lsp::TextDocument::didChange(String uri, Json::Array changes) {
-
-    auto it = openedFiles.find(uri);
-    if (it == openedFiles.end()) {
-        return Err::FILE_DOES_NOT_EXISTS;
-    }
-
-    FileInfo* info = it->second;
-
-    for (int i = 0; i < changes.items.size(); i++) {
-
-        Json::Value item = *changes.items[i];
-        if (item.type != Json::JS_OBJECT) Err::INVALID_ATTRIBUTE_NAME;
-
-        Json::Value text = Json::value(*item.object, "text");
-        if (text.type != Json::JS_STRING) Err::INVALID_ATTRIBUTE_NAME;
-
-        Json::Value range = Json::value(*item.object, "range");
-        if (range.type == Json::JS_INVALID) {
-
-            info->file.buffLen = text.string.len;
-            info->file.buff = (char*) realloc(info->file.buff, text.string.len + 1);
-            if (!info->file.buff) return Err::MALLOC;
-            memcpy(info->file.buff, text.string.buff, text.string.len);
-            info->file.buff[text.string.len] = '\0';
-
-            return computeLineOffsets(info);
-        
+            int high = hexVal(uri->buff[idx + 1]);
+            int low = hexVal(uri->buff[idx + 2]);
+            if (high >= 0 && low >= 0) {
+                uri->buff[outIdx] = (char)((high << 4) | low);
+                outIdx++;
+                idx += 3;
+                continue;
+            }
         }
 
-        if (range.type != Json::JS_OBJECT) return Err::INVALID_ATTRIBUTE_NAME;
-
-        Span span;
-        int err = toMyRange(&span, range);
-        if (err < 0) return err;
-
-        const uint64_t start = info->lineOffsets[span.start.ln] + span.start.idx;
-        const uint64_t end = info->lineOffsets[span.end.ln] + span.end.idx;
-        const uint64_t buffLen = info->file.buffLen - (end - start) + text.string.len;
-        
-        char* newBuff = (char*) realloc(info->file.buff, buffLen + 1);
-        if (!newBuff) return Err::MALLOC;
-        info->file.buff = newBuff;
-        info->file.buffLen = buffLen;
-
-        memmove(newBuff + start + text.string.len, newBuff + end, info->file.buffLen - end);
-        memcpy(newBuff + start, text.string.buff, text.string.len);
-    
-        updateLineOffsets(info, &span, { text.string.buff, text.string.len });
+        char ch = uri->buff[idx++];
+        #ifdef _WIN32
+            if (ch == '/') ch = '\\';
+        #endif
+        uri->buff[outIdx] = ch;
+        outIdx++;
 
     }
+
+    uri->buff[outIdx] = '\0';
+    uri->len = outIdx;
+
+    return outIdx;
+
+}
+
+constexpr double GROW_COEF = 1.5;
+
+// allocates sufficient initial buffer for given string
+// and copies data
+String makeFileString(String str) {
+    String out;
+    out.len = str.len * GROW_COEF;
+    out.buff = (char*) malloc(out.len);
+    return out;
+}
+
+void deleteFileString(String str) {
+    free(str.buff);
+    str.len = 0;
+}
+
+// TODO
+void panic() {
+    fprintf(stderr, "Malloc! Malloc! Maaaaalloc!\n");
+    exit(1);
+}
+
+void pushLineOffset(LineOffsets* lines, uint32_t offset) {
+    if (lines->size >= lines->capacity) {
+        lines->capacity *= 1.5;
+        lines->data = (uint32_t*) realloc(lines->data, lines->capacity * sizeof(uint32_t));
+        if (!lines->data) panic();
+    }
+    lines->data[lines->size] = offset;
+    lines->size++;
+}
+
+// Creates and computes line offsets
+void createLineOffsets(FileData* data) {
+    LineOffsets* lines = &data->lineOffsets;
+
+    lines->capacity = 1024;
+    lines->data = (uint32_t*) malloc(lines->capacity * sizeof(uint32_t));
+    lines->size = 0;
+
+    for (int i = 0; i < data->data.len; i++) {
+        const char ch = data->data[i];
+        if (ch == '\n') pushLineOffset(lines, i);
+    }
+}
+
+// As we are receiving file 'id' in form of
+// uri, we will just treat its null terminated
+// string directly as handler
+FileSystem::Handle toFileHandler(String rawUri) {
+    uriToPathInplace(&rawUri);
+    return rawUri.buff;
+}
+
+Lsp::Err::Kind
+Lsp::handle(Lsp::TextDocument::DidOpen* method) {
+
+    if (!method || !method->textDocument) {
+        return Err::report({
+            Err::INVALID_PARAMS, { nullptr, 0 }
+        }, nullptr);
+    }
+
+    Lsp::T::TextDocumentItem* item = method->textDocument;
+
+    uriToPathInplace(&item->uri);
+    hnd = FileSystem::load(item->uri);
+
+    FileSystem::FileInfo* info = FileSystem::getFileInfo(hnd);
+    FileData* data = (FileData*) info->userData;
+
+    if (!data) {
+        data = (FileData*) malloc(sizeof(FileData));
+    }
+
+    deleteFileString(data->data);
+    data->data = makeFileString(item->uri);
+
+    createLineOffsets(data);
 
     return Err::OK;
 
 }
 
-// we dont need to validate anything, just list of symbols
-int Lsp::TextDocument::documentSymbol(const char* uri, CommProvider::Info* commInfo) {
+Lsp::Err::Kind
+Lsp::handle(Lsp::TextDocument::DidClose *method) {
 
-    auto it = openedFiles.find(uri);
-    if (it == openedFiles.end()) {
-        fprintf(stderr, "File not opened: %s\n", uri);
-        return Err::FILE_DOES_NOT_EXISTS;
+    if (!method || !method->textDocument) {
+        return Err::report({
+            Err::INVALID_PARAMS, { nullptr, 0 }
+        }, nullptr);
     }
 
-    FileInfo* info = it->second;
+    FileSystem::unload(method->textDocument->uri.buff);
+    return Err::OK;
 
-    File fileWrapper;
-    fileWrapper.buff = info->file.buff;
-    fileWrapper.buffLen = info->file.buffLen;
-    fileWrapper.fpId = info->file.fpId;
+}
 
-    Span span;
-    span.file = &fileWrapper;
-    span.start = {0, 1};
-    span.end = {0, 1};
-    span.str = fileWrapper.buff;
+Lsp::Err::Kind
+Lsp::handle(TextDocument::DidChange* method) {
 
-    fprintf(stderr, "File buffer:\n%.*s\n", (int) fileWrapper.buffLen, fileWrapper.buff);
+    if (!method || !method->textDocument) {
+        return Err::report({
+            Err::INVALID_PARAMS, { nullptr, 0 }
+        }, nullptr);
+    }
 
-    Scope scope;
-    Lex::Token lastToken = Parser::parseScope(&span, &scope, SC_GLOBAL, 0);
-    fprintf(stderr, "Last token kind: %d detail: %d\n", lastToken.kind, lastToken.detail);
-    if (lastToken.encoded < 0) return lastToken.encoded;
-
-    fprintf(stderr, "Parsed successfully\n");
-
-    LspRenderer::clearBuffer();
-    LspRenderer::render(&scope, NULL);
-
-    freeNodeRecursively(&scope);
-
-    CommProvider::write(commInfo, LspRenderer::getBuffer());
+    Lsp::T::Int version = method->textDocument->version;
+    String uri = method->textDocument->uri;
+    // TODO : Here we went to sleep...
 
     return Err::OK;
 
