@@ -975,7 +975,7 @@
         return result || "LSPAny";
     }
 
-    function generateEnumCode(name, prefix, values, originalStrings = null, noneValue = 0, useSwitch = false) {
+    function generateEnumCode(name, prefix, values, originalStrings = null, noneValue = 0, useSwitch = true) {
         let code = "";
         const noneName = `${prefix}_NONE`;
 
@@ -1219,6 +1219,11 @@
             code += `\ttemplate<typename Class, typename Member>\n`;
             code += `\tstatic constexpr Field<Class, Member> make_field(const char* name, Member Class::*ptr) {\n`;
             code += `\t\treturn { name, ptr };\n\t}\n\n`;
+
+            code += `\ttemplate<>\n`
+            code += `\tstruct Schema<void> {\n`
+            code += `\t\tstatic constexpr auto fields = std::make_tuple();\n`
+            code += `\t};\n\n`
         }
 
         if (sw.hash) {

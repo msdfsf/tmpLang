@@ -125,6 +125,7 @@ JsonString jsonParseString(JsonLex* ctx) {
 
     }
 
+    // TODO : not a fan of
     ctx->src.data[writeIdx] = '\0';
 
     JsonString res = { ctx->src.data + start, (size_t) (writeIdx - start) };

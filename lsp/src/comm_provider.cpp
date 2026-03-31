@@ -75,7 +75,7 @@ CommProvider::Err CommProvider::read(Info* info, Message* msg) {
 
     }
 
-
+    // TODO we may want to try to recover from error and loop till Content-Length
     char ch;
     int32_t buff = 0;
     while ((ch = fgetc(stream)) != EOF) {
@@ -87,19 +87,13 @@ CommProvider::Err CommProvider::read(Info* info, Message* msg) {
     // as there are only two headers, we will do it in place
     // for now, and maybe forever, we only care about Content-Length
     int idx = 0;
-    while (idx < head.size()) {
+    int end = head.find('\n', idx);
 
-        int end = head.find('\n', idx);
-
-        if (head.compare(idx, 16, "Content-Length: ") == 0) {
-            idx += 16;
-            body.len = std::stoi(head.substr(idx, end - idx));
-        } else if (head.compare(idx, 14, "Content-Type: ") == 0) {
-            idx += 14;
-        }
-
-        idx = end + 1;
-
+    if (head.compare(idx, 16, "Content-Length: ") == 0) {
+        idx += 16;
+        body.len = std::stoi(head.substr(idx, end - idx));
+    } else if (head.compare(idx, 14, "Content-Type: ") == 0) {
+        idx += 14;
     }
 
     if (body.len == 0) return Err::ERR_PARSE;
@@ -160,8 +154,6 @@ CommProvider::Err CommProvider::write(CommProvider::Info* info, JsonString body)
         perror("fflush");
         return Err::ERR_IO;
     }
-
-    fprintf(stderr, "Content-Length: %ld\r\n\r\n%.*s", body.len, body.len, body.data);
 
     return Err::OK;
 

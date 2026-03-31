@@ -90,6 +90,10 @@ set "SOURCES="
 call :AddSource ".\src\json.c"
 call :AddSource "..\src\dynamic_arena.cpp"
 call :AddSource "..\src\array_list.cpp"
+call :AddSource "..\src\path.cpp"
+call :AddSource "..\src\file_driver.cpp"
+call :AddSource "..\src\set.cpp"
+
 
 for /r "%SRC_DIR%" %%f in (*.cpp) do (
     set "SOURCES=!SOURCES! "%%f""

@@ -4,7 +4,6 @@
 #include "allocator.h"
 #include "logger.h"
 
-#include <any>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -45,39 +44,6 @@ namespace FileSystem {
     DArray::Container files;
 
 
-    inline int isPathDelimiter(char ch) {
-        return (ch == '\\' || ch == '/');
-    }
-
-    void annotatePath(Path* path) {
-
-        path->flags = 0;
-
-        // Find name offset (after last '/')
-        path->nameOff = 0;
-        for (int i = path->bufferLen - 1; i >= 0; i--) {
-            if (isPathDelimiter(path->buffer[i])) {
-                path->nameOff = (uint16_t) (i + 1);
-                if (i < path->bufferLen - 1) {
-                    path->flags |= PF_HAS_NAME;
-                }
-                break;
-            }
-        }
-
-        // Find extension offset (after last '.')
-        path->extensionOff = path->bufferLen;
-        for (int i = path->bufferLen - 1; i > path->nameOff; i--) {
-            if (path->buffer[i] == '.') {
-                path->extensionOff = (uint16_t) i;
-                if (i < path->bufferLen - 1) {
-                    path->flags |= PF_HAS_EXT;
-                }
-                break;
-            }
-        }
-
-    }
 
     Path* initPath(String str) {
 
@@ -101,47 +67,6 @@ namespace FileSystem {
 
         // TODO
         return 0;
-
-    }
-
-    void toParentPath(Path* path) {
-
-        for (int i = path->nameOff - 1; i >= 0; i--) {
-            if (path->buffer[i] == '/') {
-                path->bufferLen = i;
-                path->nameOff = i;
-                break;
-            }
-        }
-
-        for (int i = path->bufferLen - 1; i >= 0; i--) {
-            if (path->buffer[i] == '/') {
-                path->nameOff = i + 1;
-                break;
-            }
-        }
-
-        path->extensionOff = path->bufferLen - 1;
-
-    }
-
-    int toAbsolutePath(Path* path) {
-
-        std::filesystem::path tmp = std::filesystem::absolute(path->buffer);
-        std::u8string str = tmp.u8string();
-
-        std::string utf8(str.begin(), str.end());
-
-        if (str.size() > MAX_FILE_PATH - 1) {
-            return 0;
-        }
-
-        memcpy(path->buffer, utf8.c_str(), str.size() + 1);
-        path->bufferLen = (uint16_t) str.size();
-
-        annotatePath(path);
-
-        return 1;
 
     }
 

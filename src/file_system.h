@@ -45,28 +45,48 @@ namespace FileSystem {
         void* userData;
     };
 
+    // We need capability to know form which source was
+    // file loading requested.
+    typedef uint32_t Origin;
+
+    // Reserved ranges for the Origin ID
+    namespace Origins {
+        // Reserved for Compiler (0 - 10)
+        constexpr Origin COMPILER_ARBITRARY = 0;
+        constexpr Origin COMPILER_SOURCE    = 1;
+        constexpr Origin COMPILER_ASSET     = 2;
+
+        // Start of user specific IDs (11+)
+        // The LSP or any other tool should define its own IDs
+        // starting from here.
+        constexpr Origin USER_START       = 11;
+    }
 
     // init/release the FileSystem itself
-    void init();
+    void init   ();
     void release();
 
     // load/unload file from the FileSystem
-    Handle load(String fname);
-    Handle load(String fpath, String fname);
-    void unload(Handle file);
+    Handle load(String fname, Origin origin);
+    Handle load(String fpath, String fname, Origin origin);
 
-    const char* getBuffer(Handle file);
+    void   unload(Handle file, Origin origin);
 
-    FileInfo* getFileInfo(Handle flhnd);
-
-    String getDirectory(Handle file);
+    const char* getBuffer   (Handle file);
+    FileInfo*   getFileInfo (Handle flhnd);
+    String      getDirectory(Handle file);
+    Handle      getHandle   (String absPath);
 
     void* getUserData(Handle flhnd);
-    void setUserData(Handle flhnd, void* dataPtr);
+    void  setUserData(Handle flhnd, void* dataPtr);
 
-    Path* initPath(String str);
-    void releasePath(Path* path);
-
+    // Path procedures
+    Path* initPath      (String str);
+    void  releasePath   (Path* path);
+    void  annotatePath  (Path* path);
+    bool  toAbsolutePath(Path* path);
+    void  toParentPath  (Path* path);
+    void  uriToPath     (String uri, Path* out);
     Path* computeRelativePath(Handle flhnd, String str);
 
     String catPaths(Path* base, const char* const appendix);

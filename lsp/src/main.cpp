@@ -1,3 +1,10 @@
+// Things to fix:
+//  for now json parser inserts '\0' at the end of a string
+//  so any given json text is invalidated. We need this, I
+//  suppose only for fopen, so the plan is to migrate to
+//  normal file open function which supports lenths.
+
+
 #include "json.h"
 #include "lsp.h"
 #include "comm_provider.h"
@@ -30,11 +37,11 @@ static JsonString generateResponse(JsonWriter* js, T* result, int id) {
     jsonWriteInt(js, id);
 
     jsonWriteKey(js, "result"_js);
-    jsonWriteObjectStart(js);
+    //jsonWriteObjectStart(js);
 
     Lsp::serialize(js, result);
 
-    jsonWriteObjectEnd(js);
+    //jsonWriteObjectEnd(js);
     jsonWriteObjectEnd(js);
 
     return jsonWriterCommit(js);
@@ -74,14 +81,16 @@ int main() {
         .context = &lspAllocatorArena
     };
 
-    fprintf(stderr, "[LSP] Initialized\n");
+    Lsp::init();
+
+    Lsp::report({ Lsp::Inf::INFO }, "Initialization finished.");
 
     bool beOrNotToBe = true;
     while (beOrNotToBe) {
         JsonLex js = { 0 };
         JsonType token;
 
-        CommProvider::Message msg;
+        CommProvider::Message msg = { 0 };
         err = CommProvider::read(&comm, &msg);
 
         if (err == CommProvider::ERR_CLOSED) break;
@@ -97,13 +106,12 @@ int main() {
         // "method": <string>
         // "params": <array> -> as JsonString which
         token = jsonNext(&js);
-        if (!jsonMatch(&js, token, JSON_OBJECT_OPEN)) {
+            if (!jsonMatch(&js, token, JSON_OBJECT_OPEN)) {
             continue;
         }
 
         int id = -1;
         JsonString methodUri = { 0 };
-        JsonString params;
 
         while (true) {
 
@@ -124,6 +132,10 @@ int main() {
                     methodUri = js.value.s;
                 }
                 continue;
+            } else if (match(key, "params")) {
+                // TODO : for now we assume that they go in order
+                // as this should be done by design
+                break;
             }
             jsonSkipValue(&js, token);
 
@@ -142,12 +154,10 @@ int main() {
         char* buffer = (char*) requestArena.head->data;
         jsonWriterInit(&jsWr, buffer, requestArena.blockPayloadSize);
 
-        JsonString resp;
+        JsonString resp = { 0, 0 };
         switch (method) {
 
             case Lsp::T::RM_INITIALIZE: {
-
-                fprintf(stderr, "RM_INITIALIZE\n");
 
                 Lsp::Initialize* params = Lsp::parse<Lsp::Initialize>(&js, &lspAllocator);
                 Lsp::T::InitializeResult result = { 0 };
@@ -159,14 +169,14 @@ int main() {
 
                 // Capabilities
                 auto* caps = Lsp::alloc<Lsp::T::ServerCapabilities>(&lspAllocator);
-                caps->textDocumentSync = sync;
 
                 // Features
-                caps->hoverProvider          = true;
-                caps->definitionProvider     = true;
-                caps->documentSymbolProvider = true;
-                caps->declarationProvider    = true;
-                caps->implementationProvider = true;
+                caps->textDocumentSync       = sync;
+                //caps->hoverProvider          = true;
+                //caps->definitionProvider     = true;
+                //caps->documentSymbolProvider = true;
+                //caps->declarationProvider    = true;
+                //caps->implementationProvider = true;
 
                 // Server Info
                 result.serverInfo = Lsp::alloc<Lsp::T::InitializeResult::_ServerInfo>(&lspAllocator);
@@ -175,14 +185,12 @@ int main() {
 
                 result.capabilities = caps;
 
-                generateResponse(&jsWr, &result, id);
+                resp = generateResponse(&jsWr, &result, id);
                 break;
 
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_DID_OPEN: {
-
-                fprintf(stderr, "RM_TEXT_DOCUMENT_DID_OPEN\n");
 
                 using namespace Lsp::TextDocument;
                 Lsp::handle(Lsp::parse<DidOpen>(&js, &lspAllocator));
@@ -193,8 +201,6 @@ int main() {
 
             case Lsp::T::RM_TEXT_DOCUMENT_DID_CHANGE: {
 
-                fprintf(stderr, "RM_TEXT_DOCUMENT_DID_CHANGE\n");
-
                 using namespace Lsp::TextDocument;
                 Lsp::handle(Lsp::parse<DidChange>(&js, &lspAllocator));
 
@@ -204,8 +210,6 @@ int main() {
 
             case Lsp::T::RM_TEXT_DOCUMENT_DID_CLOSE: {
 
-                fprintf(stderr, "RM_TEXT_DOCUMENT_DID_CLOSE\n");
-
                 using namespace Lsp::TextDocument;
                 Lsp::handle(Lsp::parse<DidClose>(&js, &lspAllocator));
 
@@ -214,8 +218,6 @@ int main() {
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_DOCUMENT_SYMBOL: {
-
-                fprintf(stderr, "RM_TEXT_DOCUMENT_DOCUMENT_SYMBOL\n");
 
                 break;
 
@@ -227,12 +229,10 @@ int main() {
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_HOVER: {
-                fprintf(stderr, "RM_TEXT_DOCUMENT_HOVER\n");
                 break;
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_DEFINITION: {
-                fprintf(stderr, "RM_TEXT_DOCUMENT_DEFINITION\n");
                 break;
             }
 
@@ -258,10 +258,11 @@ int main() {
             default:
                 break;
         }
-        CommProvider::write(&commInfo, resp);
+        if (resp.len > 0) CommProvider::write(&commInfo, resp);
 
     }
 
+    Lsp::release();
     return 0;
 
 }

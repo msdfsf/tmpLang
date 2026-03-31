@@ -5,12 +5,13 @@
 
 
 constexpr std::size_t cstrlen(const char* str) {
+    if (!str) return 0;
+
     std::size_t len = 0;
     while (str[len] != '\0') {
         len++;
     }
     return len;
-
 }
 
 struct String {

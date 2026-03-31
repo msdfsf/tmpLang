@@ -43,7 +43,9 @@
 // #include "../../src/globals.h"
 #include "../../src/file_system.h"
 #include "../../src/array_list.h"
+
 #include <tuple>
+#include <cstdlib>
 
 
 
@@ -52,11 +54,11 @@
 
 namespace Lsp::T {
 
-    typedef String   String;
-    typedef int32_t  Int;
-    typedef uint32_t UInt;
-    typedef bool     Bool;
-    typedef double   Double;
+    typedef String String;
+    typedef int32_t    Int;
+    typedef uint32_t   UInt;
+    typedef bool   Bool;
+    typedef double Double;
 
     typedef void* LSPAny;
     typedef void* LSPObject;
@@ -80,6 +82,10 @@ namespace Lsp::T {
     static constexpr Field<Class, Member> make_field(const char* name, Member Class::*ptr) {
         return { name, ptr };
     }
+
+    template<> struct Schema<void> {
+        static constexpr auto fields = std::make_tuple();
+    };
 
     // Method Count: 93
     // Seed:         257348622
@@ -664,32 +670,34 @@ namespace Lsp::T {
         SEMANTIC_TOKEN_TYPES_DECORATOR      = 23,
     };
 
-    static const char* SemanticTokenTypesStrings[] = {
-        "", // NONE
-        "namespace",
-        "type",
-        "class",
-        "enum",
-        "interface",
-        "struct",
-        "typeParameter",
-        "parameter",
-        "variable",
-        "property",
-        "enumMember",
-        "event",
-        "function",
-        "method",
-        "macro",
-        "keyword",
-        "modifier",
-        "comment",
-        "string",
-        "number",
-        "regexp",
-        "operator",
-        "decorator",
-    };
+    static const char* toString(SemanticTokenTypes val) {
+        switch (val) {
+            case SEMANTIC_TOKEN_TYPES_NAMESPACE     : return "namespace";
+            case SEMANTIC_TOKEN_TYPES_TYPE          : return "type";
+            case SEMANTIC_TOKEN_TYPES_CLASS         : return "class";
+            case SEMANTIC_TOKEN_TYPES_ENUM          : return "enum";
+            case SEMANTIC_TOKEN_TYPES_INTERFACE     : return "interface";
+            case SEMANTIC_TOKEN_TYPES_STRUCT        : return "struct";
+            case SEMANTIC_TOKEN_TYPES_TYPE_PARAMETER: return "typeParameter";
+            case SEMANTIC_TOKEN_TYPES_PARAMETER     : return "parameter";
+            case SEMANTIC_TOKEN_TYPES_VARIABLE      : return "variable";
+            case SEMANTIC_TOKEN_TYPES_PROPERTY      : return "property";
+            case SEMANTIC_TOKEN_TYPES_ENUM_MEMBER   : return "enumMember";
+            case SEMANTIC_TOKEN_TYPES_EVENT         : return "event";
+            case SEMANTIC_TOKEN_TYPES_FUNCTION      : return "function";
+            case SEMANTIC_TOKEN_TYPES_METHOD        : return "method";
+            case SEMANTIC_TOKEN_TYPES_MACRO         : return "macro";
+            case SEMANTIC_TOKEN_TYPES_KEYWORD       : return "keyword";
+            case SEMANTIC_TOKEN_TYPES_MODIFIER      : return "modifier";
+            case SEMANTIC_TOKEN_TYPES_COMMENT       : return "comment";
+            case SEMANTIC_TOKEN_TYPES_STRING        : return "string";
+            case SEMANTIC_TOKEN_TYPES_NUMBER        : return "number";
+            case SEMANTIC_TOKEN_TYPES_REGEXP        : return "regexp";
+            case SEMANTIC_TOKEN_TYPES_OPERATOR      : return "operator";
+            case SEMANTIC_TOKEN_TYPES_DECORATOR     : return "decorator";
+            default: return "";
+        }
+    }
 
     enum SemanticTokenModifiers {
         SEMANTIC_TOKEN_MODIFIERS_NONE            = 0,
@@ -705,19 +713,21 @@ namespace Lsp::T {
         SEMANTIC_TOKEN_MODIFIERS_DEFAULT_LIBRARY = 10,
     };
 
-    static const char* SemanticTokenModifiersStrings[] = {
-        "", // NONE
-        "declaration",
-        "definition",
-        "readonly",
-        "static",
-        "deprecated",
-        "abstract",
-        "async",
-        "modification",
-        "documentation",
-        "defaultLibrary",
-    };
+    static const char* toString(SemanticTokenModifiers val) {
+        switch (val) {
+            case SEMANTIC_TOKEN_MODIFIERS_DECLARATION    : return "declaration";
+            case SEMANTIC_TOKEN_MODIFIERS_DEFINITION     : return "definition";
+            case SEMANTIC_TOKEN_MODIFIERS_READONLY       : return "readonly";
+            case SEMANTIC_TOKEN_MODIFIERS_STATIC         : return "static";
+            case SEMANTIC_TOKEN_MODIFIERS_DEPRECATED     : return "deprecated";
+            case SEMANTIC_TOKEN_MODIFIERS_ABSTRACT       : return "abstract";
+            case SEMANTIC_TOKEN_MODIFIERS_ASYNC          : return "async";
+            case SEMANTIC_TOKEN_MODIFIERS_MODIFICATION   : return "modification";
+            case SEMANTIC_TOKEN_MODIFIERS_DOCUMENTATION  : return "documentation";
+            case SEMANTIC_TOKEN_MODIFIERS_DEFAULT_LIBRARY: return "defaultLibrary";
+            default: return "";
+        }
+    }
 
     enum DocumentDiagnosticReportKind {
         DOCUMENT_DIAGNOSTIC_REPORT_KIND_NONE      = 0,
@@ -725,11 +735,13 @@ namespace Lsp::T {
         DOCUMENT_DIAGNOSTIC_REPORT_KIND_UNCHANGED = 2,
     };
 
-    static const char* DocumentDiagnosticReportKindStrings[] = {
-        "", // NONE
-        "full",
-        "unchanged",
-    };
+    static const char* toString(DocumentDiagnosticReportKind val) {
+        switch (val) {
+            case DOCUMENT_DIAGNOSTIC_REPORT_KIND_FULL     : return "Full";
+            case DOCUMENT_DIAGNOSTIC_REPORT_KIND_UNCHANGED: return "Unchanged";
+            default: return "";
+        }
+    }
 
     enum ErrorCodes {
         ERROR_CODES_NONE                   = 0,
@@ -757,12 +769,14 @@ namespace Lsp::T {
         FOLDING_RANGE_KIND_REGION  = 3,
     };
 
-    static const char* FoldingRangeKindStrings[] = {
-        "", // NONE
-        "comment",
-        "imports",
-        "region",
-    };
+    static const char* toString(FoldingRangeKind val) {
+        switch (val) {
+            case FOLDING_RANGE_KIND_COMMENT: return "Comment";
+            case FOLDING_RANGE_KIND_IMPORTS: return "Imports";
+            case FOLDING_RANGE_KIND_REGION : return "Region";
+            default: return "";
+        }
+    }
 
     enum SymbolKind {
         SYMBOL_KIND_NONE           = 0,
@@ -808,14 +822,16 @@ namespace Lsp::T {
         UNIQUENESS_LEVEL_GLOBAL   = 5,
     };
 
-    static const char* UniquenessLevelStrings[] = {
-        "", // NONE
-        "document",
-        "project",
-        "group",
-        "scheme",
-        "global",
-    };
+    static const char* toString(UniquenessLevel val) {
+        switch (val) {
+            case UNIQUENESS_LEVEL_DOCUMENT: return "document";
+            case UNIQUENESS_LEVEL_PROJECT : return "project";
+            case UNIQUENESS_LEVEL_GROUP   : return "group";
+            case UNIQUENESS_LEVEL_SCHEME  : return "scheme";
+            case UNIQUENESS_LEVEL_GLOBAL  : return "global";
+            default: return "";
+        }
+    }
 
     enum MonikerKind {
         MONIKER_KIND_NONE   = 0,
@@ -824,12 +840,14 @@ namespace Lsp::T {
         MONIKER_KIND_LOCAL  = 3,
     };
 
-    static const char* MonikerKindStrings[] = {
-        "", // NONE
-        "import",
-        "export",
-        "local",
-    };
+    static const char* toString(MonikerKind val) {
+        switch (val) {
+            case MONIKER_KIND_IMPORT: return "import";
+            case MONIKER_KIND_EXPORT: return "export";
+            case MONIKER_KIND_LOCAL : return "local";
+            default: return "";
+        }
+    }
 
     enum InlayHintKind {
         INLAY_HINT_KIND_NONE      = 0,
@@ -925,18 +943,20 @@ namespace Lsp::T {
         CODE_ACTION_KIND_SOURCE_FIX_ALL          = 9,
     };
 
-    static const char* CodeActionKindStrings[] = {
-        "", // NONE
-        "",
-        "quickfix",
-        "refactor",
-        "refactor.extract",
-        "refactor.inline",
-        "refactor.rewrite",
-        "source",
-        "source.organizeImports",
-        "source.fixAll",
-    };
+    static const char* toString(CodeActionKind val) {
+        switch (val) {
+            case CODE_ACTION_KIND_EMPTY                  : return "Empty";
+            case CODE_ACTION_KIND_QUICK_FIX              : return "QuickFix";
+            case CODE_ACTION_KIND_REFACTOR               : return "Refactor";
+            case CODE_ACTION_KIND_REFACTOR_EXTRACT       : return "RefactorExtract";
+            case CODE_ACTION_KIND_REFACTOR_INLINE        : return "RefactorInline";
+            case CODE_ACTION_KIND_REFACTOR_REWRITE       : return "RefactorRewrite";
+            case CODE_ACTION_KIND_SOURCE                 : return "Source";
+            case CODE_ACTION_KIND_SOURCE_ORGANIZE_IMPORTS: return "SourceOrganizeImports";
+            case CODE_ACTION_KIND_SOURCE_FIX_ALL         : return "SourceFixAll";
+            default: return "";
+        }
+    }
 
     enum TraceValues {
         TRACE_VALUES_NONE     = 0,
@@ -945,12 +965,14 @@ namespace Lsp::T {
         TRACE_VALUES_VERBOSE  = 3,
     };
 
-    static const char* TraceValuesStrings[] = {
-        "", // NONE
-        "off",
-        "messages",
-        "verbose",
-    };
+    static const char* toString(TraceValues val) {
+        switch (val) {
+            case TRACE_VALUES_OFF     : return "Off";
+            case TRACE_VALUES_MESSAGES: return "Messages";
+            case TRACE_VALUES_VERBOSE : return "Verbose";
+            default: return "";
+        }
+    }
 
     enum MarkupKind {
         MARKUP_KIND_NONE       = 0,
@@ -958,11 +980,13 @@ namespace Lsp::T {
         MARKUP_KIND_MARKDOWN   = 2,
     };
 
-    static const char* MarkupKindStrings[] = {
-        "", // NONE
-        "plaintext",
-        "markdown",
-    };
+    static const char* toString(MarkupKind val) {
+        switch (val) {
+            case MARKUP_KIND_PLAIN_TEXT: return "PlainText";
+            case MARKUP_KIND_MARKDOWN  : return "Markdown";
+            default: return "";
+        }
+    }
 
     enum InlineCompletionTriggerKind {
         INLINE_COMPLETION_TRIGGER_KIND_INVOKED   = 0,
@@ -976,12 +1000,14 @@ namespace Lsp::T {
         POSITION_ENCODING_KIND_UTF32 = 3,
     };
 
-    static const char* PositionEncodingKindStrings[] = {
-        "", // NONE
-        "utf-8",
-        "utf-16",
-        "utf-32",
-    };
+    static const char* toString(PositionEncodingKind val) {
+        switch (val) {
+            case POSITION_ENCODING_KIND_UTF8 : return "UTF8";
+            case POSITION_ENCODING_KIND_UTF16: return "UTF16";
+            case POSITION_ENCODING_KIND_UTF32: return "UTF32";
+            default: return "";
+        }
+    }
 
     enum FileChangeType {
         FILE_CHANGE_TYPE_NONE    = 0,
@@ -1037,11 +1063,13 @@ namespace Lsp::T {
         FILE_OPERATION_PATTERN_KIND_FOLDER = 2,
     };
 
-    static const char* FileOperationPatternKindStrings[] = {
-        "", // NONE
-        "file",
-        "folder",
-    };
+    static const char* toString(FileOperationPatternKind val) {
+        switch (val) {
+            case FILE_OPERATION_PATTERN_KIND_FILE  : return "file";
+            case FILE_OPERATION_PATTERN_KIND_FOLDER: return "folder";
+            default: return "";
+        }
+    }
 
     enum NotebookCellKind {
         NOTEBOOK_CELL_KIND_NONE   = 0,
@@ -1056,12 +1084,14 @@ namespace Lsp::T {
         RESOURCE_OPERATION_KIND_DELETE = 3,
     };
 
-    static const char* ResourceOperationKindStrings[] = {
-        "", // NONE
-        "create",
-        "rename",
-        "delete",
-    };
+    static const char* toString(ResourceOperationKind val) {
+        switch (val) {
+            case RESOURCE_OPERATION_KIND_CREATE: return "Create";
+            case RESOURCE_OPERATION_KIND_RENAME: return "Rename";
+            case RESOURCE_OPERATION_KIND_DELETE: return "Delete";
+            default: return "";
+        }
+    }
 
     enum FailureHandlingKind {
         FAILURE_HANDLING_KIND_NONE                    = 0,
@@ -1071,13 +1101,15 @@ namespace Lsp::T {
         FAILURE_HANDLING_KIND_UNDO                    = 4,
     };
 
-    static const char* FailureHandlingKindStrings[] = {
-        "", // NONE
-        "abort",
-        "transactional",
-        "textOnlyTransactional",
-        "undo",
-    };
+    static const char* toString(FailureHandlingKind val) {
+        switch (val) {
+            case FAILURE_HANDLING_KIND_ABORT                  : return "Abort";
+            case FAILURE_HANDLING_KIND_TRANSACTIONAL          : return "Transactional";
+            case FAILURE_HANDLING_KIND_TEXT_ONLY_TRANSACTIONAL: return "TextOnlyTransactional";
+            case FAILURE_HANDLING_KIND_UNDO                   : return "Undo";
+            default: return "";
+        }
+    }
 
     enum PrepareSupportDefaultBehavior {
         PREPARE_SUPPORT_DEFAULT_BEHAVIOR_NONE       = 0,
@@ -1089,10 +1121,12 @@ namespace Lsp::T {
         TOKEN_FORMAT_RELATIVE = 1,
     };
 
-    static const char* TokenFormatStrings[] = {
-        "", // NONE
-        "relative",
-    };
+    static const char* toString(TokenFormat val) {
+        switch (val) {
+            case TOKEN_FORMAT_RELATIVE: return "Relative";
+            default: return "";
+        }
+    }
 
     /**
      * A parameter literal used in requests to pass a text document and a position inside that
@@ -10616,41 +10650,64 @@ namespace Lsp {
 
 
 
+
+
+
+// Logger
+// ===
+
 namespace Lsp::Err {
+
     enum Kind {
         OK = 0,
+        ALLOC,
         INVALID_PARAMS,
+        LOAD_FILE,
+        SYNC,
     };
 
     struct Info {
         Kind   kind;
-        String file;
+        String file = { 0 };
     };
 
     inline const char* str(Kind err) {
         switch (err) {
-            case INVALID_PARAMS:
-                return "The request parameters are invalid or missing required fields.";
-            default:
-                return "No error";
+        case ALLOC:
+            return "Malloc! Malloc! Maaaaalloc!";
+        case INVALID_PARAMS:
+            return "The request parameters are invalid or missing required fields.";
+        case LOAD_FILE:
+            return "Was unable to load requested file!";
+        case SYNC:
+            return "Desynchronized. Ezio haven't handled it this way.";
+        default:
+            return "No error";
         }
-    }
-
-    inline Kind report(Info err, JsonWriter* js) {
-
-        fprintf(stderr, "[LSP Error] %s: %.*s (Code: %d)\n",
-                str(err.kind),
-                err.file.len,
-                err.file.buff,
-                (int) err.kind
-        );
-
-        return err.kind;
-
     }
 
 }
 
+namespace Lsp::Inf {
+
+    enum Kind {
+        INFO  = 0,
+        DEBUG
+    };
+
+    struct Info {
+        Kind   kind;
+        String file = { 0 };
+    };
+
+}
+
+namespace Lsp {
+    Inf::Kind report(Inf::Info inf, const char* format, ...);
+    Err::Kind report(Err::Info err, ...);
+
+    void panic(Err::Info err);
+}
 
 
 
@@ -10658,6 +10715,11 @@ namespace Lsp::Err {
 // ===
 
 namespace Lsp {
+
+    void init();
+    void release();
+
+
 
     // TODO : move somewhere
     static bool match(String str, const char* lit) {
@@ -10706,7 +10768,7 @@ namespace Lsp {
         return (T*) alc->alloc(alc->context, sizeof(T) * count);
     }
 
-    inline static thread_local DArray::Container stack;
+    inline thread_local DArray::Container stack;
 
     typedef uint32_t StackMark;
 
@@ -10715,9 +10777,14 @@ namespace Lsp {
     }
 
     template <typename T>
-    static T* commitStack(Allocator* alc, int* len) {
+    static T* commitStack(Allocator* alc, StackMark mark, size_t* len) {
+        T* ptr = alloc<T>(alc, stack.size);
+        memcpy(ptr, stack.buffer, sizeof(T) * stack.size);
         *len = stack.size;
-        return (T*) alloc<T*>(alc, stack.size);
+
+        stack.size = mark;
+        
+        return ptr;
     }
 
 
@@ -10727,6 +10794,71 @@ namespace Lsp {
     // Helper trait to detect Slice<T>
     template<typename T> struct is_slice : std::false_type {};
     template<typename T> struct is_slice<Slice<T>> : std::true_type { using type = T; };
+
+    // Helper trait to detect if enum is 'string' enum
+    template<typename T, typename = void>
+    struct has_to_string : std::false_type {};
+
+    template<typename T>
+    struct has_to_string<T, std::void_t<decltype(toString(std::declval<T>()))>> : std::true_type {};
+
+    template<typename VType>
+    void parseElement(JsonLex* js, Allocator* alc, VType& val) {
+        using MType = std::decay_t<VType>;
+
+        if constexpr (std::is_same_v<MType, T::Int>) {
+            jsonNext(js);
+            val = (T::Int) js->value.n;
+        }
+        else if constexpr (std::is_same_v<MType, T::UInt>) {
+            jsonNext(js);
+            val = (T::UInt) js->value.n;
+        }
+        else if constexpr (std::is_same_v<MType, T::Bool>) {
+            jsonNext(js);
+            val = js->value.b;
+        }
+        else if constexpr (std::is_same_v<MType, String>) {
+            jsonNext(js);
+            val = { js->value.s.data, js->value.s.len };
+        }
+        else if constexpr (std::is_enum_v<MType>) {
+            jsonNext(js);
+            val = (MType) js->value.n;
+        }
+        else if constexpr (std::is_pointer_v<MType>) {
+            using Inner = std::remove_pointer_t<MType>;
+            if constexpr (!std::is_void_v<Inner>) {
+                if (jsonNext(js) == JSON_OBJECT_OPEN) {
+                    val = parse<Inner>(js, alc);
+                }
+            }
+        }
+        else if constexpr (is_slice<MType>::value) {
+            if (jsonNext(js) == JSON_ARRAY_OPEN) {
+                StackMark mark = markStack(&stack);
+                using ItemType = typename is_slice<MType>::type;
+
+                while (true) {
+                    JsonType arrToken = jsonNext(js);
+                    if (arrToken == JSON_ARRAY_CLOSE) break;
+
+                    if constexpr (std::is_pointer_v<ItemType>) {
+                        if (arrToken == JSON_OBJECT_OPEN) {
+                            using Inner = std::remove_pointer_t<ItemType>;
+                            void* ptr = (void*) parse<Inner>(js, alc);
+                            DArray::push(&stack, &ptr);
+                        }
+                    } else {
+                        ItemType item = {};
+                        parseElement(js, alc, item);
+                        DArray::push(&stack, (void*) &item);
+                    }
+                }
+                val.data = (ItemType*) commitStack<ItemType>(alc, mark, &val.size);
+            }
+        }
+    }
 
     // Note: Opening '{' assumed consumed by dispatcher or parent
     template<typename Method>
@@ -10742,60 +10874,9 @@ namespace Lsp {
             bool found = false;
             std::apply([&](auto&&... fields) {(([&] {
                 if (!found && match(key, fields.name)) {
-
                     found = true;
-                    using MType = std::remove_reference_t<decltype(obj->*(fields.ptr))>;
-
-                    if constexpr (std::is_same_v<MType, T::Int>) {
-                        jsonNext(js); obj->*(fields.ptr) = (T::Int) js->value.n;
-                    }
-                    else if constexpr (std::is_same_v<MType, T::UInt>) {
-                        jsonNext(js); obj->*(fields.ptr) = (T::UInt) js->value.n;
-                    }
-                    else if constexpr (std::is_same_v<MType, bool>) {
-                        jsonNext(js); obj->*(fields.ptr) = js->value.b;
-                    }
-                    else if constexpr (std::is_same_v<MType, String>) {
-                        jsonNext(js); obj->*(fields.ptr) = { js->value.s.data, js->value.s.len };
-                    }
-                    else if constexpr (std::is_pointer_v<MType> &&
-                        !std::is_void_v<std::remove_pointer_t<MType>>) {
-                        // Recursive call for nested objects
-                        if (jsonNext(js) == JSON_OBJECT_OPEN) {
-                            obj->*(fields.ptr) =
-                                parse<std::remove_pointer_t<MType>>(js, alc);
-                        }
-                        //using Nested = std::remove_pointer_t<MType>;
-                        //if (jsonNext(js) == JSON_OBJECT_OPEN) {
-                        //    obj->*(fields.ptr) = parse<Nested>(js, alc);
-                        //}
-                    }
-                    else if constexpr (is_slice<MType>::value) {
-                        if (jsonNext(js) == JSON_ARRAY_OPEN) {
-                            StackMark mark = markStack(&stack);
-                            using ItemType = typename is_slice<MType>::type;
-
-                            while (true) {
-                                JsonType arrToken = jsonNext(js);
-                                if (arrToken == JSON_ARRAY_CLOSE) break;
-
-                                // Slices in LSP are usually arrays of pointers or primitives
-                                if constexpr (std::is_pointer_v<ItemType>) {
-                                    if (arrToken == JSON_OBJECT_OPEN) {
-                                        void* ptr = (void*) parse<std::remove_pointer_t<ItemType>>(js, alc);
-                                        DArray::push(&stack, &ptr);
-                                    }
-                                } else {
-                                    // Handle simple array of primitives if needed
-                                    size_t value = (size_t) js->value.n;
-                                    DArray::push(&stack, (void*) &value);
-                                }
-                            }
-                            int count = 0;
-                            (obj->*(fields.ptr)).data = (ItemType*)commitStack<ItemType*>(alc, &count);
-                            (obj->*(fields.ptr)).size = (size_t)count;
-                        }
-                    }
+                    auto& val = obj->*(fields.ptr);
+                    parseElement(js, alc, val);
                 }
                 })(), ...);
             }, T::Schema<Method>::fields);
@@ -10806,67 +10887,105 @@ namespace Lsp {
         return obj;
     }
 
-    // Helper to turn a C-string literal into a JsonString for the writer
-    static inline JsonString to_js(const char* s) {
-        const size_t len = (int) strlen(s);
-        return { (char*) s, len };
+    static inline JsonString toJS(const char* str) {
+        const size_t len = strlen(str);
+        return { .data = (char*) str, .len = len };
+    }
+
+    static inline JsonString toJS(String str) {
+        return { .data = str.buff, .len = str.len };
+    }
+
+    template<typename VType>
+    void strValue(JsonWriter* js, const VType& val) {
+        using MType = std::decay_t<VType>;
+
+        // Handle LSPAny aka void* specifically to prevent recursion into 'void'
+        if constexpr (std::is_same_v<MType, void*> ||
+                      std::is_same_v<MType, T::LSPAny>) {
+            if (val != nullptr) {
+                // TODO
+                jsonWriteNull(js);
+            }
+        }
+        else if constexpr (std::is_enum_v<MType>) {
+            if constexpr (has_to_string<MType>::value) {
+                jsonWriteStr(js, toJS(toString(val)));
+            } else {
+                jsonWriteInt(js, static_cast<long long>(val));
+            }
+        }
+        else if constexpr (std::is_same_v<MType, T::Int>) {
+            jsonWriteInt(js, (long long) val);
+        }
+        else if constexpr (std::is_same_v<MType, T::UInt>) {
+            jsonWriteInt(js, (long long) val);
+        }
+        else if constexpr (std::is_same_v<MType, T::Bool>) {
+            jsonWriteBool(js, val);
+        }
+        else if constexpr (std::is_same_v<MType, T::String>) {
+            if (val.buff) {
+                jsonWriteStr(js, toJS(val));
+            }
+        }
+        else if constexpr (std::is_pointer_v<MType>) {
+            if (val != nullptr) {
+                jsonWriteObjectStart(js);
+                str<std::remove_pointer_t<MType>>(js, val);
+                jsonWriteObjectEnd(js);
+            }
+        }
+        else if constexpr (is_slice<MType>::value) {
+            if (val.data != nullptr) {
+                jsonWriteArrayStart(js);
+                using ItemType = typename is_slice<MType>::type;
+
+                for (size_t i = 0; i < val.size; i++) {
+                    if constexpr (std::is_pointer_v<ItemType>) {
+                        jsonWriteObjectStart(js);
+                        str<std::remove_pointer_t<ItemType>>(js, val.data[i]);
+                        jsonWriteObjectEnd(js);
+                    } else {
+                        strValue<ItemType>(js, val.data[i]);
+                    }
+                }
+                jsonWriteArrayEnd(js);
+            }
+        }
     }
 
     template<typename Method>
     void str(JsonWriter* js, const Method* obj) {
-        // Note: Object Start '{' handled by the caller to allow
-        // top-level wrapping (like adding "jsonrpc": "2.0")
-
         std::apply([&](auto&&... fields) {(([&] {
-            using MType = std::remove_reference_t<decltype(obj->*(fields.ptr))>;
+            // We need to skip empty/null fields
             auto& val = obj->*(fields.ptr);
+            using MType = std::decay_t<decltype(val)>;
 
-            if constexpr (std::is_same_v<MType, T::Int>) {
-                jsonWriteKey(js, to_js(fields.name));
-                jsonWriteInt(js, (long long)val);
-            }
-            else if constexpr (std::is_same_v<MType, T::UInt>) {
-                jsonWriteKey(js, to_js(fields.name));
-                jsonWriteInt(js, (long long)val);
-            }
-            else if constexpr (std::is_same_v<MType, bool>) {
-                jsonWriteKey(js, to_js(fields.name));
-                jsonWriteBool(js, val);
-            }
-            else if constexpr (std::is_same_v<MType, String>) {
-                if (val.data) {
-                    jsonWriteKey(js, to_js(fields.name));
-                    jsonWriteStr(js, val);
+            bool skip = false;
+            if constexpr (!std::is_same_v<MType, T::Int>  &&
+                            !std::is_same_v<MType, T::UInt> &&
+                            !std::is_same_v<MType, T::Bool>)
+            {
+                if constexpr (std::is_pointer_v<MType>) {
+                    skip = (val == nullptr);
+                }
+                else if constexpr (is_slice<MType>::value) {
+                    skip = (val.data == nullptr);
+                }
+                else if constexpr (std::is_same_v<MType, String>) {
+                    skip = (val.buff == nullptr);
+                }
+                else if constexpr (std::is_enum_v<MType>) {
+                    skip = ((int)val == 0);
                 }
             }
-            else if constexpr (std::is_pointer_v<MType>) {
-                if (val != nullptr) {
-                    jsonWriteKey(js, to_js(fields.name));
-                    jsonWriteObjectStart(js);
-                    str<std::remove_pointer_t<MType>>(js, val);
-                    jsonWriteObjectEnd(js);
-                }
-            }
-            else if constexpr (is_slice<MType>::value) {
-                if (val.data != nullptr) {
-                    jsonWriteKey(js, to_js(fields.name));
-                    jsonWriteArrayStart(js);
-                    using ItemType = typename is_slice<MType>::type;
 
-                    for (size_t i = 0; i < val.size; ++i) {
-                        if constexpr (std::is_pointer_v<ItemType>) {
-                            jsonWriteObjectStart(js);
-                            str<std::remove_pointer_t<ItemType>>(js, val.data[i]);
-                            jsonWriteObjectEnd(js);
-                        } else {
-                            // Simple primitive array
-                            if constexpr (std::is_same_v<ItemType, T::Int>) jsonWriteInt(js, val.data[i]);
-                        }
-                    }
-                    jsonWriteArrayEnd(js);
-                }
+            if (!skip) {
+                jsonWriteKey(js, toJS(fields.name));
+                strValue(js, val);
             }
-            })(), ...);
+        })(), ...);
         }, T::Schema<Method>::fields);
     }
 
