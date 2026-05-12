@@ -31,7 +31,7 @@ namespace Err {
         OPERATOR_CANNOT_ACT_AS_BINARY   = -22,
         CANNOT_GET_ADDRESS_OF_ADDRESS   = -23,
         INVALID_USAGE_OF_OPERATOR       = -24,
-        CANNOT_EVALUATE_EXPRESION_AT_CMP_TIME = -25, // LOOK AT : maybe rename as NOT_COMPILE_TIME_EXPRESSION to make it shorter
+        CANNOT_EVALUATE                 = -25,
         INVALID_EMBED_ARRAY_SIZE        = -26,
         UNKNOWN_QUALIFIER               = -27,
         ARRAY_EXPECTED                  = -28,
@@ -67,15 +67,24 @@ namespace Err {
         NOT_YET_IMPLEMENTED             = -58,
         IO_ERROR                        = -59,
         MAX_FILE_PATH_EXCEEDED          = -60,
-        COUNT                           = -61,
+        FILE_LOAD_FAILED                = -61,
+        DIVISION_BY_ZERO                = -62,
+        IMPORT_NOT_GLOBAL               = -63,
+        NAMESPACE_NOT_GLOBAL            = -64,
+        QUALIFIED_NAME_NOT_ALLOWED      = -65,
+        DECLARATION_AFTER_USE           = -66,
+        COUNT                           = 67,
     };
     const char* const str(Err code);
+    bool isFatal(Err err);
 }
 
 namespace Wrn {
     enum Wrn :int64_t {
         UNUSED_VARIABLE   = -1,
         SHADOWED_VARIABLE = -2,
+        DIVISION_BY_ZERO  = -3,
+        SMALLER_DTYPE_CAN_BE_USED = -4,
     };
     const char* const str(Wrn code);
 }
@@ -89,12 +98,16 @@ namespace Inf {
 
 namespace Diag {
 
+    struct Format {
+        const char* fmt;
+    };
+
     void report(AstContext* ast, Span* span, Err::Err code, ...);
     void report(AstContext* ast, Span* span, Wrn::Wrn code, ...);
     void report(AstContext* ast, Span* span, Inf::Inf code, ...);
 
-    void report(AstContext* ast, Span* span, Err::Err code, char* format, ...);
-    void report(AstContext* ast, Span* span, Wrn::Wrn code, char* format, ...);
-    void report(AstContext* ast, Span* span, Inf::Inf code, char* format, ...);
+    void report(AstContext* ast, Span* span, Err::Err code, Format fmt, ...);
+    void report(AstContext* ast, Span* span, Wrn::Wrn code, Format fmt, ...);
+    void report(AstContext* ast, Span* span, Inf::Inf code, Format fmt, ...);
 
 }

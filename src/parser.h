@@ -2,10 +2,12 @@
 
 #include "array_list.h"
 #include "data_types.h"
+#include "file_system.h"
 #include "globals.h"
 #include "lexer.h"
 #include "syntax.h"
 #include "diagnostic.h"
+#include "registry.h"
 #include <cstdint>
 
 namespace Parser {
@@ -34,16 +36,36 @@ namespace Parser {
         Lex::TokenKind b;
     };
 
+    typedef uint32_t StackMark;
+    constexpr StackMark NULL_STACK_MARK = UINT32_MAX;
+
+    // To represent tree of imports so we can check
+    // for circular imports and log to user full path
+    struct ImportNode {
+        FileSystem::Handle file;
+        ImportStatement*   import;
+        ImportNode*        parent;
+        ImportNode*        firstChild;
+        ImportNode*        nextSibling;
+    };
+
     struct ParseContext {
-        AstContext* ast;
+        Reg::Unit* unit;
 
         // The 'global' span of the file being parsed
         Span*       fileSpan;
+
+        // Root directory of the project
+        String rootDir;
 
         // State - change as we move through the tree
         Scope*      currentScope;    // The scope currently being filled
         Function*   currentFunction; // NULL if at global level
         SyntaxNode* currentLoop;
+
+        // Import that 'triggered' compilation of the current file
+        ImportNode* currentImport;
+        ImportNode* importRoot;
 
         // Stacks and Buffers
         DArray::Container nodeStack;
@@ -51,25 +73,28 @@ namespace Parser {
         Arena::Container  errBuff;
 
         // Counters and Indices
-        int      idxInScope; // Track definition index in current scope
-        uint32_t arrId;
-        uint32_t varId;
-        uint64_t errId;
-        uint64_t defId;
+        int   idxInScope; // Track definition index in current scope
+        ArrId arrId;
+        VarId varId;
+        ErrId errId;
+        DefId defId;
     };
 
 
 
     // Main
-    ParseContext* init(AstContext* ctx); // Call per thread, calls Lex::init()
-    Err::Err      parse(ParseContext* ctx, char* const flname);
-    // Manages everything automatically, call if you dont want to
-    // handle threads/contexts by yourself and just want to parse
-    // file to AstContext
-    Err::Err      parse(char* const flname, AstContext** outAstCtx);
+
+    // Call per thread, calls Lex::init/release
+    void init   (ParseContext* ctx);
+    void release(ParseContext* ctx);
+
+    Err::Err parse(ParseContext* ctx, char* const flname);
+    Err::Err parse(ParseContext* ctx, const FileSystem::Handle file);
+
+
 
     // Scopes and Blocks
-    Lex::Token parseScope(ParseContext* ctx, Span* span, const ScopeType type, const ScopeEnd end);
+    Lex::Token parseScope(ParseContext* ctx, Span* span, const ScopeType type, const ScopeEnd end, StackMark dsmarkStart = NULL_STACK_MARK);
     Lex::Token parseNamespace(ParseContext* ctx, Span* span);
     Lex::Token parseForeignScope(ParseContext* ctx, Span* span);
 

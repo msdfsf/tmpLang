@@ -1,10 +1,13 @@
 // interpreter related code that focuses
 // on 'ast' walking evaluation
 
-#include "array_list.h"
 #include "data_types.h"
+#include "diagnostic.h"
 #include "interpreter.h"
+#include "operators.h"
 #include "syntax.h"
+#include "task_system.h"
+#include "validator.h"
 
 
 
@@ -465,11 +468,332 @@ namespace Interpreter {
 
     }
 
-    int execFunction(Function* fcn, Variable* ans) {
+    template<typename T>
+    bool isZero(T value) {
+        if constexpr (std::is_floating_point_v<T>) {
+            // TODO : ? abs(value) < eps;
+            return value == 0.0 || value == -0.0;
+        } else {
+            return value == 0;
+        }
+    }
+
+    template<typename T>
+    T applyArithmetic(AstContext* ast, Span* span, OperatorEnum op, T left, T right) {
+        if (op == OP_DIVISION || op == OP_MODULO) {
+            if (isZero(right)) {
+                if constexpr (std::is_integral_v<T>) {
+                    Diag::report(ast, span, Err::DIVISION_BY_ZERO, SEV_ERROR);
+                    return (T) 0;
+                } else {
+                    Diag::report(ast, span, Wrn::DIVISION_BY_ZERO, SEV_WARNING);
+                }
+            }
+        }
+
+        switch (op) {
+            case OP_ADDITION:       return left + right;
+            case OP_SUBTRACTION:    return left - right;
+            case OP_MULTIPLICATION: return left * right;
+            case OP_DIVISION:       return left / right;
+        }
+
+        if constexpr (std::is_integral_v<T>) {
+            switch (op) {
+                case OP_MODULO:      return left % right;
+                case OP_BITWISE_AND: return left & right;
+                case OP_BITWISE_OR:  return left | right;
+                case OP_BITWISE_XOR: return left ^ right;
+            }
+        }
+
         return 0;
     }
 
-    void initEval() {
+    template<typename T>
+    T applyUnary(AstContext* ast, Span* span, OperatorEnum op, T val) {
+        switch (op) {
+            case OP_UNARY_PLUS:  return +val;
+            case OP_UNARY_MINUS: return -val;
+            case OP_NEGATION:    return !val ? (T) 1 : (T) 0;
+        }
+
+        if constexpr (std::is_integral_v<T>) {
+            switch (op) {
+                case OP_BITWISE_NEGATION: return ~val;
+            }
+        }
+
+        return 0;
+    }
+
+    void applyOperator(AstContext* ctx, Span* span, OperatorEnum op, Variable* leftVar, Variable* rightVar, Value* result) {
+        Value* left = &leftVar->value;
+        Value* right = &rightVar->value;
+
+        switch (left->typeKind) {
+            case Type::DT_I8: {
+                result->i8 = applyArithmetic(ctx, span, op, left->i8, right->i8);
+                break;
+            }
+
+            case Type::DT_U8: {
+                result->u8 = applyArithmetic(ctx, span, op, left->u8, right->u8);
+                break;
+            }
+
+            case Type::DT_I16: {
+                result->i16 = applyArithmetic(ctx, span, op, left->i16, right->i16);
+                break;
+            }
+
+            case Type::DT_U16: {
+                result->u16 = applyArithmetic(ctx, span, op, left->u16, right->u16);
+                break;
+            }
+
+            case Type::DT_I32: {
+                result->i32 = applyArithmetic(ctx, span, op, left->i32, right->i32);
+                break;
+            }
+
+            case Type::DT_U32: {
+                result->u32 = applyArithmetic(ctx, span, op, left->u32, right->u32);
+                break;
+            }
+
+            case Type::DT_I64: {
+                result->i64 = applyArithmetic(ctx, span, op, left->i64, right->i64);
+                break;
+            }
+
+            case Type::DT_U64: {
+                result->u64 = applyArithmetic(ctx, span, op, left->u64, right->u64);
+                break;
+            }
+
+            case Type::DT_F32: {
+                result->f32 = applyArithmetic(ctx, span, op, left->f32, right->f32);
+                break;
+            }
+
+            case Type::DT_F64: {
+                result->f64 = applyArithmetic(ctx, span, op, left->f64, right->f64);
+                break;
+            }
+        }
+    }
+
+    void applyOperator(AstContext* ctx, Span* span, OperatorEnum op, Variable* var, Value* result) {
+        Value* value = &var->value;
+
+        switch (op) {
+            case Type::DT_I8: {
+                result->i8 = applyUnary(ctx, span, op, value->i8);
+                break;
+            }
+
+            case Type::DT_U8: {
+                result->u8 = applyUnary(ctx, span, op, value->u8);
+                break;
+            }
+
+            case Type::DT_I16: {
+                result->i16 = applyUnary(ctx, span, op, value->i16);
+                break;
+            }
+
+            case Type::DT_U16: {
+                result->u16 = applyUnary(ctx, span, op, value->u16);
+                break;
+            }
+
+            case Type::DT_I32: {
+                result->i32 = applyUnary(ctx, span, op, value->i32);
+                break;
+            }
+
+            case Type::DT_U32: {
+                result->u32 = applyUnary(ctx, span, op, value->u32);
+                break;
+            }
+
+            case Type::DT_I64: {
+                result->i64 = applyUnary(ctx, span, op, value->i64);
+                break;
+            }
+
+            case Type::DT_U64: {
+                result->u64 = applyUnary(ctx, span, op, value->u64);
+                break;
+            }
+
+            case Type::DT_F32: {
+                result->f32 = applyUnary(ctx, span, op, value->f32);
+                break;
+            }
+
+            case Type::DT_F64: {
+                result->f64 = applyUnary(ctx, span, op, value->f64);
+                break;
+            }
+        }
+    }
+
+    void initEval(CompilerState* state) {
+    }
+
+    void flatten(AstContext* ast, Variable* var) {
+        if (!var || !var->expression) return;
+
+        switch (var->value.typeKind) {
+            case Type::DT_CUSTOM: {
+                Variable* unwrappedVar = unwrap(var);
+
+                if (unwrappedVar->expression->type != EXT_TYPE_INITIALIZATION) {
+                    // TODO : error/assert
+                    return;
+                }
+
+                TypeInitialization* init = (TypeInitialization*) unwrappedVar->expression;
+                TypeDefinition* td = (TypeDefinition*) unwrappedVar->value.def;
+
+                for (uint32_t i = 0; i < td->varCount; i++) {
+                    init->attributes[i];
+
+                    if (i < init->attributeCount) {
+                        td->vars[i]->value = init->attributes[i]->value;
+                        td->vars[i]->expression = init->attributes[i]->expression;
+                    } else if (init->fillVar) {
+                        td->vars[i]->value = init->fillVar->value;
+                        td->vars[i]->expression = init->fillVar->expression;
+                    }
+                }
+
+                break;
+            }
+
+            default: break;
+        }
+
+        // TODO : tag for the linker/optimizer as constant
+    }
+
+    // TODO : we need to track enqountered variables to prevent locking
+    Err::Err eval(Validator::ValidationContext* ctx, Variable* var) {
+        if (!var || var->value.hasValue) return Err::OK;
+
+        Err::Err err = Err::OK;
+
+        Expression* ex = var->expression;
+        if (!ex && var->def) {
+            // We are variable in expression, so we have to eval
+            // definition...
+            VariableDefinition* def = var->def;
+
+            // First we ensure that semantic check was done.
+            err = Validator::ensureValidated(ctx, (SyntaxNode*) def);
+            if (err != Err::OK) return err;
+
+            // Now evaluate...
+            AcquireNodeReturn ans =
+                acquireNode(&def->base.cmpStatus, &def->base.workerId, ctx->workerId, true);
+
+            if (ans == ANR_ACQUIRED_FOR_WORK) {
+                err = eval(ctx, def->var);
+                if (err != Err::OK) {
+                    releaseNode(&def->base.cmpStatus, err == Err::OK);
+                    return err;
+                } else {
+                    // flatten(ctx->unit->ast, def->var);
+                    releaseNode(&def->base.cmpStatus, err == Err::OK);
+                }
+            } else if (ans == ANR_ALREADY_ACQUIRED_BY_CALLER) {
+                Diag::report(ctx->unit->ast, def->base.span, Err::UNEXPECTED_ERROR, Diag::Format {
+                    "TODO : Node being validated is already on stack! Causing circular dependency!"
+                });
+                return Err::UNEXPECTED_ERROR;
+            }
+
+            var->value = def->var->value;
+
+            return Err::OK;
+        }
+
+        switch (ex->type) {
+
+            case EXT_UNARY : {
+                UnaryExpression* uex = (UnaryExpression*) ex;
+                if (!uex->operand) return Err::CANNOT_EVALUATE;
+
+                err = eval(ctx, uex->operand);
+                if (err != Err::OK) return err;
+
+                applyOperator(ctx->unit->ast, var->base.span, uex->base.opType, uex->operand, &var->value);
+                var->value.hasValue = true;
+
+                break;
+            }
+
+            case EXT_BINARY : {
+                BinaryExpression* bex = (BinaryExpression*) ex;
+                if (!bex->left || !bex->right) return Err::CANNOT_EVALUATE;
+
+                err = eval(ctx, bex->left);
+                if (err != Err::OK) return err;
+
+                err = eval(ctx, bex->right);
+                if (err != Err::OK) return err;
+
+                applyOperator(ctx->unit->ast, var->base.span, bex->base.opType, bex->left, bex->right, &var->value);
+                var->value.hasValue = true;
+
+                break;
+            }
+
+            case EXT_FUNCTION_CALL : {
+                FunctionCall* call = (FunctionCall*) ex;
+                Function* const fcn = call->fcn;
+
+                TaskSystem::dispatchCompileTimeBuild(fcn, true);
+                Interpreter::print(fcn->exe);
+
+                for (uint32_t i = 0; i < call->inArgCount; i++) {
+                    err = eval(ctx, call->inArgs[i]);
+                    if (err != Err::OK) return err;
+                }
+
+                err = Interpreter::exec(ctx->unit->ast, fcn, call->inArgs, call->inArgCount, var);
+                if (err != Err::OK) return err;
+
+                var->value.hasValue = true;
+                break;
+            }
+
+            case EXT_TYPE_INITIALIZATION: {
+                TypeInitialization* init = (TypeInitialization*) ex;
+
+                for (int i = 0; i <  init->attributeCount; i++) {
+                    err = eval(ctx, init->attributes[i]);
+                    if (err != Err::OK) return err;
+                }
+
+                err = eval(ctx, init->fillVar);
+                if (err != Err::OK) return err;
+
+                var->value.hasValue = true;
+
+                break;
+            }
+
+            default: {
+                return Err::NOT_YET_IMPLEMENTED;
+            }
+
+        }
+
+        return Err::OK;
+
     }
 
 }

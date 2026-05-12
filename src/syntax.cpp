@@ -12,6 +12,7 @@
 #include "operators.h"
 #include "string.h"
 #include "diagnostic.h"
+#include "task_status.h"
 
 
 
@@ -23,30 +24,32 @@ Function Ast::Internal::functions[Ast::Internal::IF_COUNT];
 Scope* SyntaxNode::root = NULL;
 INamed SyntaxNode::dir = { NULL, 0 };
 
-AstContext* Ast::init() {
+void Ast::init(AstContext* ast) {
+    memset(ast, 0, sizeof(AstContext));
+}
 
-    AstContext* ctx = (AstContext*) alloc(alc, sizeof(AstContext));
+void Ast::release(AstContext* ast) {
+}
 
-
-
-    // === Registry
-    //
-
+void Ast::init(AstRegistry* reg) {
     constexpr int initSize = 1024;
 
-    ctx->reg = (AstRegistry*) alloc(alc, sizeof(AstRegistry));
     for (int i = 0; i < AstRegistry::dataSize; i++) {
-        DArray::init(ctx->reg->data + i, initSize, sizeof(void*));
-        (ctx->reg->data + i)->constCoef = 0;
-        (ctx->reg->data + i)->constTerm = (ctx->reg->data + i)->allocSize;
+        DArray::init(reg->data + i, initSize, sizeof(void*));
+        (reg->data + i)->constCoef = 0;
+        (reg->data + i)->constTerm = (reg->data + i)->allocSize;
     }
+}
 
+void Ast::release(AstRegistry* reg) {
 
+}
+
+// TODO : define arg counts only once
+void Ast::init() {
 
     // === Internals
     //
-
-    ctx->usedFunctionMask = 0;
 
     Function* fPrintf = Internal::functions + Internal::IF_PRINTF;
     fPrintf->base.scope = SyntaxNode::root;
@@ -72,6 +75,7 @@ AstContext* Ast::init() {
 
     fPrintf->prototype.inArgs[0] = fPrintArg1;
     fPrintf->prototype.inArgs[1] = fPrintArg2;
+    fPrintf->prototype.inArgCount = 2;
 
 
 
@@ -83,12 +87,13 @@ AstContext* Ast::init() {
 
     fAlloc->prototype.inArgs = (VariableDefinition**) alloc(alc, sizeof(VariableDefinition*));
 
-    VariableDefinition* fAllocArg1 = (VariableDefinition*) nalloc(alc, NT_VARIABLE_DEFINITION);
+    VariableDefinition* fAllocArg1 = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
     fAllocArg1->var = (Variable*) nalloc(nalc, NT_VARIABLE);
     fAllocArg1->var->base.scope = SyntaxNode::root;
     fAllocArg1->var->value.typeKind = Type::DT_U64;
 
     fAlloc->prototype.inArgs[0] = fAllocArg1;
+    fAlloc->prototype.inArgCount = 1;
 
 
 
@@ -106,7 +111,7 @@ AstContext* Ast::init() {
     fFreeArg1->var->value.typeKind = Type::DT_POINTER;
 
     fFree->prototype.inArgs[0] = fFreeArg1;
-
+    fFree->prototype.inArgCount = 1;
 
 
     // internal Variables such as null, true, false etc...
@@ -143,7 +148,6 @@ AstContext* Ast::init() {
 
     VariableDefinition* vFalseDef = (VariableDefinition*) nalloc(nalc, NT_VARIABLE_DEFINITION);
     vFalseDef->var = vFalse;
-    return ctx;
 
 }
 
@@ -166,6 +170,57 @@ Variable* unwrap(Variable* var) {
 
 }
 
+Type::TypeInfo* getTypeInfo(Variable* var) {
+    if (Type::isPrimitive(var->value.typeKind)) {
+        return Type::basicTypes + var->value.typeKind;
+    } else if (Type::DT_CUSTOM == var->value.typeKind) {
+        return (Type::TypeInfo*) var->value.def->typeInfo;
+    }
+
+    return NULL;
+}
+
+
+
+
+AcquireNodeReturn acquireNode(uint8_t* statusField, uint8_t* nodeWorkerId, uint8_t workerId, bool wait) {
+    std::atomic_ref<uint8_t> status(*statusField);
+
+    if (status.load(std::memory_order_acquire) == TS_READY) {
+        return ANR_ALREADY_READY;
+    }
+
+    uint8_t expected = TS_PENDING;
+    if (status.compare_exchange_strong(expected, TS_RUNNING, std::memory_order_acq_rel)) {
+        *nodeWorkerId = workerId;
+        return ANR_ACQUIRED_FOR_WORK;
+    }
+
+    // Check for Circular Dependency
+    // If its true, we basicly have no other choice then to be in recursion...
+    if (*nodeWorkerId == workerId) {
+        return ANR_ALREADY_ACQUIRED_BY_CALLER;
+    }
+
+    if (wait && expected == TS_RUNNING) {
+        while (status.load(std::memory_order_acquire) == TS_RUNNING) {
+            // TODO : we may want to take a simple job to do while waiting...
+            status.wait(TS_RUNNING);
+        }
+
+        return ANR_ALREADY_READY;
+    }
+
+    return (expected == TS_READY) ?
+        ANR_ALREADY_READY : ANR_ACQUIRED_BY_ANOTHER_THREAD;
+}
+
+// Must be called if acquireNode returned true
+void releaseNode(uint8_t* statusField, bool success) {
+    std::atomic_ref<uint8_t> status(*statusField);
+    status.store(success ? TS_READY : TS_PENDING, std::memory_order_release);
+    status.notify_all();
+}
 
 
 // whatever
@@ -432,40 +487,141 @@ int _findGenericIdx(DArray::Container* arr, String* name, void** out) {
 template<uintptr_t arrayOffset, uintptr_t nameOffset>
 void* _findGenericInScope(Scope* scope, String* name) {
 
-    while (scope) {
-        DArray::Container* items = (DArray::Container*)((char*)scope + arrayOffset);
-        void* item = _findGeneric<nameOffset>(items, name);
-        if (item) return item;
-        scope = scope->base.scope;
-    }
-
     return NULL;
 
 }
 
-// TODO
+String Ast::Node::getName(SyntaxNode* node) {
+    if (!node) return { nullptr, 0 };
+
+    // TODO : ?
+    if (node->ogNode) node = node->ogNode;
+
+    switch (node->type) {
+        case NT_VARIABLE: {
+            return *(String*) &((Variable*) node)->name;
+        }
+
+        case NT_VARIABLE_DEFINITION: {
+            Variable* var = ((VariableDefinition*) node)->var;
+            if (var) return *(String*) &var->name;
+            return { nullptr, 0 };
+        }
+
+        case NT_FUNCTION: {
+            return *(String*) &((Function*) node)->name;
+        }
+
+        case NT_TYPE_DEFINITION: {
+            return *(String*) &((TypeDefinition*) node)->name;
+        }
+
+        case NT_UNION: {
+            return *(String*) &((Union*) node)->base.name;
+        }
+
+        case NT_ENUMERATOR: {
+            return *(String*) &((Enumerator*) node)->name;
+        }
+
+        case NT_NAMESPACE: {
+            return *(String*) &((Namespace*) node)->name;
+        }
+
+        case NT_LABEL: {
+            return *(String*) &((Label*) node)->name;
+        }
+
+        case NT_ERROR: {
+            return *(String*) &((ErrorSet*) node)->name;
+        }
+
+        case NT_IMPORT: {
+            ImportStatement* imp = (ImportStatement*) node;
+            if (imp->param.len > 0) return imp->param;
+            return imp->fname;
+        }
+
+        default: {
+            return { nullptr, 0 };
+        }
+    }
+}
+
 SyntaxNode* Ast::Find::inArray(SyntaxNode** arr, uint32_t len, const String* const name) {
+    if (!arr || len == 0 || !name) return NULL;
 
-    for (int i = 0; i < len; i++) {
+    for (uint32_t i = 0; i < len; i++) {
+        SyntaxNode* node = arr[i];
+        if (!node) continue;
 
-        SyntaxNode* node = arr[0];
+        // Do we cook it?
+        if (node->ogNode) node = node->ogNode;
 
-        String* nodeName;
+        const String* nodeName = NULL;
+
         switch (node->type) {
             case NT_VARIABLE: {
-                nodeName = (String*) &((Variable*) node)->name;
+                nodeName = (const String*) &((Variable*) node)->name;
+                break;
             }
 
+            case NT_VARIABLE_DEFINITION: {
+                nodeName = (const String*) &((VariableDefinition*) node)->var->name;
+                break;
+            }
+
+            case NT_FUNCTION: {
+                nodeName = (const String*) &((Function*) node)->name;
+                break;
+            }
+
+            case NT_TYPE_DEFINITION:
+            case NT_UNION: {
+                nodeName = (const String*) &((TypeDefinition*) node)->name;
+                break;
+            }
+
+            case NT_ENUMERATOR: {
+                nodeName = (const String*) &((Enumerator*) node)->name;
+                break;
+            }
+
+            case NT_NAMESPACE: {
+                nodeName = (const String*) &((Namespace*) node)->name;
+                break;
+            }
+
+            case NT_LABEL: {
+                nodeName = (const String*) &((Label*) node)->name;
+                break;
+            }
+
+            case NT_ERROR: {
+                nodeName = (const String*) &((ErrorSet*) node)->name;
+                break;
+            }
+
+            default: continue;
         }
 
-        if (cstrcmp(*name, *nodeName)) {
+        if (nodeName && cstrcmp(*name, *nodeName)) {
             return node;
         }
-
     }
 
     return NULL;
+}
 
+SyntaxNode* Ast::Find::inScope(Scope* scope, const String* const name) {
+    while (scope) {
+        SyntaxNode* node = inArray(scope->children, scope->childrenCount, name);
+        if (node) return node;
+
+        scope = scope->base.scope;
+    }
+
+    return NULL;
 }
 
 #define _defineInPtr(Type, Member) \
@@ -488,6 +644,7 @@ int Ast::Find::inArray(Type** arr, uint32_t len, String* name, Type** out) { \
     return _findGenericIdxNestedPtr<offsetof(Type, PtrMember), offsetof(SubType, NameMember)>((void**) arr, len, name, (void**) out); \
 }
 
+// Not sure its needed
 #define _defineInScope(Type, NameMember, ScopeArrayMember) \
 Type* Ast::Find::inScope##Type(Scope* scope, String* name) { \
     return NULL; \
@@ -748,8 +905,8 @@ void Ast::Node::init(TypeDefinition* node) {
     node->typeInfo = NULL;
     node->vars = NULL;
     node->varCount = 0;
+    node->typeInfo = NULL;
     node->base.type = NT_TYPE_DEFINITION;
-    // TODO
 }
 _defineMake(TypeDefinition, NT_TYPE_DEFINITION);
 
@@ -995,6 +1152,7 @@ Variable* Ast::Node::copyRef(Variable* dest, Variable* src) {
     if (!dest) {
         dest = (Variable*) nalloc(nalc, NT_VARIABLE);
     }
+    if (src == dest) return dest;
 
     dest->def = src->def;
     dest->value = src->value;

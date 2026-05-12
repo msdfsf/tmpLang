@@ -2,6 +2,7 @@
 #include "../../src/file_driver.h"
 #include "../../src/array_list.h"
 #include "../../src/set.h"
+#include "lsp.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -212,12 +213,34 @@ namespace FileSystem {
     }
 
     Handle getHandle(String absPath) {
-        File* file = findFileLsp(absPath);
+        Path path;
+        uriToPath(absPath, &path);
+
+        absPath.buff = path.buffer;
+        absPath.len = path.bufferLen;
+        
+        File * file = findFileLsp(absPath);
         if (!file) file = findFileDisc(absPath);
+
         return file;
     }
 
     FileInfo* getFileInfo(Handle hnd) {
         return &((File*) hnd)->info;
+    }
+
+    void* getUserData(Handle handle) {
+        File* file = (File*) handle;
+        return file->info.userData;
+    }
+
+    char const* getBuffer(Handle handle) {
+        File* file = (File*) handle;
+        if (file->origin >= Origins::USER_START) {
+            Lsp::FileData* data = (Lsp::FileData*) file->info.userData;
+            return data->data;
+        }
+
+        return file->data;
     }
 }

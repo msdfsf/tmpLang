@@ -116,12 +116,11 @@ void printStruct(Runtime::_StructInfo* info, uint8_t* data) {
     const uint64_t count = info->memberCount;
 
     printString(info->name);
-    printf(" {");
+    printf("{\n");
 
     uint8_t* basePtr = data;
 
     for (int i=0; i < count; i++) {
-
         Runtime::_StructMemberInfo* memberInfo = info->members + i;
 
         Runtime::_Any member;
@@ -133,13 +132,14 @@ void printStruct(Runtime::_StructInfo* info, uint8_t* data) {
             member.p = (basePtr + memberInfo->offset);
         }
 
+        printf("  ");
         Runtime::printValue(member);
 
-        if (i < count - 1) printf(";\n");
-
+        if (i < count - 1) printf(",\n");
+        else { printf("\n"); }
     }
 
-    printf(" }");
+    printf("}\n");
 
 }
 

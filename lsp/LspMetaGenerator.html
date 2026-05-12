@@ -1013,8 +1013,8 @@
             if (useSwitch) {
                 code += `\tstatic const char* toString(${name} val) {\n`;
                 code += `\t\tswitch (val) {\n`;
-                members.forEach(m => {
-                    code += `\t\t\tcase ${m.full.padEnd(pad)}: return "${m.raw}";\n`;
+                members.forEach((m, i) => {
+                    code += `\t\t\tcase ${m.full.padEnd(pad)}: return "${originalStrings[i]}";\n`;
                 });
                 code += `\t\t\tdefault: return "";\n`;
                 code += `\t\t}\n`;

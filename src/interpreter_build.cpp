@@ -11,13 +11,13 @@
 #include "syntax.h"
 #include "logger.h"
 #include "diagnostic.h"
+#include "task_system.h"
 
 
-#include <atomic>
 #include <cstdint>
 #include <cstdlib>
+#include <execution>
 #include <float.h>
-#include <thread>
 
 
 
@@ -27,177 +27,7 @@ namespace Interpreter {
 
     void clear(CompilerState* state);
 
-    // How concurrency is handled:
-    // There are few worker and the main thread.
-    // Firstly the function is secured via atomic state change.
-    // (idle -> running) if success, function is secured and its
-    // our responsibility to do the compilation.
-    // Next the worker is selected. Bitwise checklist is used.
-    // Each worker has its own bit corresponding with its id.
-    // Worker is selected via atomic bit change.
-    // If worker is selected, it compiles the function.
-    // If no worker is ready, the calling thread is responsible
-    // for the compilation.
-    // because compiler state is pricy to duplicate or extend
-    // all containers, In case that same worker has to compile
-    // multiple functions they would be queued and processed
-    // sequentially.
-    struct Worker {
-        int id;
-
-        std::thread thread;
-        std::atomic<bool> hasWork;
-
-        CompilerState state;
-        DArray::Container fcnQueue;
-    };
-
-    constexpr int workerCount = 4;
-    Worker workers[workerCount];
-    thread_local Worker* localWorker = NULL;
-
-    // reserved state for masters compilation if needed
-    CompilerState mastersState;
-
-    // the 'check list' mechanism, each thread
-    // will use its own bit to write to mark if
-    // its ready for the next task or not.
-    // 1 - free, 0 - working
-    std::atomic<uint64_t> checkList = (1ULL << workerCount) - 1;
-
-    // true: function secured
-    // false: function already claimed/compiled
-    bool secureFunction(Function* fcn, bool waitForExecution) {
-
-        TaskStatus expectedStatus = TS_PENDING;
-        std::atomic_ref<TaskStatus> fcnStatus(fcn->compilationStatus);
-
-        if (!fcnStatus.compare_exchange_strong(expectedStatus, TS_RUNNING)) {
-            if (waitForExecution) {
-                while (expectedStatus == TS_RUNNING) {
-                    fcnStatus.wait(TS_RUNNING);
-                    expectedStatus = fcnStatus.load();
-                }
-            }
-            return false;
-        }
-
-        fcn->exe = (ExeBlock*) alloc(alc, sizeof(ExeBlock));
-
-        return true;
-
-    }
-
-    // returns free worker or NULL at failure
-    Worker* secureWorker() {
-
-        // for future me: memory_order_relaxed - only this operation's atomicity is guaranteed
-        uint64_t checkListCopy = checkList.load(std::memory_order_relaxed);
-
-        int workerId = -1;
-        while (checkListCopy != 0) {
-
-            // TODO: move to a function?
-            for (int i = 0; i < workerCount; i++) {
-                if (checkListCopy & (1ULL << i)) {
-                    workerId = i;
-                    break;
-                }
-            }
-
-            // fetch_and returns the value of checkList
-            // before the AND was applied
-            const uint64_t mask = 1ULL << workerId;
-            if (checkList.fetch_and(~mask) & mask) {
-                break;
-            }
-
-            checkListCopy = checkList.load(std::memory_order_relaxed);
-
-        }
-
-        if (workerId >= 0 && workerId < workerCount) {
-            return workers + workerId;
-        } else {
-            return NULL;
-        }
-
-    }
-
-    Err::Err compile(Function* fcn, bool waitForExecution) {
-
-        if (fcn->exe) return Err::OK;
-        if (!secureFunction(fcn, waitForExecution)) return Err::OK;
-
-        Worker* worker = secureWorker();
-
-        if (worker) {
-
-            DArray::push(&worker->fcnQueue, &fcn);
-            worker->hasWork.store(true);
-            worker->hasWork.notify_all();
-
-            if (waitForExecution) {
-                while (worker->hasWork.load()) {
-                    worker->hasWork.wait(true);
-                }
-            }
-
-        } else if (localWorker) {
-            // we are worker, but we are bussy
-
-            DArray::push(&localWorker->fcnQueue, &fcn);
-
-        } else {
-            // when master become a slave
-
-            clear(&mastersState);
-            Err::Err err = compile(&mastersState, fcn);
-            if (err != Err::OK) return err;
-
-            std::atomic_ref<TaskStatus> fcnStatus(fcn->compilationStatus);
-            fcnStatus.store(TS_READY);
-            fcnStatus.notify_all();
-
-        }
-
-        return Err::OK;
-
-    }
-
-    void runWorker(Worker* worker) {
-
-        localWorker = worker;
-
-        while (1) {
-
-            worker->hasWork.wait(false);
-
-            while (worker->fcnQueue.size > 0) {
-
-                Function* fcn = *(Function**) DArray::getLast(&worker->fcnQueue);
-                DArray::pop(&worker->fcnQueue);
-
-                clear(&worker->state);
-                compile(&worker->state, fcn);
-
-                std::atomic_ref<TaskStatus> fcnStatus(fcn->compilationStatus);
-                fcnStatus.store(TS_READY);
-                fcnStatus.notify_all();
-
-            }
-
-            worker->hasWork.store(false);
-            worker->hasWork.notify_one();
-
-            checkList.fetch_or(1ULL << worker->id);
-            checkList.notify_all();
-
-        }
-
-    }
-    void init(CompilerState* state) {
-
+    void initBuild(CompilerState* state) {
         constexpr int size = 1024 * 8;
 
         Arena::init(&state->locals, size);
@@ -213,25 +43,6 @@ namespace Interpreter {
         state->defaultArgsSize = 0;
 
         state->vecResult.isTmp = false;
-
-    }
-
-    void init(Worker* worker) {
-
-        init(&worker->state);
-        DArray::init(&worker->fcnQueue, 4, sizeof(Function*));
-        worker->thread = std::thread(runWorker, worker);
-
-    }
-
-    void initBuild() {
-
-        for (int i = 0; i < workerCount; i++) {
-            init(workers + i);
-        }
-
-        init(&mastersState);
-
     }
 
     void clear(CompilerState* state) {
@@ -546,7 +357,7 @@ namespace Interpreter {
             uint8_t* body = (uint8_t*) Arena::push(&state->locals, allocSize, sizeof(vmword));
             memset(body, 0, allocSize);
         } else {
-            state->locals.logicalPos += vmwordsCount;
+            state->locals.logicalPos += vmwordsCount * sizeof(vmword);
         }
 
         // store debug info
@@ -1201,13 +1012,50 @@ namespace Interpreter {
     }
 
     Err::Err compileMemberSelection(CompilerState* state, BinaryExpression* bex) {
+        // One of the following three cases happens:
+        // 1. Pointer Access: Calculates the absolute address on the stack.
+        // 2. Local Access: Direct read from a pre-calculated frame offset.
+        // 3. Arbitrary Expression: Extracts a member from a stack-allocated blob
+        //    (e.g., from a function return) via a cropping 'crop' instruction
 
-        Variable* parent = bex->left;
-        const Type::Kind parentType = parent->value.typeKind;
-        // TODO
+        Variable* parent = unwrap(bex->left);
+        Variable* member = bex->right;
+
+        const Type::Kind pType = parent->value.typeKind;
+        Type::StructInfo* pInfo = (Type::StructInfo*) parent->value.def->typeInfo;
+
+        Type::StructMemberInfo* mInfo = pInfo->members + member->name.id;
+
+        if (pType == Type::DT_POINTER) {
+            const Err::Err err = compile(state, parent);
+            if (err != Err::OK) return err;
+
+            pushOpcode(state, OC_PUSH_U64);
+            pushOperand(state, mInfo->offset);
+
+            pushOpcode(state, OC_ADD_U64);
+
+            pushOpcode(state, selectLoadOpcode(mInfo->type->kind));
+            if (mInfo->type->kind == Type::DT_CUSTOM) {
+                pushOperand(state, mInfo->type->size);
+            }
+        } else if (parent->def) {
+            pushOpcode(state, selectGetOpcode(mInfo->type->kind));
+            if (mInfo->type->kind == Type::DT_CUSTOM) {
+                pushOperand(state, mInfo->type->size);
+            }
+            pushOperand(state, parent->def->vmOffset + mInfo->offset);
+        } else {
+            const Err::Err err = compile(state, parent);
+            if (err != Err::OK) return err;
+
+            pushOpcode(state, OC_CROP);
+            pushOperand(state, BYTES_TO_WORDS(getDtypeSize(&parent->value)));
+            pushOperand(state, mInfo->offset);
+            pushOperand(state, getDtypeSize(&member->value));
+        }
 
         return Err::OK;
-
     }
 
     Err::Err compileArraySize(CompilerState* state, Variable* var) {
@@ -1491,7 +1339,8 @@ namespace Interpreter {
                 Function* fcn = call->fcn;
 
                 if (!isValidFunctionIdx(call->fcn->internalIdx) && !fcn->exe) {
-                    err = compile(fcn);
+                    TaskSystem::dispatchCompileTimeBuild(fcn, true);
+                    // TODO : handle somehow error.
                 }
 
                 // create empty slots for callee fp and ip
@@ -1748,6 +1597,20 @@ namespace Interpreter {
 
             }
 
+            case EXT_TYPE_INITIALIZATION: {
+
+                TypeInitialization* init = (TypeInitialization*) node;
+
+                for (int i = 0; i < init->attributeCount; i++) {
+                    compile(state, init->attributes[i]);
+                }
+
+                // TODO : fill var
+
+                break;
+
+            }
+
             default: {
                 return Err::NOT_YET_IMPLEMENTED;
             }
@@ -1835,6 +1698,10 @@ namespace Interpreter {
 
         Err::Err err;
 
+        if (!fcn->exe) {
+            fcn->exe = (ExeBlock*) alloc(alc, sizeof(ExeBlock));
+        }
+
         fcn->exe->isVariadic = false;
         for (int i = 0; i < fcn->prototype.inArgCount; i++) {
 
@@ -1881,7 +1748,7 @@ namespace Interpreter {
         fcn->exe->bytecode = (uint8_t*) alloc(alc, Arena::getFlatSize(&state->bytecode), 1);
         Arena::flatCopy(&state->bytecode, fcn->exe->bytecode);
 
-        fcn->exe->localsSize = BYTES_TO_WORDS(state->locals.logicalPos);
+        fcn->exe->localsSize = state->locals.logicalPos;
         fcn->exe->locals = (vmword*) alloc(alc, Arena::getFlatSize(&state->locals), state->maxAlign);
         memset(fcn->exe->locals, 0, fcn->exe->localsSize * sizeof(vmword));
         Arena::flatCopy(&state->locals, (uint8_t*) fcn->exe->locals);
@@ -1955,7 +1822,7 @@ namespace Interpreter {
 
             default:
                 // TODO
-                return Err::CANNOT_EVALUATE_EXPRESION_AT_CMP_TIME;
+                return Err::CANNOT_EVALUATE;
 
         }
 

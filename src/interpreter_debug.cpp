@@ -30,7 +30,7 @@ namespace Interpreter {
     Set::Container functionsSet;
     DArray::Container functionsArray;
 
-    void initDebug() {
+    void initDebug(CompilerState* state) {
         Set::init(&functionsSet, 256);
         DArray::init(&functionsArray, 128, sizeof(Function*));
     }
@@ -115,6 +115,7 @@ namespace Interpreter {
             case OC_POP:    return 1;
             case OC_POP_N:  return 9;
             case OC_DUP:    return 1;
+            case OC_CROP:   return 3 * 8 + 1;
 
             case OC_ADD_I32: return 1;
             case OC_ADD_U32: return 1;
@@ -463,8 +464,9 @@ namespace Interpreter {
             case OC_JUMP_IF_TRUE:  return "jump_if_true";
             case OC_JUMP_IF_FALSE: return "jump_if_false";
 
-            case OC_POP: return "pop";
-            case OC_DUP: return "dup";
+            case OC_POP:  return "pop";
+            case OC_DUP:  return "dup";
+            case OC_CROP: return "crop";
 
             case OC_GROW: return "grow";
 
@@ -1048,6 +1050,23 @@ namespace Interpreter {
                     break;
                 }
 
+                case OC_CROP: {
+                    uint64_t blobSize;
+                    memcpy(&blobSize, buffer, 8);
+                    buffer += 8;
+
+                    uint64_t memberOffset;
+                    memcpy(&memberOffset, buffer, 8);
+                    buffer += 8;
+
+                    uint64_t memberSize;
+                    memcpy(&memberSize, buffer, 8);
+                    buffer += 8;
+
+                    idealLen = snprintf(operandStr, operandStrSize, "blob_size: %llu, member_offset: %llu, member_size: %llu", blobSize, memberOffset, memberSize);
+                    break;
+                }
+
                 case OC_GROW: {
                     uint64_t size;
                     memcpy(&size, buffer, 8);
@@ -1285,7 +1304,7 @@ namespace Interpreter {
                 if (!fcn->exe) continue;
 
                 if (depth <= maxDepth &&
-                    Set::insert(&functionsSet, (uint64_t) fcn)
+                    Set::insert(&functionsSet, (uint8_t*) fcn)
                     ) {
                     DArray::push(&functionsArray, &fcn);
                 }

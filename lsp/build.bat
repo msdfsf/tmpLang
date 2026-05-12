@@ -93,7 +93,14 @@ call :AddSource "..\src\array_list.cpp"
 call :AddSource "..\src\path.cpp"
 call :AddSource "..\src\file_driver.cpp"
 call :AddSource "..\src\set.cpp"
-
+call :AddSource "..\src\parser.cpp"
+call :AddSource "..\src\logger.cpp"
+call :AddSource "..\src\lexer.cpp"
+call :AddSource "..\src\syntax.cpp"
+call :AddSource "..\src\diagnostic.cpp"
+call :AddSource "..\src\data_types.cpp"
+call :AddSource "..\src\utils.cpp"
+call :AddSource "..\src\strlib.cpp"
 
 for /r "%SRC_DIR%" %%f in (*.cpp) do (
     set "SOURCES=!SOURCES! "%%f""
@@ -112,7 +119,7 @@ if "%SOURCES%"=="" (
 
 if /i "%TARGET_COMPILER%"=="cl" (
 
-    set "FLAGS=/std:c++20 /W0 /wd4530 /D_AMD64_ /DWIN64 /nologo"
+    set "FLAGS=/std:c++20 /W0 /wd4530 /D_AMD64_ /DWIN64 /D_CUSTOM_ALLOCATOR_ /DCONFIG_ERROR_RECOVERY /nologo"
     set "LIBS="
 
     if /i "%TARGET_MODE%"=="debug" (

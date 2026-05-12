@@ -20,6 +20,7 @@
 #include "array_list.h"
 #include "dynamic_arena.h"
 #include "ordered_dict.h"
+#include "task_status.h"
 
 
 
@@ -153,12 +154,6 @@ enum ScopeType {
     SC_COMMON = 0
 };
 
-enum TaskStatus {
-    TS_PENDING = 0,
-    TS_RUNNING = 1,
-    TS_READY   = 2
-};
-
 enum ExpressionType {
     EXT_FUNCTION_CALL = AT_EXT_FUNCTION_CALL,
     EXT_OPERATION,
@@ -181,6 +176,13 @@ enum ExpressionQualifier {
     EXQ_VARIABLE,
     EXQ_CONSTANT,
     EXQ_COMPILE_TIME
+};
+
+enum AcquireNodeReturn {
+    ANR_ALREADY_READY,
+    ANR_ACQUIRED_FOR_WORK,
+    ANR_ACQUIRED_BY_ANOTHER_THREAD,
+    ANR_ALREADY_ACQUIRED_BY_CALLER
 };
 
 struct QualifiedName : INamedEx {
@@ -210,6 +212,12 @@ struct SyntaxNode {
 
     int definitionIdx;
 
+    // Status of Linking, Type Resolution etc...
+    uint8_t semStatus;
+    // Status of Bytecode Generation, Evaluation etc...
+    uint8_t cmpStatus;
+    // TODO
+    uint8_t workerId;
 };
 
 struct Scope {
@@ -416,6 +424,7 @@ struct Variable {
     Value value;
     Expression* expression;
 
+    // In case of member .id is members index
     QualifiedName name;
 };
 
@@ -638,10 +647,12 @@ struct ImportStatement {
 // contain references to nodes in linear way
 // so validator dont have to traverse tree that much
 struct AstRegistry {
-    static constexpr int dataSize = 27;
+    static constexpr int dataSize = 29;
     union {
         DArray::Container     data[dataSize];
         struct {
+            DArray::Container scopes;
+            DArray::Container namespaces;
             DArray::Container langDefs;
             DArray::Container codeBlocks;
             DArray::Container foreignFunctions;
@@ -692,7 +703,7 @@ struct AstError {
 struct AstContext {
     Scope* root;
 
-    AstRegistry* reg;
+    AstRegistry* reg; // TODO : remove?
 
     // each bit corresponds with the InternaFunction enum
     // indicates if function was used at least once in code
@@ -712,8 +723,15 @@ struct AstContext {
 };
 
 namespace Ast {
-    AstContext* init();
-    void        release();
+
+    void init();
+    void release();
+
+    void init   (AstContext* ast);
+    void release(AstContext* ast);
+
+    void init   (AstRegistry* reg);
+    void release(AstRegistry* reg);
 
     namespace Node {
         void init(Scope* node);
@@ -843,6 +861,8 @@ namespace Ast {
 
         const char* str(NodeType type);
         const char* str(ExpressionType type);
+
+        String getName(SyntaxNode* node);
     };
 
     namespace Find {
@@ -1021,7 +1041,7 @@ constexpr int nodeTypeSize[AT_COUNT] = {
 
     extern void* nalloc   (AllocatorHandle allocator, AllocType type);
     extern void* nalloc   (AllocatorHandle allocator, AllocType type, size_t count);
-    extern void* ndealloc (AllocatorHandle allocator, void* ptr);
+    extern void  ndealloc (AllocatorHandle allocator, void* ptr);
 
 #endif
 
@@ -1032,3 +1052,9 @@ constexpr int nodeTypeSize[AT_COUNT] = {
 // ===
 
 Variable* unwrap(Variable* var);
+
+Type::TypeInfo* getTypeInfo(Variable* var);
+
+
+AcquireNodeReturn acquireNode(uint8_t* statusField, uint8_t* nodeWorkerId, uint8_t workerId, bool wait);
+void releaseNode(uint8_t* statusField, bool success);

@@ -39,17 +39,98 @@ namespace Interpreter {
         return stack;
     }
 
-    void initExec() {
+    void initExec(CompilerState* state) {
         stackSize = 1024 * 1024;
         stack = (vmword*) alloc(alc, stackSize, 8);
         Arena::init(&heap, stackSize);
         Arena::init(&vecContext.arena, stackSize);
     }
 
-    Err::Err toValue(Function* fcn, vmword* buff, uint64_t buffSize, Value* out) {
+    Err::Err StackToVariable(AstContext* ast, uint8_t* buff, int64_t buffSize, Variable* var) {
+        Value* val = &var->value;
 
-        VariableDefinition* def = fcn->prototype.outArg;
-        Value* val = &def->var->value;
+        switch (val->typeKind) {
+            case Type::DT_I8:
+            case Type::DT_U8:
+            case Type::DT_I16:
+            case Type::DT_U16:
+            case Type::DT_I32:
+            case Type::DT_U32:
+            case Type::DT_I64:
+            case Type::DT_U64:
+            case Type::DT_F32:
+            case Type::DT_F64:
+            case Type::DT_POINTER: {
+                const int size = (Type::basicTypes + val->typeKind)->size;
+                if (buffSize < size) {
+                    Diag::report(ast, var->base.span,
+                        Err::UNEXPECTED_ERROR, Diag::Format {
+                            "Unexpected Comptime Memory Error: Attempted to read %d bytes from VM stack, "
+                            "but only %lld bytes are available in the current frame."
+                        },
+                        size, buffSize);
+                    return Err::UNEXPECTED_ERROR;
+                }
+
+                val->u64 = 0;
+                memcpy(&val->u64, buff, size);
+                val->hasValue = true;
+                break;
+            }
+
+            case Type::DT_CUSTOM: {
+                TypeDefinition* def = val->def;
+                Type::StructInfo* sInfo = (Type::StructInfo*) def->typeInfo;
+
+                TypeInitialization* init = Ast::Node::makeTypeInitialization();
+                init->attributeCount = sInfo->memberCount;
+                init->attributes = (Variable**) alloc(alc, init->attributeCount * sizeof(Variable*));
+
+                for (int i = 0; i < (int)sInfo->memberCount; i++) {
+                    Type::StructMemberInfo* mInfo = sInfo->members + i;
+
+                    Variable* mVar = Ast::Node::makeVariable();
+                    mVar->value.typeKind = mInfo->type->kind;
+                    mVar->value.def =
+                        mInfo->type->kind == Type::DT_CUSTOM ?
+                        (TypeDefinition*) mInfo->type : NULL;
+
+                    uint8_t* mBuff = buff + mInfo->offset;
+                    int64_t  mSize = buffSize - mInfo->offset;
+
+                    Err::Err err = StackToVariable(ast, mBuff, mSize, mVar);
+                    if (err != Err::OK) return err;
+
+                    init->attributes[i] = mVar;
+                }
+
+                var->expression = (Expression*) init;
+                break;
+            }
+
+            case Type::DT_ARRAY:
+            case Type::DT_SLICE: {
+                Diag::report(ast, var->base.span,
+                    Err::NOT_YET_IMPLEMENTED, Diag::Format {
+                        "Compile-time conversion for %s not yet implemented"
+                    }, Type::str(val->typeKind));
+                return Err::NOT_YET_IMPLEMENTED;
+            }
+
+            default: {
+                Diag::report(ast, var->base.span,
+                    Err::UNEXPECTED_ERROR, Diag::Format {
+                        "Invalid type kind (%i) in StackToValue"
+                    }, val->typeKind);
+                return Err::UNEXPECTED_ERROR;
+            }
+        }
+
+        return Err::OK;
+    }
+
+    Err::Err VariableToStack(AstContext* ast, uint8_t* buff, int64_t buffSize, Variable* var) {
+        Value* val = &var->value;
 
         switch (val->typeKind) {
             case Type::DT_I8:
@@ -62,35 +143,84 @@ namespace Interpreter {
             case Type::DT_U64:
             case Type::DT_F32:
             case Type::DT_F64: {
-                val->u64 = *buff;
+                const int size = (Type::basicTypes + val->typeKind)->size;
+                if (buffSize < size) {
+                    Diag::report(ast, var->base.span,
+                        Err::UNEXPECTED_ERROR, Diag::Format {
+                            "Unexpected Comptime Memory Error: Attempted to write %d bytes to VM stack, "
+                            "but only %lld bytes are available in the current frame."
+                        },
+                        size, buffSize);
+                    return Err::UNEXPECTED_ERROR;
+                }
+
+                memset(buff, 0, size);
+                memcpy(buff, &val->u64, size);
+                break;
+            }
+
+            // TODO : sanity check for memberCount == varCount?
+            case Type::DT_CUSTOM: {
+                TypeDefinition* def = val->def;
+                Type::StructInfo* sInfo = (Type::StructInfo*) def->typeInfo;
+                
+                var = unwrap(var);
+                if (var->def) var = unwrap(var->def->var);
+
+                // TODO : for now assuming that it can be only init
+                if (!var->expression || var->expression->type != EXT_TYPE_INITIALIZATION) {
+                    Diag::report(ast, var->base.span, Err::UNEXPECTED_SYMBOL,
+                        "Expected struct initialization expression.");
+                    return Err::UNEXPECTED_ERROR;
+                }
+
+                TypeInitialization* init = (TypeInitialization*) var->expression;
+                for (int i = 0; i < sInfo->memberCount; i++) {
+                    Type::StructMemberInfo* mInfo = sInfo->members + i;
+
+                    Variable* mVar = NULL;
+                    if (i < init->attributeCount) {
+                        mVar = init->attributes[i];
+                    } else if (init->fillVar) {
+                        mVar = init->fillVar;
+                    } else {
+                        mVar = def->vars[i];
+                    }
+
+                    uint8_t* mBuff = buff + mInfo->offset;
+                    int64_t  mSize = buffSize - mInfo->offset;
+
+                    Err::Err err = VariableToStack(ast, mBuff, mSize, mVar);
+                    if (err != Err::OK) return err;
+                }
+
                 break;
             }
 
             case Type::DT_SLICE:
             case Type::DT_ERROR:
-            case Type::DT_CUSTOM:
-            case Type::DT_POINTER:
             case Type::DT_FUNCTION:
             case Type::DT_COUNT:
             case Type::DT_MULTIPLE_TYPES:
             case Type::DT_ARRAY: {
-                Logger::log(logErr, "Datatype is not yet supported as output type in compile time context.", fcn->base.span);
+                Diag::report(ast, var->base.span,
+                    Err::NOT_YET_IMPLEMENTED, Diag::Format {
+                        "Compile-time conversion for %s not yet implemented"
+                    }, Type::str(val->typeKind));
                 return Err::NOT_YET_IMPLEMENTED;
             }
 
             default: {
-                Logger::log(logErr, "tmp", fcn->base.span);
-                return Err::NOT_YET_IMPLEMENTED;
+                Diag::report(ast, var->base.span,
+                    Err::UNEXPECTED_ERROR, Diag::Format {
+                        "Invalid type kind (%i) in ValueToStack"
+                    }, val->typeKind);
+                return Err::UNEXPECTED_ERROR;
             }
         }
 
-        out->typeKind = def->var->value.typeKind;
-        out->hasValue = 1;
-
         return Err::OK;
-
     }
-
 
 
     // some useful functions to not copy-paste that much
@@ -247,8 +377,7 @@ namespace Interpreter {
 
 
 
-    Err::Err exec(Function* fcn, Value* out) {
-
+    Err::Err exec(AstContext* ast, Function* fcn, Variable** args, uint64_t argCount, Variable* out) {
         Arena::clear(&heap);
 
         ExeBlock* block = fcn->exe;
@@ -263,8 +392,27 @@ namespace Interpreter {
         PUSH(sp, 0);
 
         uint8_t* fp = (uint8_t*) sp; // current frame on operand stack
-        GROW(sp, block->localsSize * sizeof(vmword));
-        memcpy(fp, block->locals, block->localsSize * sizeof(vmword));
+        GROW(sp, block->fixedSize);
+        GROW(sp, block->localsSize);
+        memcpy(fp, block->locals, block->localsSize);
+
+        // push actual args
+        {
+            int64_t offset = 0;
+            for (int i = 0; i < argCount; i++) {
+                const int64_t size = getTypeInfo(args[i])->size;
+                if (offset + size > block->fixedSize) {
+                    Diag::report(ast, args[i]->base.span, Err::UNEXPECTED_ERROR, Diag::Format{
+                        "Internal Compiler Error: Argument '%i' at offset %llu exceeds "
+                        "function frame size %llu"
+                    }, i, offset, block->fixedSize);
+                    return Err::UNEXPECTED_ERROR;
+                };
+
+                VariableToStack(ast, fp + offset, size, args[i]);
+                offset += size;
+            }
+        }
 
         while (1) {
 
@@ -974,13 +1122,33 @@ namespace Interpreter {
                     break;
                 }
 
+                case OC_CROP: {
+                    uint64_t blobSize     = FETCH(ip, uint64_t);
+                    uint64_t memberOffset = FETCH(ip, uint64_t);
+                    uint64_t memberSize   = FETCH(ip, uint64_t);
+
+                    vmword* base = sp - blobSize;
+                    uint8_t* src = (uint8_t*) base + memberOffset;
+
+                    memmove(base, src, memberSize);
+
+                    uint64_t memberWords = BYTES_TO_WORDS(memberSize);
+
+                    if (memberWords * sizeof(vmword) > memberSize) {
+                        memset((uint8_t*)base + memberSize, 0, memberWords * sizeof(vmword) - memberSize);
+                    }
+
+                    sp = base + memberWords;
+                    break;
+                }
+
                 case OC_CALL: {
                     Function* fcn = (Function*) FETCH(ip, uint64_t);
                     FETCH(ip, uint64_t); // vararg count, we dont need here
                     ExeBlock* exe = fcn->exe;
 
                     if (isValidFunctionIdx(fcn->internalIdx)) {
-                        int fSize = internalCall(block, fp, sp, (Ast::Internal::FunctionType)fcn->internalIdx);
+                        int fSize = internalCall(block, fp, sp, (Ast::Internal::FunctionType) fcn->internalIdx);
                         DROP_IN_WORDS(sp, 2 + fSize);
                         break;
                     }
@@ -1224,8 +1392,7 @@ namespace Interpreter {
         DROP(sp, ansSize);
         vmword* ans = sp;
 
-        return toValue(fcn, ans, ansSize, out);
-
+        return StackToVariable(ast, (uint8_t*) ans, ansSize, out);
     }
 
 }

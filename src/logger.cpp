@@ -85,7 +85,7 @@ namespace Logger {
             idx = span->start.idx;
             lnStartIdx = Utils::findLineStart(body, idx, &tabCount);
             lnEndIdx = Utils::findLineEnd(body, idx);
-            lnLength = lnEndIdx - lnStartIdx + 1;
+            lnLength = lnEndIdx - lnStartIdx;
             underlineLen = span->end.idx - span->start.idx + 1;
         }
 

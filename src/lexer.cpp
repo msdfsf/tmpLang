@@ -1,5 +1,6 @@
 #include "lexer.h"
 #include "data_types.h"
+#include "dynamic_arena.h"
 #include "strlib.h"
 #include "syntax.h"
 #include "logger.h"
@@ -30,6 +31,11 @@ namespace Lex {
     void init() {
         DArray::init(&qnameStack, 32 * 2, sizeof(int));
         Arena::init(&stringStack, 32 * 2);
+    }
+
+    void release() {
+        DArray::release(&qnameStack);
+        Arena::release(&stringStack);
     }
 
     const char* toStr(TokenKind token) {
@@ -1192,8 +1198,8 @@ namespace Lex {
 
         while (true) {
             token = nextToken(span, val);
-            if (token.kind == tokenA.kind ||
-                token.kind == tokenB.kind ||
+            if (token.encoded == tokenA.encoded ||
+                token.encoded == tokenB.encoded ||
                 token.kind == Lex::TK_END
             ) {
                 break;
@@ -1214,9 +1220,28 @@ namespace Lex {
             if (token.kind == Lex::TK_END) break;
 
             for (uint32_t i = 0; i < tokenCount; i++) {
-                if (token.kind == tokens[i].kind) {
+                if (token.encoded == tokens[i].encoded) {
                     return token;
                 }
+            }
+        }
+
+        return token;
+
+    }
+
+    // TODO: optimize
+    Token syncToken(Span* const span, TokenKind tokenA, TokenKind tokenB, TokenValue* val) {
+
+        Token token;
+
+        while (true) {
+            token = nextToken(span, val);
+            if (token.kind == tokenA ||
+                token.kind == tokenB ||
+                token.kind == Lex::TK_END
+            ) {
+                break;
             }
         }
 

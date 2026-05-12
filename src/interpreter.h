@@ -8,6 +8,7 @@
 #include "ordered_dict.h"
 #include "syntax.h"
 #include "diagnostic.h"
+#include "validator.h"
 
 
 
@@ -186,6 +187,7 @@ namespace Interpreter {
         OC_POP,
         OC_POP_N,
         OC_DUP,
+        OC_CROP,
 
         OC_ADD_I32,
         OC_ADD_U32,
@@ -391,24 +393,24 @@ namespace Interpreter {
     };
 
     struct VecDescriptor {
-        Type::Kind dtype;
+        Type::Kind   dtype;
         OperatorEnum oper;
-        Type::Kind srcDtype; // for cast
-        uint8_t reserved;
-        uint32_t flags;
+        Type::Kind   srcDtype; // for cast
+        uint8_t      reserved;
+        uint32_t     flags;
     };
     static_assert(sizeof(VecDescriptor) == sizeof(vmword), "VecDescriptor must match 'vmword' size!");
 
     struct VecInfo {
-        uint64_t dest;
+        uint64_t      dest;
         VecDescriptor desc;
     };
 
     struct LocalVarInfo {
         // for now enough
         Variable* var;
-        uint64_t size;
-        uint64_t align;
+        uint64_t  size;
+        uint64_t  align;
     };
 
     struct LocalFcnInfo {
@@ -503,37 +505,38 @@ namespace Interpreter {
 
 
 
-    void initDebug();
-    void initBuild();
-    void initExec();
-    void initEval();
-    inline void init() {
-        initDebug();
-        initBuild();
-        initExec();
-        initEval();
+    void initDebug(CompilerState* state);
+    void initBuild(CompilerState* state);
+    void initExec (CompilerState* state);
+    void initEval (CompilerState* state);
+    inline void init(CompilerState* state) {
+        initDebug(state);
+        initBuild(state);
+        initExec (state);
+        initEval (state);
     }
 
-    Err::Err compile(Function* fcn, bool waitForExecution = true);
+    void releaseDebug(CompilerState* state);
+    void releaseBuild(CompilerState* state);
+    void releaseExec (CompilerState* state);
+    void releaseEval (CompilerState* state);
+    inline void release(CompilerState* state) {
+        releaseDebug(state);
+        releaseBuild(state);
+        releaseExec (state);
+        releaseEval (state);
+    }
+
     Err::Err compile(CompilerState* state, Function* fcn);
 
-    Err::Err exec(Function* fcn, Value* out);
+    Err::Err eval(Validator::ValidationContext* ctx, Variable* var);
+    Err::Err exec(AstContext* ast, Function* fcn, Variable** args, uint64_t argCount, Variable* out);
 
     void print(Function* fcn, uint64_t depth = 0);
     void print(ExeBlock* block);
     const char* toStr(Opcode opcode);
 
-
-    // returns error or dtype enumeric value of the result
-    // stores ivalue and idtypeEnum into ans value and dtypeValue
-    int execFunction(Function* fcn, Variable* ans);
-
-
-    inline int evaluate(Variable* op);
-
-    int applyOperator(OperatorEnum oper, Value* value);
-    int applyOperator(OperatorEnum oper, Value* valueA, Value* valueB);
-
     vmword encodeVecDescriptor(const VecDescriptor desc);
     VecDescriptor decodeVecDescriptor(const vmword word);
+
 };

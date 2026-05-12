@@ -376,6 +376,7 @@ namespace Lex {
 
     // call in each thread
     void init();
+    void release();
 
     const char* toStr(TokenKind token);
 
@@ -399,6 +400,7 @@ namespace Lex {
     // Order of arguments dictates the priority of the search.
     Token syncToken(Span* const span, Token tokenA, Token tokenB, TokenValue* val = NULL);
     Token syncToken(Span* const span, Token* tokens, uint32_t tokenCount, TokenValue* val = NULL);
+    Token syncToken(Span* const span, TokenKind tokenA, TokenKind tokenB, TokenValue* val = NULL);
 
     unsigned int hash(const char* str);
 

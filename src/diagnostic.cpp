@@ -3,6 +3,7 @@
 #include "logger.h"
 #include "config.h"
 #include "syntax.h"
+#include "task_system.h"
 #include <cstdarg>
 #include <stdarg.h>
 #include <stdio.h>
@@ -62,7 +63,7 @@ const char* const Err::str(Err code) { switch (code) {
         return "Cannot get address of address!";
     case INVALID_USAGE_OF_OPERATOR:
         return "Invalid usage of operator '%.*s'!";
-    case CANNOT_EVALUATE_EXPRESION_AT_CMP_TIME:
+    case CANNOT_EVALUATE:
         return "Cannot evaluate expresion at compile time!";
     case INVALID_EMBED_ARRAY_SIZE:
         return "Embed array requires compile time size!";
@@ -134,6 +135,18 @@ const char* const Err::str(Err code) { switch (code) {
         return "IO error!";
     case MAX_FILE_PATH_EXCEEDED:
         return "Max file path exceeded!";
+    case FILE_LOAD_FAILED:
+        return "Wasn't able to open file %.*s in path %.*s!";
+    case DIVISION_BY_ZERO:
+        return "Division by zero!";
+    case IMPORT_NOT_GLOBAL:
+        return "Import is not in global scope";
+    case NAMESPACE_NOT_GLOBAL:
+        return "Namespace is not in global scope";
+    case QUALIFIED_NAME_NOT_ALLOWED:
+        return "Qualified name not allowed!";
+    case DECLARATION_AFTER_USE:
+        return "Declaration after usage!";
     default:
         return "Unknown error!";
 
@@ -145,6 +158,8 @@ const char* const Wrn::str(Wrn code) { switch (code) {
         return "Unused variable!";
     case SHADOWED_VARIABLE:
         return "Shadow variable";
+    case DIVISION_BY_ZERO:
+        return "Division by zero";
     default:
         return "Unknown warning!";
 
@@ -159,19 +174,25 @@ const char* const Inf::str(Inf code) { switch (code) {
 
 }}
 
+// TODO
+bool Err::isFatal(Err err) {
+    return (
+        err == Err::MALLOC
+    );
+}
+
 namespace Diag {
 
     Logger::Level toLoggerLevel(const Severity sev) {
         switch (sev) {
-            SEV_NOTE:    return Logger::INFO;
-            SEV_WARNING: return Logger::WARNING;
-            SEV_FATAL:
-            SEV_ERROR:   return Logger::ERROR;
+            case SEV_NOTE:    return Logger::INFO;
+            case SEV_WARNING: return Logger::WARNING;
+            case SEV_FATAL:
+            case SEV_ERROR:   return Logger::ERROR;
         }
     }
 
     void report(AstContext* ctx, Span* span, Severity sev, uint32_t code, const char* const format, va_list args) {
-
         char buff[1024];
 
         const int len = vsnprintf(buff, sizeof(buff), format, args);
@@ -182,63 +203,69 @@ namespace Diag {
             Logger::log({ .level = level, .tag = ctx->tag }, buff, span);
         }
 
-        if constexpr (Config::ERROR_RECOVERY_ENABLED) {
+        if (sev == SEV_ERROR) {
+            if constexpr (Config::ERROR_RECOVERY_ENABLED) {
+                if (ctx->errorCount < Config::maxErrorCount) {
+                    AstError* err = &ctx->errors[ctx->errorCount];
+                    err->severity = sev;
+                    err->err = code;
+                    err->span = getSpanStamp(span);
 
-            if (ctx->errorCount < Config::maxErrorCount) {
+                    err->msg.buff = (char*) nalloc(nalc, AT_ERROR_STRING, len);
+                    memcpy(err->msg.buff, buff, len + 1);
+                    err->msg.len = len;
 
-                AstError* err = &ctx->errors[ctx->errorCount];
-                err->severity = sev;
-                err->err = code;
-                err->span = getSpanStamp(span);
-                err->msg.buff = (char*) nalloc(nalc, AT_ERROR_STRING, len);
-                err->msg.len = len;
+                    ctx->errorCount++;
+                }
 
-                ctx->errorCount++;
+                ctx->totalErrorCount++;
 
+                if (Err::isFatal((Err::Err) code)) {
+                    TaskSystem::panic(code);
+                }
+            } else {
+                TaskSystem::panic(code);
             }
-
-            ctx->totalErrorCount++;
-
         }
 
+    }
+
+    void report(AstContext* ctx, Span* span, Err::Err code, Format fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        report(ctx, span, SEV_ERROR, -code, fmt.fmt, args);
+        va_end(args);
+    }
+
+    void report(AstContext* ctx, Span* span, Wrn::Wrn code, Format fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        report(ctx, span, SEV_WARNING, -code, fmt.fmt, args);
+        va_end(args);
+    }
+
+    void report(AstContext* ctx, Span* span, Inf::Inf code, Format fmt, ...) {
+        va_list args;
+        va_start(args, fmt);
+        report(ctx, span, SEV_NOTE, -code, fmt.fmt, args);
+        va_end(args);
     }
 
     void report(AstContext* ctx, Span* span, Err::Err code, ...) {
         va_list args;
         va_start(args, code);
-        report(ctx, span, SEV_ERROR, -code, va_arg(args, char*), args);
+        report(ctx, span, SEV_ERROR, -code, Err::str(code), args);
         va_end(args);
     }
 
     void report(AstContext* ctx, Span* span, Wrn::Wrn code, ...) {
         va_list args;
         va_start(args, code);
-        report(ctx, span, SEV_WARNING, -code, va_arg(args, char*), args);
-        va_end(args);
-    }
-
-    void report(AstContext* ctx, Span* span, Inf::Inf code, ...) {
-        va_list args;
-        va_start(args, code);
-        report(ctx, span, SEV_NOTE, -code, va_arg(args, char*), args);
-        va_end(args);
-    }
-
-    void report(AstContext* ctx, Span* span, Err::Err code, char* format, ...) {
-        va_list args;
-        va_start(args, code);
-        report(ctx, span, SEV_ERROR, -code, args, args + 1);
-        va_end(args);
-    }
-
-    void report(AstContext* ctx, Span* span, Wrn::Wrn code, char* format, ...) {
-        va_list args;
-        va_start(args, code);
         report(ctx, span, SEV_WARNING, -code, Wrn::str(code), args);
         va_end(args);
     }
 
-    void report(AstContext* ctx, Span* span, Inf::Inf code, char* format, ...) {
+    void report(AstContext* ctx, Span* span, Inf::Inf code, ...) {
         va_list args;
         va_start(args, code);
         report(ctx, span, SEV_NOTE, -code, Inf::str(code), args);

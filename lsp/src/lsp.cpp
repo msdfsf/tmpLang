@@ -1,5 +1,8 @@
 #include "lsp.h"
+#include "../../src/task_system.h"
+#include "lsp_render.h"
 
+#include <atomic>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -8,31 +11,54 @@
 
 
 
-FileSystem::Handle hnd;
-
-struct LineOffsets {
-    uint32_t* data;
-    uint32_t  size;
-    uint32_t  capacity;
-};
-
-struct FileString : String {
-    size_t capacity;
-};
-
-struct FileData {
-    FileString  data;
-    uint32_t    version;
-    LineOffsets lineOffsets;
-};
-
 constexpr double             GROW_COEF      = 1.5;
 constexpr FileSystem::Origin ORIGIN         = FileSystem::Origins::USER_START;
 constexpr uint32_t           INVALID_OFFSET = UINT32_MAX;
 
+void print(const Lsp::FileData* data);
 
 
-void print(const FileData* data);
+
+// Custom compiler allocator
+// ===
+
+#include "../../src/allocator.h"
+
+// We just set alc each time before file parsing
+// to specific arena we want to use.
+thread_local AllocatorHandle alc = NULL;
+
+void* alloc(AllocatorHandle allocator, size_t size) {
+    return Arena::push((Arena::Container*) allocator, size);
+}
+
+void* alloc(AllocatorHandle allocator, size_t size, size_t align) {
+    return Arena::push((Arena::Container*) allocator, size, align);
+}
+
+void dealloc(AllocatorHandle allocator, void* ptr) {
+    return Arena::rollback((Arena::Container*) allocator, ptr);
+}
+
+void clear(AllocatorHandle allocator) {
+    return Arena::clear((Arena::Container*) allocator);
+}
+
+
+
+thread_local AllocatorHandle nalc = NULL;
+
+inline void* nalloc(AllocatorHandle allocator, AllocType type) {
+    return alloc(allocator, nodeTypeSize[type]);
+}
+
+inline void* nalloc(AllocatorHandle allocator, AllocType type, size_t count) {
+    return alloc(allocator, nodeTypeSize[type] * count);
+}
+
+void ndealloc(AllocatorHandle allocator, void* ptr) {
+    return dealloc(allocator, ptr);
+}
 
 
 
@@ -41,8 +67,8 @@ void print(const FileData* data);
 
 // allocates sufficient initial buffer for given string
 // and copies data
-FileString makeFileString(String str) {
-    FileString out;
+Lsp::FileString makeFileString(String str) {
+    Lsp::FileString out;
     out.capacity = str.len * GROW_COEF;
     out.buff = (char*) malloc(out.capacity);
     memcpy(out.buff, str.buff, str.len);
@@ -50,12 +76,12 @@ FileString makeFileString(String str) {
     return out;
 }
 
-void releaseFileString(FileString str) {
+void releaseFileString(Lsp::FileString str) {
     free(str.buff);
     str.len = 0;
 }
 
-void resizeFileString(FileString* str, size_t newSize) {
+void resizeFileString(Lsp::FileString* str, size_t newSize) {
     if (newSize <= str->capacity) {
         str->len = newSize;
         return;
@@ -68,7 +94,7 @@ void resizeFileString(FileString* str, size_t newSize) {
     str->len = newSize;
 }
 
-void pushLineOffset(LineOffsets* lines, uint32_t offset) {
+void pushLineOffset(Lsp::LineOffsets* lines, uint32_t offset) {
     if (lines->size >= lines->capacity) {
         lines->capacity *= 1.5;
         lines->data = (uint32_t*) realloc(lines->data, lines->capacity * sizeof(uint32_t));
@@ -79,26 +105,27 @@ void pushLineOffset(LineOffsets* lines, uint32_t offset) {
 }
 
 // Creates and computes line offsets
-void createLineOffsets(FileData* data) {
-    LineOffsets* lines = &data->lineOffsets;
+void createLineOffsets(Lsp::FileData* data) {
+    Lsp::LineOffsets* lines = &data->lineOffsets;
 
     lines->capacity = 1024;
     lines->data = (uint32_t*) malloc(lines->capacity * sizeof(uint32_t));
     lines->size = 0;
 
+    pushLineOffset(lines, 0);
     for (int i = 0; i < data->data.len; i++) {
         const char ch = data->data[i];
         if (ch == '\n') pushLineOffset(lines, i);
     }
 }
 
-void releaseLineOffset(LineOffsets* offsets) {
+void releaseLineOffset(Lsp::LineOffsets* offsets) {
     free(offsets->data);
     offsets->capacity = 0;
     offsets->size = 0;
 }
 
-void resizeLineOffsets(LineOffsets* offsets, size_t newSize) {
+void resizeLineOffsets(Lsp::LineOffsets* offsets, size_t newSize) {
     if (newSize <= offsets->capacity) {
         offsets->size = newSize;
         return;
@@ -123,14 +150,14 @@ uint32_t countLines(String str) {
 // It seems that predetermine line count in the changed span is
 // faster and whats more important simpler.
 void updateLineOffsets(
-    FileData* data,
+    Lsp::FileData* data,
     uint32_t  startLine,
     uint32_t  endLine,
     uint32_t  startOffset,
     String    newText,
     int64_t   diffOffset
 ) {
-    LineOffsets* const offsets = &data->lineOffsets;
+    Lsp::LineOffsets* const offsets = &data->lineOffsets;
 
     for (uint32_t i = endLine + 1; i < offsets->size; i++) {
         offsets->data[i] += diffOffset;
@@ -158,32 +185,45 @@ void updateLineOffsets(
     }
 }
 
-void updateLineOffsets(FileData* data, String text) {
+void updateLineOffsets(Lsp::FileData* data, String text) {
     data->lineOffsets.size = 0;
+
+    pushLineOffset(&data->lineOffsets, 0);
     for (int i = 0; i < text.len; i++) {
         const char ch = data->data[i];
         if (ch == '\n') pushLineOffset(&data->lineOffsets, i);
     }
 }
 
-FileData* makeFileData() {
-    FileData* data = (FileData*) calloc(1, sizeof(FileData));
+Lsp::FileData* makeFileData() {
+    Lsp::FileData* data = (Lsp::FileData*) calloc(1, sizeof(Lsp::FileData));
     if (!data) Lsp::panic({ Lsp::Err::ALLOC, { 0 } });
 
     data->data = { 0 };
     data->lineOffsets = { 0 };
 
+    int arenaCount = sizeof(Lsp::FileData::arenas) / sizeof(Arena::Container);
+    for (int i = 0; i < arenaCount; i++) {
+        Arena::init(data->arenas + i, 1024 * 1024 * 32);
+
+        data->unit[i].ast = alloc<AstContext>(&Lsp::State::allocator);
+        data->unit[i].reg = alloc<AstRegistry>(&Lsp::State::allocator);
+
+        Ast::init(data->unit[i].ast);
+        Ast::init(data->unit[i].reg);
+    }
+
     return data;
 }
 
-void releaseFileData(FileData* data) {
+void releaseFileData(Lsp::FileData* data) {
     releaseFileString(data->data);
     releaseLineOffset(&data->lineOffsets);
     free(data);
 }
 
 // Converts a position to a byte offset, clamping out-of-bounds values
-uint64_t getOffset(FileData* data, Lsp::T::Position pos) {
+uint64_t getOffset(Lsp::FileData* data, Lsp::T::Position pos) {
     if (pos.line >= data->lineOffsets.size) {
         return data->data.len;
     }
@@ -202,7 +242,7 @@ uint64_t getOffset(FileData* data, Lsp::T::Position pos) {
 }
 
 // Converts a position to a byte offset, returning INVALID_OFFSET if out of bounds
-uint64_t getStrictOffset(FileData* data, Lsp::T::Position pos) {
+uint64_t getStrictOffset(Lsp::FileData* data, Lsp::T::Position pos) {
     if (pos.line >= data->lineOffsets.size) {
         return INVALID_OFFSET;
     }
@@ -222,7 +262,7 @@ uint64_t getStrictOffset(FileData* data, Lsp::T::Position pos) {
 
 Lsp::Err::Kind
 applyChanges(
-    FileData* data,
+    Lsp::FileData* data,
     Lsp::T::Slice<Lsp::T::TextDocumentContentChangeEvent*> changes
 ) {
     for (int i = 0; i < changes.size; i++) {
@@ -271,7 +311,9 @@ applyChanges(
 
 void Lsp::init() {
     DArray::init(&Lsp::stack, 1024, sizeof(void*));
+    Ast::init();
     FileSystem::init();
+    TaskSystem::init(4);
 }
 
 void Lsp::release() {
@@ -280,6 +322,12 @@ void Lsp::release() {
 }
 
 
+
+void ensureFileAstUpdated(FileSystem::Handle fhnd) {
+    TaskSystem::beginGroup();
+    TaskSystem::dispatchParse(fhnd);
+    TaskSystem::wait();
+}
 
 // TextDocument handles
 // ===
@@ -293,7 +341,7 @@ Lsp::handle(Lsp::TextDocument::DidOpen* method) {
 
     Lsp::T::TextDocumentItem* item = method->textDocument;
 
-    hnd = FileSystem::load(item->uri, ORIGIN);
+    FileSystem::Handle hnd = FileSystem::load(item->uri, ORIGIN);
     if (!hnd) return Err::LOAD_FILE;
 
     FileSystem::FileInfo* info = FileSystem::getFileInfo(hnd);
@@ -309,6 +357,9 @@ Lsp::handle(Lsp::TextDocument::DidOpen* method) {
     data->version = item->version;
 
     createLineOffsets(data);
+
+    info->status = FileSystem::FS_DIRTY;
+    ensureFileAstUpdated(hnd);
 
     print(data);
     return Err::OK;
@@ -371,6 +422,354 @@ Lsp::handle(TextDocument::DidChange* method) {
 
     print(data);
     return Err::OK;
+
+}
+
+template<typename T, typename F>
+SyntaxNode* handleQuery(Lsp::FileData* fdata, T* method, F fcn) {
+
+    int idx;
+    while (true) {
+        // Check-in
+        idx = fdata->committedIdx.load(std::memory_order_acquire);
+        fdata->readerCount[idx].fetch_add(1, std::memory_order_relaxed);
+
+        // But theoretically there is a chance, that buffers was switched and new
+        // work already started as readerCount was not updated in time. We have to
+        // validate.
+        if (idx == fdata->committedIdx.load(std::memory_order_acquire)) {
+            break;
+        }
+
+        // Unlucky. Check-out and try again
+        int remaining = fdata->readerCount[idx].fetch_sub(1, std::memory_order_release);
+        if (remaining == 1) fdata->readerCount[idx].notify_one();
+    }
+
+    SyntaxNode* result = fcn(fdata, method);
+
+    // Check-out
+    if (fdata->readerCount[idx].fetch_sub(1, std::memory_order_release) == 1) {
+        fdata->readerCount[idx].notify_one();
+    }
+
+    return result;
+
+}
+
+Pos toPos(Lsp::FileData* fdata, Lsp::T::Position* lspPos) {
+    if (fdata->lineOffsets.size <= lspPos->line) {
+        return { -1, -1 };
+    }
+
+    return {
+        .idx = (int) (fdata->lineOffsets.data[lspPos->line] + lspPos->character),
+        .ln = (int) lspPos->line
+    };
+}
+
+Lsp::T::Position* toLspPosition(Lsp::FileData* fdata, Pos pos) {
+   using namespace Lsp;
+   T::Position* position = alloc<T::Position>(&Lsp::State::allocator);
+
+   const int line = pos.ln - 1;
+
+   position->line = line;
+   if (fdata->lineOffsets.size <= line) {
+       position->character = 0;
+   } else {
+       position->character = pos.idx - fdata->lineOffsets.data[line];
+   }
+
+   return position;
+}
+
+Lsp::T::Range* toLspRange(Lsp::FileData* fdata, Span* span) {
+    using namespace Lsp;
+    T::Range* range = alloc<T::Range>(&Lsp::State::allocator);
+
+    range->start = toLspPosition(fdata, span->start);
+    range->end = toLspPosition(fdata, span->end);
+
+    return range;
+}
+
+bool isInside(Span* span, Pos pos) {
+    return (span->start.idx <= pos.idx) && (span->end.idx >= pos.idx);
+}
+
+SyntaxNode* findMostRelevantNode(SyntaxNode* root, Pos pos);
+
+SyntaxNode* findMostRelevantNode(Expression* root, Pos pos) {
+    if (!root) return NULL;
+
+    switch (root->type) {
+        case EXT_BINARY: {
+            BinaryExpression* bex = (BinaryExpression*) root;
+
+            SyntaxNode* node;
+            node = findMostRelevantNode((SyntaxNode*) bex->left, pos);
+            if (node) return node;
+
+            node = findMostRelevantNode((SyntaxNode*) bex->right, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case EXT_FUNCTION_CALL: {
+            FunctionCall* call = (FunctionCall*) root;
+
+            if (isInside(call->name.span, pos)) {
+                return call->fcn ? (SyntaxNode*) call->fcn : (SyntaxNode*) root;
+            }
+
+            for (uint32_t i = 0; i < call->inArgCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) call->inArgs[i], pos);
+                if (node) return node;
+            }
+
+            break;
+        }
+
+        case EXT_UNARY: {
+            UnaryExpression* uex = (UnaryExpression*) root;
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) uex->operand, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case EXT_TERNARY: {
+            TernaryExpression* tex = (TernaryExpression*) root;
+
+            // TODO
+
+            break;
+        }
+
+        case EXT_TYPE_INITIALIZATION: {
+            TypeInitialization* init = (TypeInitialization*) root;
+
+            for (uint32_t i = 0; i < init->attributeCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) init->attributes[i], pos);
+                if (node) return node;
+            }
+
+            break;
+        }
+
+        case EXT_ARRAY_INITIALIZATION: {
+            ArrayInitialization* init = (ArrayInitialization*) root;
+
+            for (uint32_t i = 0; i < init->attributeCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) init->attributes[i], pos);
+                if (node) return node;
+            }
+
+            break;
+        }
+
+        case EXT_CATCH: {
+            Catch* ex = (Catch*) root;
+
+            // TODO
+            break;
+        }
+
+        case EXT_ALLOC: {
+            Alloc* ex = (Alloc*) root;
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) ex->def, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case EXT_FREE: {
+            Free* ex = (Free*) root;
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) ex->var, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case EXT_SLICE: {
+            Slice* slice = (Slice*) root;
+
+            SyntaxNode* node;
+
+            node = findMostRelevantNode((SyntaxNode*) slice->arr, pos);
+            if (node) return node;
+
+            node = findMostRelevantNode((SyntaxNode*) slice->bidx, pos);
+            if (node) return node;
+
+            node = findMostRelevantNode((SyntaxNode*) slice->eidx, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case EXT_GET_LENGTH: {
+            GetLength* len = (GetLength*) root;
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) len->arr, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case EXT_GET_SIZE: {
+            GetSize* sz = (GetSize*) root;
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) sz->arr, pos);
+            if (node) return node;
+
+            break;
+        }
+    }
+
+    return NULL;
+}
+
+// For now we assume that all nodes are always in order
+SyntaxNode* findMostRelevantNode(SyntaxNode* root, Pos pos) {
+    if (!root || !isInside(root->span, pos)) return NULL;
+
+    switch (root->type) {
+        case NT_SCOPE: {
+            Scope* scope = (Scope*) root;
+
+            for (int i = 0; i < scope->childrenCount; i++) {
+                SyntaxNode* child = scope->children[i];
+                SyntaxNode* node = findMostRelevantNode(child, pos);
+                if (node) return node;
+            }
+
+            break;
+        }
+
+        case NT_FUNCTION: {
+            Function* fcn = (Function*) root;
+
+            for (uint32_t i = 0; i < fcn->prototype.inArgCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) fcn->prototype.inArgs[i], pos);
+                if (node) return node;
+            }
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) fcn->bodyScope, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case NT_VARIABLE_DEFINITION: {
+            VariableDefinition* def = (VariableDefinition*) root;
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) def->var, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case NT_BRANCH: {
+            Branch* branch = (Branch*) root;
+
+            for (uint32_t i = 0; i < branch->expressionCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) branch->expressions[i], pos);
+                if (node) node;
+            }
+
+            for (uint32_t i = 0; i < branch->scopeCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) branch->scopes[i], pos);
+                if (node) return node;
+            }
+
+            break;
+        }
+
+        case NT_TYPE_DEFINITION: {
+            TypeDefinition* type = (TypeDefinition*) root;
+
+            for (uint32_t i = 0; i < type->varCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) type->vars[i], pos);
+                if (node) return node;
+            }
+
+            break;
+        }
+
+        case NT_STATEMENT: {
+            Statement* stmt = (Statement*) root;
+
+            SyntaxNode* node = findMostRelevantNode((SyntaxNode*) stmt->operand, pos);
+            if (node) return node;
+
+            break;
+        }
+
+        case NT_VARIABLE: {
+            Variable* var = (Variable*) root;
+
+            SyntaxNode* node = (SyntaxNode*) findMostRelevantNode(var->expression, pos);
+            if (node) return node;
+
+            break;
+
+        }
+
+        case NT_ENUMERATOR: {
+            Enumerator* type = (Enumerator*) root;
+
+            for (uint32_t i = 0; i < type->varCount; i++) {
+                SyntaxNode* node = findMostRelevantNode((SyntaxNode*) type->vars[i], pos);
+                if (node) return node;
+            }
+
+            break;
+        }
+
+        case NT_FOR_LOOP: {
+            ForLoop* loop = (ForLoop*) loop;
+
+            // TODO
+
+            break;
+        }
+    }
+
+    return root;
+}
+
+Lsp::T::Hover*
+Lsp::handle(Lsp::TextDocument::Hover* method) {
+
+    FileSystem::Handle fhnd = FileSystem::getHandle(method->textDocument->uri);
+    if (!fhnd) return NULL;
+
+    FileData* fdata = (FileData*) FileSystem::getUserData(fhnd);
+
+    SyntaxNode* node = handleQuery(fdata, method, [] (auto fdata, auto method) {
+        SyntaxNode* node = findMostRelevantNode(
+            (SyntaxNode*) fdata->unit->ast->root,
+            toPos(fdata, method->position)
+        );
+
+        return node;
+    });
+
+    if (!node) return NULL;
+
+    T::Hover* result = alloc<T::Hover>(&State::allocator);
+    result->range = toLspRange(fdata, node->span);
+    result->contents = alloc<T::MarkupContent>(&State::allocator);
+    result->contents->kind = Lsp::T::MARKUP_KIND_MARKDOWN;
+    result->contents->value = Lsp::Render::hover(node);
+
+    return result;
 
 }
 
@@ -453,39 +852,39 @@ void Lsp::panic(Err::Info err) {
 constexpr int MAX_TEXT_PREVIEW   = 1024;
 constexpr int MAX_OFFSET_PREVIEW = 16;
 
-void print(const FileData* data) {
+void print(const Lsp::FileData* data) {
     if (!data) {
-        printf(AC_ERROR "\nFileData: [NULL]" AC_RESET "\n");
+        fprintf(stderr, AC_ERROR "\nFileData: [NULL]" AC_RESET "\n");
         return;
     }
 
-    printf(AC_SECTION "\n=== FileData (LSP State) ===" AC_RESET "\n");
-    printf("  " AC_VAR "Version:      " AC_RESET AC_NUMBER "%u" AC_RESET "\n", data->version);
+    fprintf(stderr, AC_SECTION "\n=== FileData (LSP State) ===" AC_RESET "\n");
+    fprintf(stderr, "  " AC_VAR "Version:      " AC_RESET AC_NUMBER "%u" AC_RESET "\n", data->version);
 
-    printf("  " AC_VAR "Content:      " AC_RESET AC_NUMBER "%zu" AC_RESET AC_SEPARATOR "/" AC_RESET AC_NUMBER "%zu" AC_RESET " bytes (Used/Cap)\n",
+    fprintf(stderr, "  " AC_VAR "Content:      " AC_RESET AC_NUMBER "%zu" AC_RESET AC_SEPARATOR "/" AC_RESET AC_NUMBER "%zu" AC_RESET " bytes (Used/Cap)\n",
            data->data.len, data->data.capacity);
 
-    printf("  " AC_VAR "Line Offsets: " AC_RESET AC_NUMBER "%u" AC_RESET AC_SEPARATOR "/" AC_RESET AC_NUMBER "%u" AC_RESET " lines (Used/Cap)\n",
+    fprintf(stderr, "  " AC_VAR "Line Offsets: " AC_RESET AC_NUMBER "%u" AC_RESET AC_SEPARATOR "/" AC_RESET AC_NUMBER "%u" AC_RESET " lines (Used/Cap)\n",
            data->lineOffsets.size, data->lineOffsets.capacity);
 
     // Visualizing the offset array
-    printf("  " AC_VAR "Offset Map:   " AC_RESET AC_SEPARATOR "[" AC_RESET);
+    fprintf(stderr, "  " AC_VAR "Offset Map:   " AC_RESET AC_SEPARATOR "[" AC_RESET);
     uint32_t previewCount = data->lineOffsets.size > MAX_OFFSET_PREVIEW ? MAX_OFFSET_PREVIEW : data->lineOffsets.size;
     for (uint32_t i = 0; i < previewCount; i++) {
-        printf(AC_NUMBER "%u" AC_RESET "%s",
+        fprintf(stderr, AC_NUMBER "%u" AC_RESET "%s",
                data->lineOffsets.data[i],
                (i == previewCount - 1) ? "" : AC_SEPARATOR ", " AC_RESET);
     }
-    if (data->lineOffsets.size > MAX_OFFSET_PREVIEW) printf(AC_SEPARATOR ", ..." AC_RESET);
-    printf(AC_SEPARATOR "]" AC_RESET "\n");
+    if (data->lineOffsets.size > MAX_OFFSET_PREVIEW) fprintf(stderr, AC_SEPARATOR ", ..." AC_RESET);
+    fprintf(stderr, AC_SEPARATOR "]" AC_RESET "\n");
 
     // Preview the actual text content
     if (data->data.buff) {
         int previewLen = data->data.len > MAX_TEXT_PREVIEW ? MAX_TEXT_PREVIEW : (int)data->data.len;
-        printf("  " AC_VAR "Text Preview:\n" AC_RESET "---\n" AC_TYPE "%.*s" AC_RESET AC_SEPARATOR "%s" AC_RESET "\n---\n",
+        fprintf(stderr, "  " AC_VAR "Text Preview:\n" AC_RESET "---\n" AC_TYPE "%.*s" AC_RESET AC_SEPARATOR "%s" AC_RESET "\n---\n",
                previewLen, data->data.buff,
                data->data.len > MAX_TEXT_PREVIEW ? AC_BRIGHT_BLACK "..." : "");
     }
 
-    printf("\n");
+    fprintf(stderr, "\n");
 }

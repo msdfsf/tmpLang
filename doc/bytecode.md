@@ -141,6 +141,9 @@ The VM populates the Linkage slots, copies the `locals` template, and shifts the
 * **Stack:** `..., val: Word -> ..., val: Word, val: Word`  
 * **Description:** Duplicates the top Word on the stack.
 
+**`crop`** `u64: blob_offset_words`, `u64: member_offset_bytes`, `u64: member_size_bytes`
+* **Stack:** `..., blob -> ..., member`
+* **Description:** Extracts a byte-packed member from a word-aligned blob on the stack.
 ---
 
 ### 5.2 Memory Access

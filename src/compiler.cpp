@@ -2,11 +2,11 @@
 
 #include "allocator.h"
 #include "dynamic_arena.h"
-#include "parser.h"
+#include "file_system.h"
 #include "diagnostic.h"
 #include "syntax.h"
-#include "validator.h"
 #include "logger.h"
+#include "task_system.h"
 
 #include "translator_debug.h"
 #include "translator_c.h"
@@ -45,47 +45,61 @@ int build();
 
 int Compiler::compile() {
 
-    Err::Err err;
-    AstContext* astCxt;
-
     Arena::Container arena;
     alc = &arena;
     initAlloc(&arena);
     initNAlloc(&arena);
 
+    Ast::init();
     FileSystem::init();
+    TaskSystem::init(0);
 
-    Logger::log({ Logger::INFO }, "Compilation started...\n");
+    Logger::log({ Logger::INFO }, "Initialization completed\n");
 
-    err = Parser::parse(mainFile, &astCxt);
-    if (err < 0) return err;
 
-    translatorDebug.printNode(stdout, 0, &astCxt->root->base, NULL);
 
-    Logger::log({ Logger::INFO }, "Parsing completed...\n");
+    FileSystem::Handle mainFileHandle
+        = FileSystem::load(mainFile, FileSystem::Origins::COMPILER_SOURCE);
 
-    err = Validator::validate(astCxt);
-    if (err < 0) return err;
+    TaskSystem::beginGroup();
+    TaskSystem::dispatchParse(mainFileHandle);
+    TaskSystem::wait();
 
-    Logger::log({ Logger::INFO }, "Validating completed...\n");
+    Logger::log({ Logger::INFO }, "Parsing completed\n");
 
-    // if (printForeignCode(SyntaxNode::codeBlocks, SyntaxNode::langDefs, Compiler::outDir)) return -1;
-    // if (printForeignFunction(SyntaxNode::foreignFunctions, SyntaxNode::langDefs, Compiler::outDir)) return -1;
-    // if (compileForeignCode(Compiler::outDir)) return -1;
 
-    // Logger::log(Logger::INFO, "Foreign block of codes assembled...\n");
 
-    // TODO : make parallel
-    if (outLangs & ITSELF_CONSOLE_LANG) runTranslator(&translatorDebug);
-    if (outLangs & C_LANG) runTranslator(&translatorC);
+    TaskSystem::beginGroup();
+    TaskSystem::dispatchValidation(mainFileHandle);
+    TaskSystem::wait();
 
-    Logger::log({ Logger::INFO }, "Translation completed...\n");
+    Logger::log({ Logger::INFO }, "Validating completed\n");
+
+
+
+    TaskSystem::beginGroup();
+
+    if (outLangs & ITSELF_CONSOLE_LANG) {
+        TaskSystem::dispatchCodegen(&translatorDebug, mainFileHandle);
+    }
+
+    if (outLangs & C_LANG) {
+        TaskSystem::dispatchCodegen(&translatorC, mainFileHandle);
+    }
+
+    TaskSystem::wait();
+
+    Logger::log({ Logger::INFO }, "Translation completed\n");
     if (Compiler::command == TRANSLATE) return 0;
 
-    err = (Err::Err) build();
+
+
+    Err::Err err = (Err::Err) build();
     if (err < 0) return err;
 
     Logger::log({ Logger::INFO }, "Binary generation completed...\n");
+
+
 
     return Err::OK;
 

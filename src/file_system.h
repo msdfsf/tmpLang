@@ -1,6 +1,8 @@
 #pragma once
 
 #include "string.h"
+#include "task_status.h"
+#include <atomic>
 #include <cstdint>
 
 
@@ -13,6 +15,14 @@ namespace FileSystem {
 
     typedef void* Handle;
     constexpr Handle null = NULL;
+
+    // Used to signal in which state the file processing is.
+    // Assumed to be used for concurrency handling.
+    enum FileStatus : int {
+        FS_DIRTY = TS_PENDING,
+        FS_BUSY  = TS_RUNNING,
+        FS_READY = TS_READY
+    };
 
     struct Timestamp {
         uint64_t low;
@@ -29,20 +39,23 @@ namespace FileSystem {
     };
 
     struct Path {
-        char buffer[MAX_FILE_PATH];
+        char     buffer[MAX_FILE_PATH];
         uint16_t bufferLen;
         uint16_t nameOff;
         uint16_t extensionOff;
-        uint8_t flags;
+        uint8_t  flags;
     };
 
     struct FileInfo {
-        String name;
-        Path* absPath;
-        Path* relativePath; // has to be computed
-        uint64_t sizeBytes;
+        String    name;
+        Path*     absPath;
+        Path*     relativePath; // has to be computed
+        uint64_t  sizeBytes;
         Timestamp modifiedTime;
-        void* userData;
+        void*     astRoot;
+        void*     userData;
+
+        std::atomic<FileStatus> status;
     };
 
     // We need capability to know form which source was
@@ -81,12 +94,14 @@ namespace FileSystem {
     void  setUserData(Handle flhnd, void* dataPtr);
 
     // Path procedures
-    Path* initPath      (String str);
+    Path* makePath      (String str);
+    Path* initPath      (Path* path);
     void  releasePath   (Path* path);
     void  annotatePath  (Path* path);
     bool  toAbsolutePath(Path* path);
     void  toParentPath  (Path* path);
     void  uriToPath     (String uri, Path* out);
+    int   computeRelativePath(Path* abs, String root, Path* out);
     Path* computeRelativePath(Handle flhnd, String str);
 
     String catPaths(Path* base, const char* const appendix);

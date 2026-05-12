@@ -64,6 +64,10 @@
         return Arena::rollback(allocator, ptr);
     }
 
+    inline void  clear(AllocatorHandle allocator) {
+        Arena::clear(allocator);
+    }
+
 #else
 
     typedef void* AllocatorHandle;
@@ -72,5 +76,6 @@
     extern void* alloc   (AllocatorHandle allocator, size_t size);
     extern void* alloc   (AllocatorHandle allocator, size_t size, size_t align);
     extern void  dealloc (AllocatorHandle allocator, void* ptr);
+    extern void  clear   (AllocatorHandle allocator);
 
 #endif

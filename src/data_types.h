@@ -97,7 +97,7 @@ namespace Type {
     struct TypeInfoEx {
         TypeInfo base;
         union {
-           StructInfo  str;
+           StructInfo  str; // TODO : better name?
            ArrayInfo   arr;
            PointerInfo ptr;
         };
@@ -125,8 +125,16 @@ namespace Type {
         return x >= DT_F32 && x <= DT_F64;
     }
 
+    inline int isTruthy(int x) {
+        return isInt(x);
+    }
+
     inline int isPrimitive(int x) {
         return (x >= DT_I8 && x <= DT_F64) || x == DT_POINTER;
+    }
+
+    inline int isBasic(int x) {
+        return (x > Type::DT_VOID && x <= Type::DT_F64);
     }
 
     inline int isStructLike(int x) {

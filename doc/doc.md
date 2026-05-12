@@ -61,7 +61,12 @@ The following keywords are reserved and cannot be used as identifiers:
 alloc, as, catch, const, def, embed, error, fcn, for, free, from, import, local, loop, namespace, return, using, while, int, i8, u8, i16, u16, i32, u32, i64, u64, f32, f64
 ```
 
-> **Note:** Other identifiers like type names (`i32`, `u8` etc.) and the literal `null` are predefined but not strictly reserved keywords.
+## Structural Constraints
+'Declarative' definitions, such as structs, functions and enums, represent the structural blueprint of a program rather than its execution flow. Therefore, these definitions are accessible throughout their scope without ordering constraints, meaning they may be referenced before their declaration. Consequently, any data from parent scopes can be used regardless of its ordering relative to the definition.
+
+Imperative definitions, such as variable definitions, represent actual logic of the program. Therefore, they obey ordering.
+
+
 
 ## Data Types
 ### Built-in Primitive Types

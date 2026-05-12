@@ -3,7 +3,10 @@
 #include "array_list.h"
 #include "allocator.h"
 #include "logger.h"
+#include "set.h"
+#include "config.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -25,48 +28,30 @@ namespace FileSystem {
 
 
 
-    struct FileId {
-        uint64_t size;
-        std::filesystem::file_time_type time;
-    };
-
     struct File {
-        FileId id;
-        String data;
-    };
-
-    struct Chunk {
-        char empty;
-        File file;
+        String   data;
         FileInfo info;
+        Origin   origin;
+        int      idx; // idx in filesData
+        bool     isOpened;
     };
 
-    DArray::Container files;
+    DArray::Container filesData;
+    Set::Container    filesSet;
 
 
 
-    Path* initPath(String str) {
-
-        if (str.len > MAX_FILE_PATH) {
-            return NULL;
-        }
+    Path* makePath(Path* src) {
 
         Path* path = (Path*) alloc(alc, sizeof(Path));
 
-        path->bufferLen = str.len;
-        memcpy(path->buffer, str.buff, str.len);
+        path->bufferLen = src->bufferLen;
+        memcpy(path->buffer, src->buffer, src->bufferLen);
         path->buffer[path->bufferLen] = '\0';
 
         annotatePath(path);
 
         return path;
-
-    }
-
-    int validatePath(const Path* p) {
-
-        // TODO
-        return 0;
 
     }
 
@@ -135,120 +120,64 @@ namespace FileSystem {
 
     }
 
-
-
-    // Expected to be called after loading the file
-    // so no checks. We can check here, but it kinda has
-    // no point as even after sucessful check file could
-    // become invalid.
-    FileId genId(const char* path) {
-
-        FileId id;
-
-        id.size = std::filesystem::file_size(path);
-        id.time = std::filesystem::last_write_time(path);
-
-        return id;
-
+    FileInfo* getFileInfo(Handle fhnd) {
+        File* file = (File*) fhnd;
+        return &file->info;
     }
 
-    inline int cmpId(FileId idA, FileId idB) {
-        return idA.size == idB.size && idA.time == idB.time;
+    void init() {
+        DArray::init(&filesData, Config::fileCount, sizeof(File));
+        Set::init(&filesSet, Config::fileCount * 2);
+        filesSet.hashMethod = Set::HM_STRING_FNV1A;
+        filesSet.keyOffset = offsetof(File, info) +
+                             offsetof(FileInfo, absPath) +
+                             offsetof(String, buff);
     }
 
-    inline Handle idx2hnd(int idx) {
-        return (Handle) ((uint64_t) idx + 1);
+    void release() {
+        DArray::release(&filesData);
+        Set::release(&filesSet);
     }
 
-    inline int hnd2idx(Handle hnd) {
-        return ((uint64_t) hnd) - 1;
-    }
+    Handle load(Path* absPath, Origin origin) {
 
-    Handle find(File* file, int* idx = NULL) {
-
-        File* data = (File*) files.buffer;
-        for (int i = 0; i < files.size; i++) {
-            File* testFile = data + i;
-            if (cmpId(testFile->id, file->id)) {
-                if (idx) *idx = i;
+        {
+            File* file = (File*) Set::find(&filesSet, (uint64_t) absPath->buffer);
+            if (file) {
+                file->isOpened = true;
                 return file;
             }
         }
 
-        if (idx) *idx = -1;
-        return null;
-
-    }
-
-    FileInfo* getFileInfo(Handle flhnd) {
-
-        Chunk* chunk = (Chunk*) DArray::get(&files, hnd2idx(flhnd));
-        return &chunk->info;
-
-    }
-
-    void init() {
-        DArray::init(&files, 32, sizeof(Chunk));
-    }
-
-    void release() {
-        DArray::release(&files);
-    }
-
-    Handle load(Path* absPath) {
-
         char* buffer;
-        char* fname = (char*) absPath->buffer;
-        const int bufferLen = FileDriver::readFile(fname, &buffer);
+        const int bufferLen = FileDriver::readFile(absPath->buffer, &buffer);
+        if (bufferLen < 0) return null;
 
-        if (bufferLen < 0) {
-            return null;
-        }
+        File file;
+        file.isOpened = true;
+        file.origin = origin;
+        file.data.buff = buffer;
+        file.data.len = bufferLen;
+        file.info.modifiedTime = { 0, 0 };
+        file.info.sizeBytes = 0;
+        file.info.relativePath = NULL;
+        file.info.userData = NULL;
+        file.info.status = FileStatus::FS_DIRTY;
 
-        Chunk chunk;
-        chunk.empty = 0;
-        chunk.file.id = genId(fname);
-        chunk.file.data.buff = buffer;
-        chunk.file.data.len = bufferLen;
-        chunk.info.modifiedTime = { 0, 0 };
-        chunk.info.sizeBytes = 0;
-        chunk.info.relativePath = NULL;
-        chunk.info.userData = NULL;
+        file.info.absPath = makePath(file.info.absPath);
+        annotatePath(file.info.absPath);
 
-        chunk.info.absPath = initPath(fname);
-        annotatePath(chunk.info.absPath);
+        toAbsolutePath(file.info.absPath);
+        file.info.name = nameFromPath(file.info.absPath);
 
-        toAbsolutePath(chunk.info.absPath);
-        chunk.info.name = nameFromPath(chunk.info.absPath);
+        file.idx = filesData.size;
+        DArray::push(&filesData, &file);
 
-        int writeIdx = -1;
-
-        Chunk* data = (Chunk*) files.buffer;
-        for (int i = 0; i < files.size; i++) {
-
-            Chunk* testChunk = data + i;
-            if (testChunk->empty) {
-                writeIdx = i;
-                continue;
-            }
-
-            if (cmpId(testChunk->file.id, chunk.file.id)) {
-                return idx2hnd(i);
-            }
-
-        }
-
-        if (writeIdx > 0) {
-            DArray::set(&files, writeIdx, &chunk);
-            return idx2hnd(writeIdx);
-        } else {
-            DArray::push(&files, &chunk);
-            return idx2hnd(files.size - 1);
-        }
+        return DArray::get(&filesData, file.idx);
 
     }
 
-    Handle load(String fname) {
+    Handle load(String fname, Origin origin) {
 
         if (fname.len >= MAX_FILE_PATH) {
             return null;
@@ -258,11 +187,11 @@ namespace FileSystem {
         memcpy(absPath->buffer, fname.buff, fname.len);
         absPath->buffer[fname.len] = '\0';
 
-        load(absPath);
+        load(absPath, origin);
 
     }
 
-    Handle load(String fpath, String fname) {
+    Handle load(String fpath, String fname, Origin origin) {
 
         if (fname.len + fpath.len + 1 >= MAX_FILE_PATH) {
             return null;
@@ -276,55 +205,44 @@ namespace FileSystem {
         memcpy(absPath->buffer + fpath.len + 1, fname.buff, fname.len);
         absPath->buffer[fpath.len + fname.len + 1] = '\0';
 
-        load(absPath);
+        load(absPath, origin);
 
     }
 
-    void unload(Handle flhnd) {
+    void unload(Handle fhnd, Origin origin) {
+        File* file = (File*) fhnd;
+        if (file->idx >= filesData.size) return;
 
-        int idx = hnd2idx(flhnd);
-        if (idx >= files.size) return;
-
-        Chunk* chunk = (Chunk*) files.buffer + idx;
-        chunk->empty = 1;
-
+        file->isOpened = false;
     }
 
-    const char* getBuffer(Handle flhnd) {
+    const char* getBuffer(Handle fhnd) {
+        File* file = (File*) fhnd;
+        if (!file->isOpened) return NULL;
 
-        int idx = hnd2idx(flhnd);
-        if (idx >= files.size) return NULL;
-
-        Chunk chunk;
-        DArray::get(&files, idx, &chunk);
-        if (chunk.empty) return NULL;
-
-        return chunk.file.data.buff;
-
+        return file->data.buff;
     }
 
-    String getDirectory(Handle flhnd) {
-
-        Chunk* chunk = ((Chunk*) files.buffer) + hnd2idx(flhnd);
-        return { chunk->info.absPath->buffer, chunk->info.absPath->nameOff };
-
+    String getDirectory(Handle fhnd) {
+        File* file = (File*) fhnd;
+        return { file->info.absPath->buffer, file->info.absPath->nameOff };
     }
 
-    void* getUserData(Handle flhnd) {
-
-        Chunk* chunk = ((Chunk*) files.buffer) + hnd2idx(flhnd);
-        return chunk->info.userData;
-
+    Handle getHandle(String absPath) {
+        return (Handle) Set::find(&filesSet, (uint64_t) absPath.buff);
     }
 
-    void setUserData(Handle flhnd, void *dataPtr) {
-
-        Chunk* chunk = ((Chunk*) files.buffer) + hnd2idx(flhnd);
-        chunk->info.userData = dataPtr;
-
+    void* getUserData(Handle fhnd) {
+        File* file = (File*) fhnd;
+        return file->info.userData;
     }
 
-    Path* computeRelativePath(Handle flhnd, String root) {
+    void setUserData(Handle fhnd, void *dataPtr) {
+        File* file = (File*) fhnd;
+        file->info.userData = dataPtr;
+    }
+
+    Path* computeRelativePath(Handle fhnd, String root) {
 
         std::filesystem::path tmpRoot(std::string(root.buff, root.len));
         std::filesystem::path tmpFile(std::string(root.buff, root.len));
@@ -335,7 +253,7 @@ namespace FileSystem {
             return NULL;
         }
 
-        FileInfo* info = getFileInfo(flhnd);
+        FileInfo* info = getFileInfo(fhnd);
         if (!info->relativePath) {
             info->relativePath = (Path*) alloc(alc, sizeof(Path));
         }

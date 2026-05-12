@@ -135,4 +135,21 @@ namespace FileSystem {
 
         annotatePath(out);
     }
+
+    int computeRelativePath(Path* abs, String root, Path* out) {
+        std::filesystem::path tmpRoot(std::string(root.buff, root.len));
+        std::filesystem::path tmpFile(std::string(abs->buffer, abs->bufferLen));
+
+        std::filesystem::path relative = std::filesystem::relative(tmpFile, tmpRoot);
+        out->bufferLen = relative.string().size();
+        if (out->bufferLen > MAX_FILE_PATH) {
+            return -1;
+        }
+
+        memcpy(out->buffer, relative.c_str(), out->bufferLen);
+        annotatePath(out);
+
+        return out->bufferLen;
+    }
+
 }

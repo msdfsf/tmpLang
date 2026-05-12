@@ -43,6 +43,8 @@
 // #include "../../src/globals.h"
 #include "../../src/file_system.h"
 #include "../../src/array_list.h"
+#include "../../src/dynamic_arena.h"
+#include "../../src/registry.h"
 
 #include <tuple>
 #include <cstdlib>
@@ -737,8 +739,8 @@ namespace Lsp::T {
 
     static const char* toString(DocumentDiagnosticReportKind val) {
         switch (val) {
-            case DOCUMENT_DIAGNOSTIC_REPORT_KIND_FULL     : return "Full";
-            case DOCUMENT_DIAGNOSTIC_REPORT_KIND_UNCHANGED: return "Unchanged";
+            case DOCUMENT_DIAGNOSTIC_REPORT_KIND_FULL     : return "full";
+            case DOCUMENT_DIAGNOSTIC_REPORT_KIND_UNCHANGED: return "unchanged";
             default: return "";
         }
     }
@@ -771,9 +773,9 @@ namespace Lsp::T {
 
     static const char* toString(FoldingRangeKind val) {
         switch (val) {
-            case FOLDING_RANGE_KIND_COMMENT: return "Comment";
-            case FOLDING_RANGE_KIND_IMPORTS: return "Imports";
-            case FOLDING_RANGE_KIND_REGION : return "Region";
+            case FOLDING_RANGE_KIND_COMMENT: return "comment";
+            case FOLDING_RANGE_KIND_IMPORTS: return "imports";
+            case FOLDING_RANGE_KIND_REGION : return "region";
             default: return "";
         }
     }
@@ -945,16 +947,16 @@ namespace Lsp::T {
 
     static const char* toString(CodeActionKind val) {
         switch (val) {
-            case CODE_ACTION_KIND_EMPTY                  : return "Empty";
-            case CODE_ACTION_KIND_QUICK_FIX              : return "QuickFix";
-            case CODE_ACTION_KIND_REFACTOR               : return "Refactor";
-            case CODE_ACTION_KIND_REFACTOR_EXTRACT       : return "RefactorExtract";
-            case CODE_ACTION_KIND_REFACTOR_INLINE        : return "RefactorInline";
-            case CODE_ACTION_KIND_REFACTOR_REWRITE       : return "RefactorRewrite";
-            case CODE_ACTION_KIND_SOURCE                 : return "Source";
-            case CODE_ACTION_KIND_SOURCE_ORGANIZE_IMPORTS: return "SourceOrganizeImports";
-            case CODE_ACTION_KIND_SOURCE_FIX_ALL         : return "SourceFixAll";
-            default: return "";
+            case CODE_ACTION_KIND_EMPTY                  : return "";
+			case CODE_ACTION_KIND_QUICK_FIX              : return "quickfix";
+			case CODE_ACTION_KIND_REFACTOR               : return "refactor";
+			case CODE_ACTION_KIND_REFACTOR_EXTRACT       : return "refactor.extract";
+			case CODE_ACTION_KIND_REFACTOR_INLINE        : return "refactor.inline";
+			case CODE_ACTION_KIND_REFACTOR_REWRITE       : return "refactor.rewrite";
+			case CODE_ACTION_KIND_SOURCE                 : return "source";
+			case CODE_ACTION_KIND_SOURCE_ORGANIZE_IMPORTS: return "source.organizeImports";
+			case CODE_ACTION_KIND_SOURCE_FIX_ALL         : return "source.fixAll";
+			default: return "";
         }
     }
 
@@ -967,9 +969,9 @@ namespace Lsp::T {
 
     static const char* toString(TraceValues val) {
         switch (val) {
-            case TRACE_VALUES_OFF     : return "Off";
-            case TRACE_VALUES_MESSAGES: return "Messages";
-            case TRACE_VALUES_VERBOSE : return "Verbose";
+            case TRACE_VALUES_OFF     : return "off";
+            case TRACE_VALUES_MESSAGES: return "messages";
+            case TRACE_VALUES_VERBOSE : return "verbose";
             default: return "";
         }
     }
@@ -982,8 +984,8 @@ namespace Lsp::T {
 
     static const char* toString(MarkupKind val) {
         switch (val) {
-            case MARKUP_KIND_PLAIN_TEXT: return "PlainText";
-            case MARKUP_KIND_MARKDOWN  : return "Markdown";
+            case MARKUP_KIND_PLAIN_TEXT: return "plaintext";
+            case MARKUP_KIND_MARKDOWN  : return "markdown";
             default: return "";
         }
     }
@@ -1002,9 +1004,9 @@ namespace Lsp::T {
 
     static const char* toString(PositionEncodingKind val) {
         switch (val) {
-            case POSITION_ENCODING_KIND_UTF8 : return "UTF8";
-            case POSITION_ENCODING_KIND_UTF16: return "UTF16";
-            case POSITION_ENCODING_KIND_UTF32: return "UTF32";
+            case POSITION_ENCODING_KIND_UTF8 : return "utf-8";
+            case POSITION_ENCODING_KIND_UTF16: return "utf-16";
+            case POSITION_ENCODING_KIND_UTF32: return "utf-32";
             default: return "";
         }
     }
@@ -1086,9 +1088,9 @@ namespace Lsp::T {
 
     static const char* toString(ResourceOperationKind val) {
         switch (val) {
-            case RESOURCE_OPERATION_KIND_CREATE: return "Create";
-            case RESOURCE_OPERATION_KIND_RENAME: return "Rename";
-            case RESOURCE_OPERATION_KIND_DELETE: return "Delete";
+            case RESOURCE_OPERATION_KIND_CREATE: return "create";
+            case RESOURCE_OPERATION_KIND_RENAME: return "rename";
+            case RESOURCE_OPERATION_KIND_DELETE: return "delete";
             default: return "";
         }
     }
@@ -1103,10 +1105,10 @@ namespace Lsp::T {
 
     static const char* toString(FailureHandlingKind val) {
         switch (val) {
-            case FAILURE_HANDLING_KIND_ABORT                  : return "Abort";
-            case FAILURE_HANDLING_KIND_TRANSACTIONAL          : return "Transactional";
-            case FAILURE_HANDLING_KIND_TEXT_ONLY_TRANSACTIONAL: return "TextOnlyTransactional";
-            case FAILURE_HANDLING_KIND_UNDO                   : return "Undo";
+            case FAILURE_HANDLING_KIND_ABORT                  : return "abort";
+            case FAILURE_HANDLING_KIND_TRANSACTIONAL          : return "transactional";
+            case FAILURE_HANDLING_KIND_TEXT_ONLY_TRANSACTIONAL: return "textOnlyTransactional";
+            case FAILURE_HANDLING_KIND_UNDO                   : return "undo";
             default: return "";
         }
     }
@@ -1123,7 +1125,7 @@ namespace Lsp::T {
 
     static const char* toString(TokenFormat val) {
         switch (val) {
-            case TOKEN_FORMAT_RELATIVE: return "Relative";
+            case TOKEN_FORMAT_RELATIVE: return "relative";
             default: return "";
         }
     }
@@ -10663,6 +10665,7 @@ namespace Lsp::Err {
         ALLOC,
         INVALID_PARAMS,
         LOAD_FILE,
+        RESOLVE_FILE,
         SYNC,
     };
 
@@ -10679,6 +10682,8 @@ namespace Lsp::Err {
             return "The request parameters are invalid or missing required fields.";
         case LOAD_FILE:
             return "Was unable to load requested file!";
+        case RESOLVE_FILE:
+            return "Was unable to resolve given file!";
         case SYNC:
             return "Desynchronized. Ezio haven't handled it this way.";
         default:
@@ -10733,7 +10738,7 @@ namespace Lsp {
     }
 
     struct Allocator {
-        void* (*alloc)(void* context, size_t size);
+        void* (*alloc) (void* context, size_t size);
         void* context; // Points to your Arena
     };
 
@@ -10742,26 +10747,40 @@ namespace Lsp {
         inline String rootUri;
         inline void*  clientCapabilities;
 
+        // Allocator to build the request and following response.
+        inline Allocator allocator;
+
         // Tracking the client
         inline String clientName;
         inline String clientVersion;
-
-        struct FileInfo {
-
-            String id;
-            FileSystem::FileInfo file;
-
-            // indexed by line number - 1
-            // has to be updated on every change via computeLineOffsets
-            // std::vector<uint64_t> lineOffsets;
-
-        };
-
-        FileInfo* getFileInfo(uint64_t id);
-
     }
 
+    struct AstSnapshot {
+        uint64_t version;
+        Reg::Unit* unit;
+    };
 
+    struct LineOffsets {
+        uint32_t* data;
+        uint32_t  size;
+        uint32_t  capacity;
+    };
+
+    struct FileString : String {
+        size_t capacity;
+    };
+
+    struct FileData {
+        FileString  data;
+        uint32_t    version;
+        LineOffsets lineOffsets;
+
+        Reg::Unit        unit[2];
+        Arena::Container arenas[2];
+        std::atomic<int> committedIdx { 0 };
+        // Number of active queries reading each arena
+        std::atomic<int> readerCount[2] { 0, 0 };
+    };
 
     template <typename T>
     static T* alloc(Allocator* alc, size_t count = 1) {
@@ -10783,7 +10802,7 @@ namespace Lsp {
         *len = stack.size;
 
         stack.size = mark;
-        
+
         return ptr;
     }
 
@@ -10963,10 +10982,11 @@ namespace Lsp {
             using MType = std::decay_t<decltype(val)>;
 
             bool skip = false;
-            if constexpr (!std::is_same_v<MType, T::Int>  &&
-                            !std::is_same_v<MType, T::UInt> &&
-                            !std::is_same_v<MType, T::Bool>)
-            {
+            if constexpr (
+                !std::is_same_v<MType, T::Int>  &&
+                !std::is_same_v<MType, T::UInt> &&
+                !std::is_same_v<MType, T::Bool>
+            ) {
                 if constexpr (std::is_pointer_v<MType>) {
                     skip = (val == nullptr);
                 }
@@ -10992,16 +11012,22 @@ namespace Lsp {
     template<typename MethodResult>
     JsonString serialize(JsonWriter* js, MethodResult* result) {
 
-        jsonWriteObjectStart(js);
-        str(js, result);
-        jsonWriteObjectEnd(js);
+        if (!result) {
+            jsonWriteNull(js);
+        } else {
+            jsonWriteObjectStart(js);
+            str(js, result);
+            jsonWriteObjectEnd(js);
+        }
 
         return jsonWriterCommit(js);
 
     }
 
-    Err::Kind handle(Lsp::TextDocument::DidOpen*   method);
-    Err::Kind handle(Lsp::TextDocument::DidClose*  method);
-    Err::Kind handle(Lsp::TextDocument::DidChange* method);
+    Err::Kind handle(TextDocument::DidOpen*   method);
+    Err::Kind handle(TextDocument::DidClose*  method);
+    Err::Kind handle(TextDocument::DidChange* method);
+
+    T::Hover* handle(TextDocument::Hover* method);
 
 }

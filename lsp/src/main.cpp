@@ -14,10 +14,6 @@
 
 
 
-CommProvider::Info commInfo = { CommProvider::CT_STD };
-
-
-
 constexpr JsonString operator ""_js(const char* s, size_t l) {
     return {(char*) s, l};
 }
@@ -72,6 +68,9 @@ int main() {
     CommProvider::Info comm;
     comm.type = CommProvider::CT_STD;
 
+    Arena::Container generalArena;
+    Arena::init(&generalArena, 1024 * 32);
+
     Arena::Container requestArena;
     Arena::init(&requestArena, 1024 * 1024 * 32);
 
@@ -80,6 +79,10 @@ int main() {
         .alloc   =(void* (*)(void*, size_t)) static_cast<void* (*) (Arena::Container*, size_t)>(&Arena::push),
         .context = &lspAllocatorArena
     };
+
+    Lsp::State::allocator = lspAllocator;
+    alc = &generalArena;
+    nalc = &generalArena;
 
     Lsp::init();
 
@@ -106,7 +109,7 @@ int main() {
         // "method": <string>
         // "params": <array> -> as JsonString which
         token = jsonNext(&js);
-            if (!jsonMatch(&js, token, JSON_OBJECT_OPEN)) {
+        if (!jsonMatch(&js, token, JSON_OBJECT_OPEN)) {
             continue;
         }
 
@@ -158,7 +161,6 @@ int main() {
         switch (method) {
 
             case Lsp::T::RM_INITIALIZE: {
-
                 Lsp::Initialize* params = Lsp::parse<Lsp::Initialize>(&js, &lspAllocator);
                 Lsp::T::InitializeResult result = { 0 };
 
@@ -172,7 +174,7 @@ int main() {
 
                 // Features
                 caps->textDocumentSync       = sync;
-                //caps->hoverProvider          = true;
+                caps->hoverProvider          = true;
                 //caps->definitionProvider     = true;
                 //caps->documentSymbolProvider = true;
                 //caps->declarationProvider    = true;
@@ -187,34 +189,27 @@ int main() {
 
                 resp = generateResponse(&jsWr, &result, id);
                 break;
-
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_DID_OPEN: {
-
                 using namespace Lsp::TextDocument;
                 Lsp::handle(Lsp::parse<DidOpen>(&js, &lspAllocator));
 
                 break;
-
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_DID_CHANGE: {
-
                 using namespace Lsp::TextDocument;
                 Lsp::handle(Lsp::parse<DidChange>(&js, &lspAllocator));
 
                 break;
-
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_DID_CLOSE: {
-
                 using namespace Lsp::TextDocument;
                 Lsp::handle(Lsp::parse<DidClose>(&js, &lspAllocator));
 
                 break;
-
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_DOCUMENT_SYMBOL: {
@@ -229,6 +224,12 @@ int main() {
             }
 
             case Lsp::T::RM_TEXT_DOCUMENT_HOVER: {
+                using namespace Lsp::TextDocument;
+
+                Lsp::T::Hover* result =
+                    Lsp::handle(Lsp::parse<Hover>(&js, &lspAllocator));
+
+                resp = generateResponse(&jsWr, result, id);
                 break;
             }
 
@@ -237,7 +238,6 @@ int main() {
             }
 
             case Lsp::T::RM_SHUTDOWN: {
-
                 beOrNotToBe = 0;
 
                 jsonWriteObjectStart(&jsWr);
@@ -248,7 +248,6 @@ int main() {
 
                 JsonString resp = jsonWriterCommit(&jsWr);
                 break;
-
             }
 
             case Lsp::T::RM_EXIT: {
@@ -258,7 +257,7 @@ int main() {
             default:
                 break;
         }
-        if (resp.len > 0) CommProvider::write(&commInfo, resp);
+        if (resp.len > 0) CommProvider::write(&comm, resp);
 
     }
 

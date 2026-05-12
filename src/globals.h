@@ -7,6 +7,16 @@
 #include <cstdint>
 
 
+// 64-bit IDs (top 8 bits = thread ID, lower bits = index)
+static constexpr uint64_t THREAD_MASK = 0xFF00000000000000;
+static constexpr uint64_t INDEX_MASK  = 0x00FFFFFFFFFFFFFF;
+
+typedef uint64_t Id;
+
+typedef Id VarId;
+typedef Id ArrId;
+typedef Id ErrId;
+typedef Id DefId;
 
 // TODO
 typedef float float_t;
@@ -15,6 +25,8 @@ typedef double double_t;
 typedef uint64_t Flags;
 
 typedef size_t MemberOffset;
+
+typedef String INamed;
 
 struct Pos;
 struct Span;
@@ -70,6 +82,10 @@ enum State : uint64_t {
     IS_LENGTH = 1 << 16,
     IS_SIZE = 1 << 17,
 
+    // For now here. Sometimes we may need to know
+    // what ordering constraints are applicable to 'us'.
+    IS_UNORDERED = 1 << 18,
+
     IS_RENDERED = 1 << 24,
 
     IS_UNIQUE  = 1 << 30, // used in parser while checking for unique names in scope
@@ -99,10 +115,6 @@ struct SpanEx : Span {
 struct LogInfo {
     Span loc;
 };
-
-
-typedef uint64_t Id;
-typedef String INamed;
 
 // sometimes we need to store locations of INamed stuff that
 // is not describing advanced stuff
