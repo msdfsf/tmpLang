@@ -97,4 +97,8 @@ namespace FileDriver {
         return !std::filesystem::create_directory(path);
     }
 
+    int doesFileExists(const char* const path) {
+        return std::filesystem::exists(path);
+    }
+
 }

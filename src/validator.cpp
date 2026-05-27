@@ -1,14 +1,14 @@
 // Each file (unit) is validated as a separate task in the TaskSystem.
-// 
+//
 // Every SyntaxNode carries two u8 statuses:
 //   - semStatus: Tracks semantic validation (Linking, Types, Constraints).
 //   - cmpStatus: Tracks compile-time evaluation (Bytecode, Constant Values).
-// 
+//
 // It is assumed that semantic validation must be completed before evaluation
 // for all required nodes. Therefore, these statuses can be treated as linear:
 // semStatus is processed first, followed by cmpStatus. As a result, each node
 // has only one workerId shared across both procedures.
-// 
+//
 // Validation of each unit is handled locally. If a node from
 // another unit is required, it can be claimed via an atomic
 // reference and processed immediately locally, or awaited
@@ -26,7 +26,7 @@
 // atomics. All basic nodes can be processed without such overhead, as they
 // are either part of an already acquired resource or part of a resource that
 // cannot be acquired independently at all.
-// 
+//
 // Discrete tasks that can be handled independently—such as
 // compile-time evaluation after all type information is
 // resolved—can be offloaded to the TaskSystem.
@@ -34,6 +34,9 @@
 #include "validator.h"
 #include "array_list.h"
 #include "data_types.h"
+#include "dynamic_arena.h"
+#include "file_system.h"
+#include "foreign_code.h"
 #include "globals.h"
 #include "logger.h"
 #include "operators.h"
@@ -69,6 +72,7 @@ namespace Validator {
     void init(ValidationContext* ctx) {
         DArray::init(&ctx->fCandidates, 32, sizeof(FunctionPrototype));
         Set::init(&ctx->searchSet, 64);
+        Arena::init(&ctx->stringArena, 8 * 1024);
     }
 
     void release(ValidationContext* ctx) {
@@ -102,9 +106,65 @@ namespace Validator {
 
 
 
+    Err::Err bindFromExternalLibrary(ValidationContext* ctx, Function* fcn) {
+        Err::Err err;
+
+        if (fcn->lib) return Err::OK;
+        
+        if (fcn->name.pathSize != 1) {
+            Diag::report(ctx->unit->ast, fcn->base.span, Err::UNEXPECTED_ERROR,
+                Diag::Format{
+                    "External function '%.*s' must be qualified by exactly one namespace prefix.\n"
+                    "  Current path depth: %d\n"
+                    "  Expected format: <namespace>::<function name>"
+                },
+                fcn->name.len, fcn->name.buff, (int) fcn->name.pathSize
+            );
+
+            return Err::UNEXPECTED_ERROR;
+        }
+
+        INamed* expectedNamespace = fcn->name.path;
+        ImportStatement* foundImport = NULL;
+
+        const int importCount = ctx->unit->reg->imports.size;
+        for (int i = 0; i < importCount; i++) {
+            ImportStatement* import = *(ImportStatement**) DArray::get(&ctx->unit->reg->imports, i);
+            err = ensureValidated(ctx, (SyntaxNode*) import);
+            if (err != Err::OK) continue;
+
+            if (import->keyword != KW_NAMESPACE) {
+                continue;
+            }
+
+            if (expectedNamespace && cstrcmp(expectedNamespace, &import->param)) {
+                foundImport = import;
+                break;
+            }
+        }
+
+        if (!foundImport) {
+            Diag::report(ctx->unit->ast, fcn->base.span, Err::UNEXPECTED_ERROR,
+                Diag::Format{
+                    "No foreign library found for namespace '%.*s'.\n"
+                    "  Hint: To use this function, link a library using: import [C] \"lib_name\" as %.*s"
+                },
+                expectedNamespace->len, expectedNamespace->buff,
+                expectedNamespace->len, expectedNamespace->buff
+            );
+
+            return Err::UNEXPECTED_ERROR;
+        }
+
+        err = Extern::loadLibrary(ctx, foundImport->fname, Extern::LL_INSPECT, &fcn->lib);
+        if (err != Err::OK) return err;
+
+        return Extern::ensureFunctionExists(ctx, fcn->lib, fcn);
+    }
+
     Err::Err validate(ValidationContext* ctx, Function* fcn) {
         Err::Err err;
-        
+
         Function* prevFcn = ctx->currentFunction;
         ctx->currentFunction = fcn;
 
@@ -117,6 +177,10 @@ namespace Validator {
 
         if (fcn->bodyScope) {
             err = validate(ctx, fcn->bodyScope);
+            if (err != Err::OK) return err;
+        } else {
+            // signature only: function from extern library
+            err = bindFromExternalLibrary(ctx, fcn);
             if (err != Err::OK) return err;
         }
 
@@ -272,7 +336,7 @@ namespace Validator {
 
             case EXT_FUNCTION_CALL: {
                 FunctionCall* call = (FunctionCall*) ex;
-                
+
                 // We need to beforehand validate arguments, so
                 // later we can properly link function via overloads...
                 for (int i = 0; i < call->inArgCount; i++) {
@@ -283,7 +347,7 @@ namespace Validator {
                 err = linkCall(ctx, var);
                 if (err != Err::OK) return err;
 
-                // 
+                //
                 Function* fcn = call->fcn;
 
                 int callArgCount = call->inArgCount;
@@ -307,7 +371,7 @@ namespace Validator {
 
                 // TODO : ? We may want to compute specific
                 //          runtim type info for here...
-                
+
                 if (fcn->prototype.outArg) {
                     // TODO : again, dont like this call, think about it more...
                     Ast::Node::copyRef(call->outArg, call->fcn->prototype.outArg->var);
@@ -315,7 +379,7 @@ namespace Validator {
                 } else {
                     var->value.typeKind = Type::DT_VOID;
                 }
-                
+
                 break;
             }
 
@@ -761,6 +825,20 @@ namespace Validator {
         return Err::OK;
     }
 
+    // TODO
+    Err::Err validate(ValidationContext* ctx, ImportStatement* node) {
+        ImportStatement* import = (ImportStatement*) node;
+        if (import->tag.len > 0) {
+            // Foreign import
+            if (!cstrcmp(import->tag, String("C"))) {
+                Diag::report(ctx->unit->ast, node->base.span, Err::UNEXPECTED_SYMBOL, "TODO : unknown tag");
+                return Err::UNEXPECTED_SYMBOL;
+            }
+        }
+
+        return Err::OK;
+    }
+
     Err::Err validate(ValidationContext* ctx, SyntaxNode* node) {
         Err::Err err;
 
@@ -837,6 +915,7 @@ namespace Validator {
             }
 
             case NT_IMPORT: {
+                err = validate(ctx, (ImportStatement*) node);
                 break;
             }
 
@@ -870,7 +949,7 @@ namespace Validator {
 
         AcquireNodeReturn ans =
             acquireNode(&node->semStatus, &node->workerId, ctx->workerId, true);
-        
+
         if (ans == ANR_ACQUIRED_FOR_WORK) {
             switch(node->type) {
                 case NT_FUNCTION: {
@@ -885,6 +964,11 @@ namespace Validator {
 
                 case NT_TYPE_DEFINITION: {
                     err = validate(ctx, (TypeDefinition*) node);
+                    break;
+                }
+
+                case NT_IMPORT: {
+                    err = validate(ctx, (ImportStatement*)node);
                     break;
                 }
 
@@ -919,6 +1003,11 @@ namespace Validator {
     Err::Err validate(ValidationContext* ctx) {
         Err::Err err;
 
+        FileSystem::FileInfo* finfo = ctx->unit->ast->root->base.span->fileInfo;
+        FileSystem::getFileDir(finfo->absPath, &ctx->fileDir);
+
+
+
         err = verifyFunctionsAreGlobal(ctx);
         if (err != Err::OK) return err;
 
@@ -948,6 +1037,12 @@ namespace Validator {
 
         for (int i = 0; i < reg->fcns.size; i++) {
             ensureValidated(ctx, *(SyntaxNode**) DArray::get(&reg->fcns, i));
+        }
+
+
+
+        for (int i = 0; i < reg->imports.size; i++) {
+            validate(ctx, *(SyntaxNode**) DArray::get(&reg->imports, i));
         }
 
 
@@ -1099,7 +1194,7 @@ namespace Validator {
         // in case of scopeNames var is the last name (ex. point.x, var is then x)
         // scopeNames are sorted from left to right as written
         if (var->name.len == 0) return Err::OK;
-        
+
         Variable* tmpVar;
 
         Scope* scope = var->base.scope;

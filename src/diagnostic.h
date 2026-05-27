@@ -73,7 +73,11 @@ namespace Err {
         NAMESPACE_NOT_GLOBAL            = -64,
         QUALIFIED_NAME_NOT_ALLOWED      = -65,
         DECLARATION_AFTER_USE           = -66,
-        COUNT                           = 67,
+        FOREIGN_LIBRARY_NOT_FOUND       = -67,
+        PATH_TOO_LONG                   = -68,
+        SYMBOL_NOT_FOUND                = -69,
+        LIBRARY_LOAD_FAILED             = -70,
+        COUNT                           = 71,
     };
     const char* const str(Err code);
     bool isFatal(Err err);

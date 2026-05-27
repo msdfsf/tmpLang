@@ -315,6 +315,7 @@ namespace Parser {
 
         ctx->currentScope = Ast::Node::makeScope();
         ctx->currentScope->base.scope = NULL;
+        ctx->currentScope->base.span = ctx->fileSpan;
         ctx->idxInScope = 0;
 
         ctx->unit->ast->root = ctx->currentScope;
@@ -393,7 +394,7 @@ namespace Parser {
         Lex::Token token;
 
         Scope* node = currentScope;
-        
+
         Pos prevPos = lspan.start;
         Lex::Token prevToken = Lex::toToken(Lex::TK_NONE);
 
@@ -545,6 +546,7 @@ namespace Parser {
         return token;
     }
 
+    // TODO : think about dealloc
     Lex::Token parseLanguageTag(ParseContext* ctx, Span* span, String* tag) {
         Lex::Token token;
         Lex::TokenValue tokenVal;
@@ -553,7 +555,7 @@ namespace Parser {
         QualifiedName* qname = (QualifiedName*) tokenVal.any;
 
         if (token.kind != Lex::TK_IDENTIFIER) {
-            ndealloc(nalc, qname);
+            // ndealloc(nalc, qname);
             Diag::report(ctx->unit->ast, span, Err::UNEXPECTED_SYMBOL);
             return sync(span, { Lex::TK_ARRAY_END });
         }
@@ -566,7 +568,7 @@ namespace Parser {
         tag->buff = qname->buff;
         tag->len = qname->len;
 
-        ndealloc(nalc, qname);
+        // ndealloc(nalc, qname);
 
         token = Lex::nextToken(span, &tokenVal);
         if (token.kind != Lex::TK_ARRAY_END) {
@@ -1412,12 +1414,12 @@ namespace Parser {
                 fcn->name.buff = NULL;
                 fcn->name.len = NULL;
             } else {
-                fcn->name.buff = tokenVal.str->buff;
-                fcn->name.len = tokenVal.str->len;
+                // TODO : 'Mem leak'
+                fcn->name = *((QualifiedName*)tokenVal.any);
             }
         } else {
-            fcn->name.buff = tokenVal.str->buff;
-            fcn->name.len = tokenVal.str->len;
+            // TODO : 'Mem leak'
+            fcn->name = *((QualifiedName*) tokenVal.any);
         }
 
         fcn->name.span = getSpanStamp(&lspan);
@@ -1484,6 +1486,11 @@ namespace Parser {
         token = parseDataType(ctx, &lspan, { token, tokenVal }, NULL_FLAG, fcn->prototype.outArg, &tokenVal);
         if (token.encoded < 0) return token;
 
+        // function signature only allowed for 'foreign' functions
+        if (token.kind == Lex::TK_STATEMENT_END && foreignLang) {
+            goto defer;
+        }
+
         // scope
         if (token.kind != Lex::TK_SCOPE_BEGIN && token.kind != Lex::TK_STATEMENT_BEGIN) {
             Diag::report(ctx->unit->ast, &lspan, Err::UNEXPECTED_SYMBOL);
@@ -1491,50 +1498,34 @@ namespace Parser {
         }
 
         fcnParseScope:
+        {
+            fcn->internalIdx = -1;
 
-        if (foreignLang) {
+            ctx->currentFunction = fcn;
 
-            ForeignFunction* ffcn = (ForeignFunction*) fcn;
-
-            ffcn->code.codeStr = (char*) (lspan.str + lspan.start.idx);
-            ffcn->code.codeStr.len = Lex::findBlockEnd(&lspan, Lex::SCOPE_BEGIN, Lex::SCOPE_END);
-            if (ffcn->code.codeStr.len < 0) {
-                return Lex::toToken(Err::UNEXPECTED_END_OF_FILE);
+            // we want be able to lookup input in scope...
+            dsmark = markStack(&ctx->defStack);
+            for (int i = 0; i < fcn->prototype.inArgCount; i++) {
+                DArray::push(&ctx->defStack, &fcn->prototype.inArgs[i]);
             }
 
-            ffcn->fcn.internalIdx = -3443431;
-            DArray::push(&ctx->unit->reg->foreignFunctions, &ffcn);
+            const ScopeEnd scopeEnd = (ScopeEnd)(token.kind == Lex::TK_STATEMENT_BEGIN);
+            Scope* currentScope = ctx->currentScope;
+            currentScope->base.flags |= IS_UNORDERED;
 
-            ffcn->fcn.base.span = finalizeSpan(&lspan, span);
-            return token;
+            Scope* newScope = Ast::Node::makeScope();
+            newScope->base.scope = ctx->currentScope;
 
+            ctx->currentScope = newScope;
+            token = parseScope(ctx, &lspan, SC_COMMON, scopeEnd, dsmark);
+            ctx->currentScope = currentScope;
+
+            ctx->currentFunction = NULL;
+
+            fcn->bodyScope = newScope;
         }
 
-        fcn->internalIdx = -1;
-
-        ctx->currentFunction = fcn;
-
-        // we want be able to lookup input in scope...
-        dsmark = markStack(&ctx->defStack);
-        for (int i = 0; i < fcn->prototype.inArgCount; i++) {
-            DArray::push(&ctx->defStack, &fcn->prototype.inArgs[i]);
-        }
-
-        const ScopeEnd scopeEnd = (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN);
-        Scope* currentScope = ctx->currentScope;
-        currentScope->base.flags |= IS_UNORDERED;
-
-        Scope* newScope = Ast::Node::makeScope();
-        newScope->base.scope = ctx->currentScope;
-
-        ctx->currentScope = newScope;
-        token = parseScope(ctx, &lspan, SC_COMMON, scopeEnd, dsmark);
-        ctx->currentScope = currentScope;
-
-        ctx->currentFunction = NULL;
-
-        fcn->bodyScope = newScope;
-
+        defer:
         DArray::push(&ctx->nodeStack, &fcn);
         DArray::push(&ctx->unit->reg->fcns, &fcn);
 
@@ -2467,6 +2458,8 @@ namespace Parser {
     void dispatchImport(ParseContext* ctx, Span* span, ImportStatement* import) {
         using namespace FileSystem;
 
+        if (import->tag.len > 0) return;
+
         Handle fhnd = load(import->fname, Origins::COMPILER_SOURCE);
         if (!fhnd) {
             Diag::report(ctx->unit->ast, span, Err::FILE_LOAD_FAILED, import->fname.len, import->fname.buff);
@@ -2486,8 +2479,11 @@ namespace Parser {
         // import->root = fileRootScope;
         import->base.scope = ctx->currentScope;
 
-        token = Lex::tryKeyword(&lspan, KW_FROM);
-        if (token.kind != Lex::TK_KEYWORD) {
+        token = Lex::nextToken(&lspan);
+        if (token.kind == Lex::TK_ARRAY_BEGIN) {
+            token = parseLanguageTag(ctx, &lspan, &import->tag);
+            token = Lex::nextFileName(&lspan, &tokenVal);
+        } else if (token.kind != Lex::TK_KEYWORD) {
             token = Lex::nextFileName(&lspan, &tokenVal);
         }
 
@@ -2520,6 +2516,11 @@ namespace Parser {
             Diag::report(ctx->unit->ast, span, Err::UNEXPECTED_SYMBOL, "End of statement expected!");
         }
 
+        import->param = *tokenVal.str;
+
+        DArray::push(&ctx->unit->reg->imports, (void*) &import);
+
+        // TODO : why dispatch before finalizeSpan?
         dispatchImport(ctx, span, import);
 
         import->base.span = finalizeSpan(&lspan, span);

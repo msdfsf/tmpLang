@@ -12,7 +12,10 @@ namespace Set {
         // Start of the section where data will be treated as
         // null-terminated strings
         HM_STRING_START,
-        HM_STRING_FNV1A = HM_STRING_START
+        HM_STRING_FNV1A = HM_STRING_START,
+    
+        // 'key' is treated as a pointer to 12 byte int
+        HM_12_FNV1A,
     };
 
     enum SlotType {

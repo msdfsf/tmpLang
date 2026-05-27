@@ -1,7 +1,16 @@
 :: Builds the project for windows
 :: Expetcs the compiler being in the PATH
 ::
-:: $1 choose the compiler ['cl', 'clang++', 'g++']
+:: Note: as GNU assembler was chosen to provide syntax
+:: consistency and cross-platform compatibility, support
+:: for the 'cl' compiler has been dropped. Using 'cl' would
+:: require a separate tool for assembly, contradicting the
+:: whole point of using one prefered compiler as now there
+:: are, in a way, two. Instead, 'clang-cl' is supported
+:: from the 'microsoft family', allowing a single tool
+:: to do the job.
+::
+:: $1 choose the compiler ['clang-cl', 'clang++', 'g++']
 ::    default: any thats avaliable in the PATH
 ::    in given order
 :: $2 choose the mode ['release', 'debug']
@@ -44,7 +53,7 @@ if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 :: AUTO-DETECTION (DEFAULTS)
 :: =============================================
 
-set "KNOWN_COMPILERS=cl g++ clang++"
+set "KNOWN_COMPILERS=clang-cl g++ clang++"
 
 if "%TARGET_MODE%"=="" set "TARGET_MODE=release"
 
@@ -80,16 +89,16 @@ call :print_info "Mode:     %TARGET_MODE%"
 
 
 :: =============================================
-:: FIND ALL CPPs
+:: FIND ALL SOURCES
 :: =============================================
 
 set "SOURCES="
-for /r "%SRC_DIR%" %%f in (*.cpp) do (
+for /r "%SRC_DIR%" %%f in (*.cpp *.s) do (
     set "SOURCES=!SOURCES! "%%f""
 )
 
 if "%SOURCES%"=="" (
-    call :print_error "No .cpp files found in %SRC_DIR%"
+    call :print_error "No .cpp or .s files found in %SRC_DIR%"
     exit /b 1
 )
 
@@ -99,10 +108,10 @@ if "%SOURCES%"=="" (
 :: COMPILATION CONFIGURATION
 :: =============================================
 
-if /i "%TARGET_COMPILER%"=="cl" (
+if /i "%TARGET_COMPILER%"=="clang-cl" (
 
-    set "FLAGS=/std:c++20 /W0 /wd4530 /D_AMD64_ /DWIN64 /nologo"
-    set "LIBS=/link /LIBPATH:"..\%LIB_DIR%\" libtcc.lib"
+    set "FLAGS=/std:c++20 /W0 /wd4530 /D_AMD64_ /DWIN64 /nologo /clang:-fproc-stat-report"
+    set "LIBS=/link /LIBPATH:..\%LIB_DIR% libtcc.lib"
 
     if /i "%TARGET_MODE%"=="debug" (
         set "FLAGS=!FLAGS! /Zi /Od /Fe"compiler.exe""

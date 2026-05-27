@@ -162,7 +162,10 @@ static inline Span* getSpanStamp(Span* span) {
 }
 
 static inline SpanEx markSpanStart(Span* span) {
-    return SpanEx { { *span }, span->start };
+    SpanEx spanEx;
+    (Span&) spanEx = *span;
+    spanEx.super = span->start;
+    return spanEx;
 }
 
 static inline Span* finalizeSpan(SpanEx* lspan, Span* span) {

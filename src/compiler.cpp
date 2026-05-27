@@ -7,6 +7,7 @@
 #include "syntax.h"
 #include "logger.h"
 #include "task_system.h"
+#include "foreign_code.h"
 
 #include "translator_debug.h"
 #include "translator_c.h"
@@ -53,6 +54,7 @@ int Compiler::compile() {
     Ast::init();
     FileSystem::init();
     TaskSystem::init(0);
+    Extern::init();
 
     Logger::log({ Logger::INFO }, "Initialization completed\n");
 

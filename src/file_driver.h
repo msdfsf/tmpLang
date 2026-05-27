@@ -15,5 +15,7 @@ namespace FileDriver {
     int writeFile(FILE* file, char* buffer, int buffLen);
 
     int createDirectory(char* const path);
-    
+
+    int doesFileExists(const char* const path);
+
 }

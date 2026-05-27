@@ -34,8 +34,19 @@ namespace Set {
                 return hash;
             }
 
+            case HM_12_FNV1A: {
+                uint8_t* str = (uint8_t*) data;
+                uint64_t hash = 0xcbf29ce484222325ULL;
+                for (int i = 0; i < 12; i++) {
+                    hash ^= (uint64_t) *str;
+                    hash *= 0x100000001b3ULL;
+                    str++;
+                }
+                return hash;
+            }
+
             case HM_STRING_FNV1A: {
-                const uint8_t* str = (const uint8_t*) data;
+                uint8_t* str = (uint8_t*) data;
                 uint64_t hash = 0xcbf29ce484222325ULL;
                 while (*str) {
                     hash ^= (uint64_t) *str;

@@ -30,12 +30,12 @@ namespace FileSystem {
     };
 
     enum PathFlag : uint8_t {
-        PF_ABSOLUTE      = 1 << 0, // Path starts from a root (e.g., "/" or "C:\")
-        PF_NORMALIZED    = 1 << 1, // Path has been normalized (no '.', '..', or double slashes)
-        PF_HAS_EXT       = 1 << 2, // Path includes a file extension
-        PF_HAS_NAME      = 1 << 3, // Path includes a valid name component
-        PF_IS_DIR        = 1 << 4, // Path refers to a directory (known or forced)
-        PF_IS_FILE       = 1 << 5, // Path refers to a regular file
+        PF_ABSOLUTE      = 1 << 0,
+        PF_NORMALIZED    = 1 << 1,
+        PF_HAS_EXT       = 1 << 2,
+        PF_HAS_NAME      = 1 << 3,
+        PF_IS_DIR        = 1 << 4,
+        PF_IS_FILE       = 1 << 5,
     };
 
     struct Path {
@@ -90,6 +90,8 @@ namespace FileSystem {
     String      getDirectory(Handle file);
     Handle      getHandle   (String absPath);
 
+    void getFileDir(Path* filePath, Path* outDir);
+
     void* getUserData(Handle flhnd);
     void  setUserData(Handle flhnd, void* dataPtr);
 
@@ -101,8 +103,11 @@ namespace FileSystem {
     bool  toAbsolutePath(Path* path);
     void  toParentPath  (Path* path);
     void  uriToPath     (String uri, Path* out);
+    bool  combinePath   (Path* base, String appendix, Path* out);
     int   computeRelativePath(Path* abs, String root, Path* out);
     Path* computeRelativePath(Handle flhnd, String str);
+
+    bool isPath(String name);
 
     String catPaths(Path* base, const char* const appendix);
 

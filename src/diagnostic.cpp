@@ -147,6 +147,14 @@ const char* const Err::str(Err code) { switch (code) {
         return "Qualified name not allowed!";
     case DECLARATION_AFTER_USE:
         return "Declaration after usage!";
+    case FOREIGN_LIBRARY_NOT_FOUND:
+        return "Foreign library not found!";
+    case PATH_TOO_LONG:
+        return "Path too long!";
+    case SYMBOL_NOT_FOUND:
+        return "Symbol not found!";
+    case LIBRARY_LOAD_FAILED:
+        return "Library load failed!";
     default:
         return "Unknown error!";
 

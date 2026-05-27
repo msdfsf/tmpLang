@@ -1,3 +1,5 @@
+// TODO : all path stuff is messy...
+
 #include "file_system.h"
 #include "file_driver.h"
 #include "array_list.h"
@@ -5,6 +7,7 @@
 #include "logger.h"
 #include "set.h"
 #include "config.h"
+#include "string.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -20,8 +23,11 @@
 
 namespace FileSystem {
 
-    constexpr int PATH_SEP = '\\';
-
+    #if _WIN32
+        constexpr int PATH_SEP = '\\';
+    #elif
+        constexpr int PATH_SEP = '/';
+    #endif
 
 
     Logger::Type logErr = { .level = Logger::ERROR, .tag = stageTag };
@@ -40,6 +46,10 @@ namespace FileSystem {
     Set::Container    filesSet;
 
 
+
+    bool isAnySlash(const char ch) {
+        return (ch == '\\' || ch == '/');
+    }
 
     Path* makePath(Path* src) {
 
@@ -60,6 +70,198 @@ namespace FileSystem {
             path->buffer + path->nameOff,
             path->bufferLen - path->nameOff
         );
+    }
+
+    void goBackPath(String* path, int count) {
+        if (!path || path->len <= 0 || count <= 0) return;
+
+        int idx = path->len;
+
+        while (count > 0) {
+            // Skip trailing slashes
+            while (idx >= 0 && isAnySlash(path->buff[idx])) {
+                idx--;
+            }
+
+            #ifdef _WIN32
+            if (idx == 1 && path->buff[idx] == ':') {
+                idx = 2;
+                break;
+            }
+            #endif
+
+            // Go till the slash or start of the string
+            while (idx >= 0 && !isAnySlash(path->buff[idx])) {
+                idx--;
+            }
+
+            count--;
+
+            // If the root slash stop and preserve slash
+            if (idx == 0 && isAnySlash(path->buff[idx])) {
+                idx = 1;
+                break;
+            }
+        }
+
+        path->len = idx;
+    }
+
+    void normalizePath(String* str) {
+        if (!str || str->len == 0) return;
+
+        int idx = 0;
+        int minPathLen = 1;
+        bool isAbsolute = false;
+
+        #ifdef _WIN32
+            // drive letter (C:/)
+            if (str->len >= 2 && str->buff[1] == ':') {
+                idx = 3;
+
+                // This may invalidate dir name, but as
+                // we want to do transformation in place
+                // we cannot repair it here...
+                str->buff[2] = PATH_SEP;
+                isAbsolute = true;
+                minPathLen = 3;
+            }
+        #endif
+
+        // leading slash (Unix root or Windows network)
+        if (idx < str->len && isAnySlash(str->buff[idx])) {
+            str->buff[idx] = PATH_SEP;
+            idx++;
+            isAbsolute = true;
+        }
+
+        int namedDirCount = 0;
+        int writeIdx = idx;
+
+        while (idx < str->len) {
+            const char ch = str->buff[idx];
+
+            if (isAnySlash(ch)) {
+                idx++;
+                continue;
+            }
+
+            int dirStart = idx;
+            while (idx < str->len && isAnySlash(ch)) {
+                idx++;
+            }
+            int dirLen = idx - dirStart;
+
+            // We have . dir
+            if (dirLen == 1 && str->buff[dirStart] == '.') {
+                continue;
+            }
+
+            // ../../a/b/../../
+            // We have .. dir
+            if (
+                dirLen == 2 &&
+                str->buff[dirStart] == '.' &&
+                str->buff[dirStart + 1] == '.'
+            ) {
+                if (namedDirCount <= 0) {
+                    writeIdx += 2;
+                    str->buff[writeIdx] = PATH_SEP;
+                    continue;
+                }
+
+                String tmp = { str->buff, (uint64_t) writeIdx };
+                goBackPath(&tmp, 1);
+                namedDirCount--;
+
+                continue;
+            }
+
+            // We have normal dir
+            namedDirCount++;
+            str->buff[writeIdx++] = PATH_SEP;
+
+            memmove(str->buff + writeIdx, str->buff + dirStart, dirLen);
+            writeIdx += dirLen;
+        }
+
+        str->buff[writeIdx] = '\0';
+        str->len = writeIdx;
+    }
+
+    int countPrefixBackSteps(String path) {
+        int count = 0;
+
+        int idx = 0;
+        while (idx + 2 < path.len) {
+            if (path.buff[idx] == '.' && path.buff[idx + 1] == '.') {
+                if (idx + 3 >= path.len || isAnySlash(path.buff[idx + 2])) {
+                    count++;
+                }
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    bool isPathGlobal(String str) {
+        if (str.len == 0 || str.buff == NULL) return false;
+
+        // Unix-style
+        if (str.buff[0] == '/' || str.buff[0] == '\\') {
+            return true;
+        }
+
+        // Windows-style
+        if (str.len >= 2) {
+            const char ch = str.buff[0];
+            if (
+                ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) &&
+                str.buff[1] == ':'
+            ) {
+                return true;
+            }
+        }
+
+        // Network / UNC paths
+        if (str.len >= 2 && str.buff[0] == '\\' && str.buff[1] == '\\') {
+            return true;
+        }
+
+        return false;
+    }
+
+    bool combinePath(Path* base, String appendix, Path* out) {
+        normalizePath(&appendix);
+
+        if (isPathGlobal(appendix)) {
+            if (appendix.len > MAX_FILE_PATH) {
+                return false;
+            }
+            memcpy(base->buffer, appendix.buff, appendix.len);
+            return true;
+        }
+
+        const int backSteps = countPrefixBackSteps(appendix);
+
+        String strPath = { base->buffer, base->bufferLen };
+        goBackPath(&strPath, backSteps);
+
+        // As we ensured that appendix is normalized...
+        int appendixOffset = 3 * backSteps;
+        int appendixLength = appendix.len - appendixOffset;
+        if (base->bufferLen + appendixLength > MAX_FILE_PATH) {
+            return true;
+        }
+
+        memcpy(
+            base->buffer + base->bufferLen,
+            appendix.buff + appendixOffset,
+            appendixLength
+        );
+
+        return false;
     }
 
     String catPaths(Path* base, const char* const appendix) {
@@ -125,6 +327,16 @@ namespace FileSystem {
         return &file->info;
     }
 
+    void getFileDir(Path* filePath, Path* outDir) {
+        int idx = filePath->bufferLen - 1;
+        for (; idx >= 0; idx--) {
+            if (isAnySlash(filePath->buffer[idx])) {
+                break;
+            }
+        }
+        memcpy(outDir->buffer, filePath->buffer, idx + 1);
+    }
+
     void init() {
         DArray::init(&filesData, Config::fileCount, sizeof(File));
         Set::init(&filesSet, Config::fileCount * 2);
@@ -164,7 +376,7 @@ namespace FileSystem {
         file.info.userData = NULL;
         file.info.status = FileStatus::FS_DIRTY;
 
-        file.info.absPath = makePath(file.info.absPath);
+        file.info.absPath = makePath(absPath);
         annotatePath(file.info.absPath);
 
         toAbsolutePath(file.info.absPath);
@@ -186,6 +398,7 @@ namespace FileSystem {
         Path* absPath = (Path*) alloc(alc, sizeof(Path));
         memcpy(absPath->buffer, fname.buff, fname.len);
         absPath->buffer[fname.len] = '\0';
+        absPath->bufferLen = fname.len;
 
         load(absPath, origin);
 

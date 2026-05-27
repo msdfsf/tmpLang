@@ -67,6 +67,26 @@ alloc, as, catch, const, def, embed, error, fcn, for, free, from, import, local,
 Imperative definitions, such as variable definitions, represent actual logic of the program. Therefore, they obey ordering.
 
 
+## Native Interop (C-ABI)
+
+The language allows you to use external libraries. You can use these libraries both during the final run of your program and during **compile-time evaluation**.
+
+### 1. Linking Libraries
+To use an external library, you must first register it using the `import` keyword.
+
+Libraries have to be specified without file extensions like `.lib`, `.dll`, `.a`, or `.so`. The compiler automatically selects the correct file format based on your OS.
+
+```lang
+// TODO
+```
+
+### 2. Declaring Foreign Functions
+Once a library is linked, you must explicitly declare the functions you want to use. These declarations use the `[C]` attribute to signal that they follow the standard C calling convention.
+
+### Full Example
+```lang
+// TODO
+```
 
 ## Data Types
 ### Built-in Primitive Types

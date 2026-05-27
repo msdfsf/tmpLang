@@ -152,4 +152,12 @@ namespace FileSystem {
         return out->bufferLen;
     }
 
+    bool isPath(String str) {
+        for (int i = 0; i < str.len; i++) {
+            const char ch = str[i];
+            if (ch == '\\' || ch == '/') return true;
+        }
+        return false;
+    }
+
 }

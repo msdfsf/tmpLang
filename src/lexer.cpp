@@ -606,21 +606,21 @@ namespace Lex {
         DArray::clear(&qnameStack);
 
         while (1) {
+            int offset = idx - len + 1;
 
             while (isIdentifierChar(str[idx + 1])) {
                 idx++;
                 len++;
             }
 
-            Keyword keyword = keywordLookup(str, len);
+            Keyword keyword = keywordLookup(str + offset, len);
 
             if (keyword > 0) {
                 token.kind = TK_KEYWORD;
                 token.detail = keyword;
             }
 
-            int tmp = idx - len + 1;
-            DArray::push(&qnameStack, &tmp);
+            DArray::push(&qnameStack, &offset);
             DArray::push(&qnameStack, &len);
 
             if (!cmpTwoChars(SCOPE_RESOLUTION, str + idx + 1)) {
@@ -636,7 +636,6 @@ namespace Lex {
             accLen += len + 2;
             len = 0;
             idx +=2;
-
         }
 
         int* data = (int*) qnameStack.buffer;
@@ -644,7 +643,7 @@ namespace Lex {
         if (qnameStack.size - 2 > 0) {
 
             qname->pathSize = (qnameStack.size - 2) / 2;
-            qname->path = (INamed*) alloc(alc, qname->pathSize);
+            qname->path = (INamed*) alloc(alc, qname->pathSize * sizeof(INamed));
 
             for (int i = 0; i < qname->pathSize; i++) {
                 qname->path[i].buff = (char*) str + data[i];
@@ -657,8 +656,8 @@ namespace Lex {
 
         }
 
-        qname->buff = (char*) str + data[qname->pathSize];
-        qname->len = data[qname->pathSize + 1];
+        qname->buff = (char*) str + data[2 * qname->pathSize];
+        qname->len = data[2 * qname->pathSize + 1];
 
         DArray::clear(&qnameStack);
 

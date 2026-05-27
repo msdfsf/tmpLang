@@ -158,4 +158,82 @@ namespace Strings {
 
     }
 
+    wchar_t* encodeUtf16(String str, int* lenOut, int nullTerminate) {
+        int len = 0;
+
+        for (int i = 0; i < str.len;) {
+            unsigned char ch = (unsigned char) str.buff[i];
+
+            if (ch < 0x80) {
+                i += 1;
+                len += 1;
+            } else if ((ch & 0xE0) == 0xC0) {
+                i += 2;
+                len += 1;
+            } else if ((ch & 0xF0) == 0xE0) {
+                i += 3;
+                len += 1;
+            } else {
+                // surrogate pair
+                i += 4;
+                len += 2;
+            }
+        }
+
+        wchar_t* out =
+            (wchar_t*) alloc(alc, (len + (nullTerminate ? 1 : 0)) * sizeof(wchar_t));
+
+        wchar_t* ptr = out;
+
+        for (int i = 0; i < str.len;) {
+            unsigned char ch = (unsigned char)str.buff[i];
+
+            if (ch < 0x80) {
+                *ptr++ = (wchar_t)ch;
+                i += 1;
+            } else if ((ch & 0xE0) == 0xC0) {
+                uint32_t codepoint =
+                    ((uint32_t)(ch & 0x1F) << 6) |
+                    ((uint32_t)(str.buff[i + 1] & 0x3F));
+
+                *ptr++ = (wchar_t)codepoint;
+
+                i += 2;
+            } else if ((ch & 0xF0) == 0xE0) {
+                uint32_t codepoint =
+                    ((uint32_t)(ch & 0x0F) << 12) |
+                    ((uint32_t)(str.buff[i + 1] & 0x3F) << 6) |
+                    ((uint32_t)(str.buff[i + 2] & 0x3F));
+
+                *ptr++ = (wchar_t)codepoint;
+
+                i += 3;
+            } else {
+                uint32_t codepoint =
+                    ((uint32_t)(ch & 0x07) << 18) |
+                    ((uint32_t)(str.buff[i + 1] & 0x3F) << 12) |
+                    ((uint32_t)(str.buff[i + 2] & 0x3F) << 6) |
+                    ((uint32_t)(str.buff[i + 3] & 0x3F));
+
+                codepoint -= 0x10000;
+
+                wchar_t high =
+                    (wchar_t)(0xD800 + (codepoint >> 10));
+
+                wchar_t low =
+                    (wchar_t)(0xDC00 + (codepoint & 0x3FF));
+
+                *ptr++ = high;
+                *ptr++ = low;
+
+                i += 4;
+            }
+        }
+
+        if (nullTerminate) *ptr = 0;
+        if (lenOut) *lenOut = len;
+
+        return out;
+    }
+
 }

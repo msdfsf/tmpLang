@@ -1,5 +1,6 @@
 #pragma once
 #include "data_types.h"
+#include "dynamic_arena.h"
 #include "registry.h"
 #include "set.h"
 #include "syntax.h"
@@ -30,8 +31,12 @@ namespace Validator {
         Set::Container    searchSet;
         DArray::Container fCandidates; // f as function
 
+        Arena::Container stringArena;
+
         SyntaxNode* currentLoop;
         Function* currentFunction;
+
+        FileSystem::Path fileDir;
 
         uint8_t workerId;
     };

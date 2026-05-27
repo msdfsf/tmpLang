@@ -8,6 +8,7 @@ namespace Strings {
     void replace(String str, String rstr, const int idx, const int len);
 
     char* encodeUtf8(String str, int* lenOut, int* bytesOut, int copyWhenAscii);
+    wchar_t* encodeUtf16(String str, int* lenOut, int nullTerminate);
 
     inline constexpr int compare(const String strA, const String strB) {
 

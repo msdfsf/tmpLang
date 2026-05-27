@@ -85,6 +85,11 @@ namespace Interpreter {
     struct ExeBlock;
 }
 
+namespace Extern {
+    struct Library;
+    typedef Library* LibraryHandle;
+}
+
 
 
 // ======================================
@@ -437,7 +442,7 @@ struct FunctionPrototype {
 struct Function {
     SyntaxNode base;
     FunctionPrototype prototype;
-    INamedEx name;
+    QualifiedName name;
 
     // TODO : not sure we need this
     ReturnStatement** returns;
@@ -450,6 +455,9 @@ struct Function {
 
     TaskStatus compilationStatus;
     Interpreter::ExeBlock* exe;
+
+    Extern::LibraryHandle lib;
+    void* externAddress;
 
     int internalIdx; // if it is > 0, then its internal function, and value represents unique id, otherwise should be ignored ***** TODO : for now value: -1 is used as identifer to not render function, fix it later *****
 };
@@ -622,6 +630,9 @@ struct LangDef {
 
 struct ImportStatement {
     SyntaxNode base;
+
+    // tag of the import, like C for C-ABI
+    String tag;
 
     // name of the importing file
     String fname;
