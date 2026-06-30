@@ -76,6 +76,8 @@ namespace Type {
         uint64_t  offset;
     };
 
+    // TODO : when implementing packed structs, add
+    // flag to know if fields are aligned or not.
     struct StructInfo {
         TypeInfo base;
         _String  name;

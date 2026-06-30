@@ -1,8 +1,19 @@
 #include "runtime.h"
 #include "stdio.h"
+#include "schubfach_table.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+
+
+
+typedef SchubfachU128 u128;
+void printF64(double f);
+
+
+
+#define max(a, b) ((a) > (b) ? (a) : (b))
 
 
 
@@ -68,6 +79,332 @@ void printI64(int64_t val) {
 
 void printU64(uint64_t val) {
     printI64(val, 0);
+}
+
+// TODO
+struct FloatFormat {
+    uint8_t preDotDigits;
+    uint8_t postDotDigits;
+};
+
+void printFloat(bool sign, uint64_t mantissa, int64_t exp, FloatFormat format) {
+    uint8_t buff[64];
+    uint8_t idx = 63;
+
+    uint64_t val = mantissa;
+    
+    // remove trailing zeros
+    while (val > 0) {
+        if (val % 10) break;
+        val /= 10;
+        exp++;
+    }
+
+    do {
+        buff[idx] = (val % 10) + '0';
+        val /= 10;
+        idx--;
+    } while (val > 0);
+
+    idx++;
+
+    const int valLen = 64 - idx;
+    const bool expSign = exp < 0;
+
+    const int intLen = valLen + exp;
+    const int decLen = valLen - intLen;
+
+    fwrite(buff + idx, 1, intLen, stdout);
+    if (decLen > 0) {
+        buff[idx + intLen - 1] = '.';
+        fwrite(buff + idx + intLen - 1, 1, decLen + 1, stdout);
+    }
+}
+
+uint64_t u128MultHigh2(u128 a, uint64_t b) {
+    unsigned __int128 al = a.l;
+    unsigned __int128 ah = a.h;
+    unsigned __int128 b128 = b;
+
+    // Bits [0-127]
+    unsigned __int128 low_part = al * b128;
+    // Bits [64-191]
+    unsigned __int128 high_part = ah * b128 + (uint64_t)(low_part >> 64);
+
+    // Return bits [128-191]
+    return (uint64_t)(high_part >> 64);
+}
+
+uint64_t u128MultHigh(u128 a, uint64_t b) {
+    constexpr bool hasInt128 =
+    #if defined(__SIZEOF_INT128__)
+        true;
+    #else
+        false;
+    #endif
+
+    if constexpr (hasInt128) {
+        unsigned __int128 al   = a.l;
+        unsigned __int128 ah   = a.h;
+        unsigned __int128 b128 = b;
+
+        unsigned __int128 low  = al * b128;
+        unsigned __int128 high = ah * b128 + (uint64_t) (low >> 64);
+
+        return (uint64_t) (high >> 64);
+    } else {
+
+        u128 ans;
+
+        constexpr int sz = 8 * sizeof(uint32_t);
+
+        const uint64_t a1 = (uint32_t) (a.h >> sz);
+        const uint64_t a2 = (uint32_t) (a.h);
+        const uint64_t a3 = (uint32_t) (a.l >> sz);
+        const uint64_t a4 = (uint32_t) (a.l);
+
+        const uint64_t b1 = (uint32_t) (b >> sz);
+        const uint64_t b2 = (uint32_t) (b);
+
+        uint64_t carry = 0;
+        uint64_t p1    = 0;
+        uint64_t p2    = 0;
+        uint64_t tmp1  = 0;
+        uint64_t tmp2  = 0;
+
+        // r4
+        p1 = a4 * b2;
+
+        ans.l = (uint32_t) p1;
+        carry = p1 >> sz;
+
+        // r3
+        p1 = a4 * b1;
+        p2 = a3 * b2;
+
+        tmp2 = ((uint32_t) p1) + ((uint32_t) p2) + carry;
+        tmp1 = (p1 >> sz) + (p2 >> sz) + (tmp2 >> sz);
+
+        ans.l |= tmp2 << sz;
+        carry = tmp1 >> sz;
+
+        // r2
+        p1 = a3 * b1;
+        p2 = a2 * b2;
+
+        tmp2 = ((uint32_t) p1) + ((uint32_t) p2) + carry;
+        tmp1 = (p1 >> sz) + (p2 >> sz) + (tmp2 >> sz);
+
+        ans.h = (uint32_t) tmp2;
+        carry = tmp1 >> sz;
+
+        // r1
+        p1 = a2 * b1;
+        p2 = a1 * b2;
+
+        tmp2 = ((uint32_t) p1) + ((uint32_t) p2) + carry;
+        tmp1 = (p1 >> sz) + (p2 >> sz) + (tmp2 >> sz);
+
+        ans.h |= tmp2 << sz;
+
+        carry = a1 * b1 + tmp1;
+        return carry;
+    }
+}
+
+// TODO : go through few more time to make
+//        it make more sence...
+// 
+// Based on:
+// The Schubfach way to render doubles
+// Raffaello Giulietti
+//
+// Var namings:
+// 'e' for exponent as prefix
+// 'm' for mantissa as prefix
+// '2'/'10' as postfix to denote base mantissa/exponent are related to
+//
+// Trivia as I get it:
+// f is consisted of m and e in binary unnormalized form.
+// We want to normalize it so:
+//  f = m2 * 2^e2
+// Then we want to search for nearest boundaries, but we need to
+// do so in base 10, as our final result has to be in such base
+// if we want to print it.
+//
+// So, arbitrary float definition becomes:
+//  f = m10 * 2^e10
+// Therefore arbitrary m10 equals:
+//  m10 = m2 * 2^e2 / 10^e10
+// or
+//  m10 = m2 * 2^e2 * 10^(-e10)
+//
+// As resolving 10^(-e10) at runtime is kinda slow,
+// a lookup table of u128 values is used. Powers
+// in the table are stored with implicitly baked exponent:
+// table[e10] = floor(2^(-r) * 10^(-e10)) + 1
+// which allows for direct uint computations.
+//
+// To store powers with high precision table values have
+// to utilize u128 as much as they can, therefore while
+// defining the exponent r width of a number is assumed
+// as 125 (not full 128, so there is some room to not overflow
+// while used in computations):
+//  10^(-e10) = table[e10] * 2^(r)
+// therefore:
+//  r = log_2(10^(-e10)/table[e10])
+// or
+//  r = log_2(10^(-e10)) - log_2(table[e10])
+// with assumption of 125 width number:
+//  r = log_2(10^(-e10)) - log_2(2^125)
+// or
+//  r = log_2(10^(-e10)) - 125
+//
+// Now we kinda can convert any float to base 10 representation
+// in the code while being efficient...
+//
+// Because float representation in base 10 is not exactly aligned
+// with base 2, nor is the input float necessarily aligned with the
+// real value it represents, we have to find the most suitable value.
+// Basically we choose the right and left boundaries of rounding interval
+// and proceed to convert them with input float to the base 10 and then
+// decide which number in such interval suits the best. Which is basically
+// truncated to only 4 possible floats, 3 of which we already computed and
+// one is just the adjacent one from the input one.
+//
+// After following rules from the paper, we end up with hopefully the
+// most accurate representation of the input float in base 10 in form
+// of u64 mantissa, int exponent, bool sign. Which allows us to easily
+// print it as we can treat it as integer printing...
+//
+void printF32(float f) {
+    // TODO
+    printF64((double) f);
+}
+
+void printF64(double f) {
+    constexpr uint64_t SIGN_MASK     = 0x8000000000000000;
+    constexpr uint64_t EXPONENT_MASK = 0x7FF0000000000000;
+    constexpr uint64_t MANTISSA_MASK = 0x000FFFFFFFFFFFFF;
+    constexpr int32_t  MANTISSA_LEN  = 52;
+    constexpr int32_t  BIAS          = 1023;
+
+    uint64_t bits;
+    memcpy(&bits, &f, sizeof(uint64_t));
+
+    bool sign = (bits & SIGN_MASK) != 0;
+    int64_t e = (bits & EXPONENT_MASK) >> 52;
+    uint64_t m = bits & MANTISSA_MASK;
+
+    if ((e == 0x00) && (m == 0)) {
+        // Null
+        //fwrite({ '0' }, 1, 1, stdout);
+        return;
+    } else if ((e == 0xFF) && (m == 0)) {
+        // Inf
+        //fwrite({ 'I', 'n', 'f' }, 1, 4, stdout);
+        return;
+    }
+    else if ((e == 0xFF) && (m != 0)) {
+        // Nan
+        //fwrite({ 'N', 'a', 'N' }, 1, 4, stdout);
+        return;
+    }
+
+    const bool isSpacingRegular = (m != 0 || e == 0);
+
+    uint64_t m2 = (e != 0 ? 1LL << MANTISSA_LEN : 0) + m;
+    int64_t e2 = (e != 0 ? e : 1) - BIAS - MANTISSA_LEN;
+
+    // We search for such boundaries of a rounding interval R_f:
+    //  10^k <= width(R_f) < 10^(k + 1)
+    // where k is the unique int defining the concrete interval:
+    //  k = log10(width(R_f))
+    // k can obey two forms depending on R_f spacing:
+    // either floor(log10(2^e2))       if spacing is regular
+    // or     floor(log10(3/4 * 2^e2)) if spacing is irregular
+    //
+    // Note: we shift boundaries so further computations are over integers
+    //
+    int64_t e10 = (e2 * 661'971'961'083LL + (isSpacingRegular ? 0 : -274'743'187'321LL)) >> 41;
+
+    uint64_t ml2 = 4 * m2 - (isSpacingRegular ? 2 : 1);
+    uint64_t mr2 = 4 * m2 + 2;
+    uint64_t ms2 = 4 * m2;
+
+    // We will apply all needed powers of 2 at once.
+    // We need to:
+    //  shift by e2 - 2,
+    //  compensate for r in the lookup table,
+    //  ? custom adjustment for table lookup
+    //    (not in the paper, but for some reason we are a bit off)
+    //
+    // Note: we compute r using magic numbers instead of logs
+    // Note: as later we will drop the bottom 128 bits of the multiplication
+    //       result, we are virtually already shifted right by 128
+    // Note: the paper states that 2 <= shift <= 5
+    //
+    const uint64_t shift = e2 + (((-e10) * 913'124'641'741LL) >> 38) + 2 + 1;
+
+    // Going base 10
+    //
+    const u128 invPow10Scaled = SchubfachTable[-e10 + 292];
+
+    // this should always fit into 64bit
+    ml2 <<= shift;
+    mr2 <<= shift;
+    ms2 <<= shift;
+
+    uint64_t tmp = u128MultHigh2(invPow10Scaled, ms2);
+
+    uint64_t ml10 = u128MultHigh(invPow10Scaled, ml2);
+    uint64_t mr10 = u128MultHigh(invPow10Scaled, mr2);
+    uint64_t ms10 = u128MultHigh(invPow10Scaled, ms2) >> 2;
+    uint64_t mt10 = ms10 + 1;
+
+    // Geting the answer
+    //
+    const uint64_t eIsEven = e & 1;
+    const FloatFormat format = { .preDotDigits = 6, .postDotDigits = 6 };
+
+    // magic 10 is the base of the result
+    if (ms10 >= 10) {
+        const uint64_t ms1010 = (ms10 / 10) * 10;
+        const uint64_t mt1010 = ms1010 + 10;
+
+        if (ml10 + eIsEven <= 4 * ms1010) {
+            printFloat(sign, ms1010, e10, format);
+            return;
+        }
+
+        if (4 * mt1010 + eIsEven <= mr10) {
+            printFloat(sign, mt1010, e10, format);
+            return;
+        }
+    }
+
+    // If coresponding mantissas are in rounding interval
+    bool leftIsIn = ml10 + eIsEven <= 4 * ms10;
+    bool rightIsIn = 4 * mt10 + eIsEven <= mr10;
+
+    if (leftIsIn && !rightIsIn) {
+        printFloat(sign, ml10, e10, format);
+        return;
+    }
+
+    if (!leftIsIn && rightIsIn) {
+        printFloat(sign, mr10, e10, format);
+        return;
+    }
+
+    // Both in interval, decide by distance
+    bool leftIsCloser = ms10 < 2 * (ms10 + mt10);
+    bool rightIsCloser = ms10 > 2 * (ms10 + mt10);
+    if (leftIsCloser || (!rightIsCloser && ms10 & 1)) {
+        printFloat(sign, ml10, e10, format);
+    } else {
+        printFloat(sign, mr10, e10, format);
+    }
 }
 
 void printString(Runtime::_ArrayInfo* str, Runtime::_Slice* slice) {
@@ -160,6 +497,16 @@ void Runtime::printValue(_Any val) {
         case Type::DT_U32:
         case Type::DT_U64: {
             printI64(val.u);
+            break;
+        }
+
+        case Type::DT_F32: {
+            printF32(*(float*) ((void*) &val.f));
+            break;
+        }
+
+        case Type::DT_F64: {
+            printF64(val.f);
             break;
         }
 

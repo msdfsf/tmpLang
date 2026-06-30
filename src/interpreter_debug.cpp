@@ -1317,11 +1317,37 @@ namespace Interpreter {
 
     }
 
+    void printFullFunctionName(Function* fcn) {
+        Namespace* path[16];
+        constexpr int maxPathLen = sizeof(path) / sizeof(Namespace*);
+        int pathLen = 0;
+        
+        Scope* scope = fcn->base.scope;
+        while (scope && scope->base.type == NT_NAMESPACE) {
+            if (pathLen < maxPathLen) {
+                path[pathLen] = (Namespace*) scope;
+            }
+            pathLen++;
+
+            scope = scope->base.scope;
+        }
+
+        if (pathLen >= maxPathLen) {
+            fprintf(stream, "...::");
+        }
+
+        for (int i = 0; i < pathLen; i++) {
+            Namespace* nspace = path[i];
+            fprintf(stream, AC_BOLD_WHITE "%.*s::", nspace->name.len, nspace->name.buff);
+        }
+
+        fprintf(stream, AC_BOLD_WHITE "%.*s", fcn->name.len, fcn->name.buff);
+    }
+
     // TODO : better name
     void printFlat(Function* fcn) {
-
         fprintf(stream, AC_BOLD AC_MAGENTA "Function: " AC_RESET);
-        fprintf(stream, AC_MAGENTA "%.*s\n" AC_RESET, fcn->name.len, fcn->name.buff);
+        printFullFunctionName(fcn);
 
         fprintf(stream, "  ");
         printSignature(fcn);
@@ -1329,7 +1355,6 @@ namespace Interpreter {
 
         print(fcn->exe);
         fputc('\n', stream);
-
     }
 
     // TODO : print improvements
@@ -1340,7 +1365,6 @@ namespace Interpreter {
     //  - maybe preview AC_DIM
     //  - maybe color variables
     void print(Function* fcn, uint64_t depth) {
-
         collectFunctions(fcn->exe, 1, depth);
 
         fprintf(stream, AC_DIM "[ROOT]\n" AC_RESET);
@@ -1349,11 +1373,9 @@ namespace Interpreter {
             Function* fcn = *(Function**) DArray::get(&functionsArray, i);
             printFlat(fcn);
         }
-
     }
 
     void print(ExeBlock* block) {
-
         if (block->rawDataSize > 0) {
             fprintf(stream, AC_BOLD_CYAN "Raw data:\n" AC_RESET);
             printConstants(block->rawData, block->rawDataSize);
@@ -1366,7 +1388,6 @@ namespace Interpreter {
 
         fprintf(stream, AC_BOLD_CYAN "Bytecode:\n" AC_RESET);
         printBytecode(block, 1, 0);
-
     }
 
 }

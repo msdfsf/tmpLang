@@ -400,7 +400,7 @@ namespace FileSystem {
         absPath->buffer[fname.len] = '\0';
         absPath->bufferLen = fname.len;
 
-        load(absPath, origin);
+        return load(absPath, origin);
 
     }
 
@@ -418,7 +418,7 @@ namespace FileSystem {
         memcpy(absPath->buffer + fpath.len + 1, fname.buff, fname.len);
         absPath->buffer[fpath.len + fname.len + 1] = '\0';
 
-        load(absPath, origin);
+        return load(absPath, origin);
 
     }
 

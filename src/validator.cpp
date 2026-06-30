@@ -110,53 +110,20 @@ namespace Validator {
         Err::Err err;
 
         if (fcn->lib) return Err::OK;
-        
-        if (fcn->name.pathSize != 1) {
+
+        ImportStatement* import = fcn->base.scope->base.import;
+        if (!import) {
             Diag::report(ctx->unit->ast, fcn->base.span, Err::UNEXPECTED_ERROR,
                 Diag::Format{
-                    "External function '%.*s' must be qualified by exactly one namespace prefix.\n"
-                    "  Current path depth: %d\n"
-                    "  Expected format: <namespace>::<function name>"
+                    "No foreign library found for fcn '%.*s'.\n"
                 },
-                fcn->name.len, fcn->name.buff, (int) fcn->name.pathSize
+                fcn->name.len, fcn->name.buff
             );
 
             return Err::UNEXPECTED_ERROR;
         }
 
-        INamed* expectedNamespace = fcn->name.path;
-        ImportStatement* foundImport = NULL;
-
-        const int importCount = ctx->unit->reg->imports.size;
-        for (int i = 0; i < importCount; i++) {
-            ImportStatement* import = *(ImportStatement**) DArray::get(&ctx->unit->reg->imports, i);
-            err = ensureValidated(ctx, (SyntaxNode*) import);
-            if (err != Err::OK) continue;
-
-            if (import->keyword != KW_NAMESPACE) {
-                continue;
-            }
-
-            if (expectedNamespace && cstrcmp(expectedNamespace, &import->param)) {
-                foundImport = import;
-                break;
-            }
-        }
-
-        if (!foundImport) {
-            Diag::report(ctx->unit->ast, fcn->base.span, Err::UNEXPECTED_ERROR,
-                Diag::Format{
-                    "No foreign library found for namespace '%.*s'.\n"
-                    "  Hint: To use this function, link a library using: import [C] \"lib_name\" as %.*s"
-                },
-                expectedNamespace->len, expectedNamespace->buff,
-                expectedNamespace->len, expectedNamespace->buff
-            );
-
-            return Err::UNEXPECTED_ERROR;
-        }
-
-        err = Extern::loadLibrary(ctx, foundImport->fname, Extern::LL_INSPECT, &fcn->lib);
+        err = Extern::loadLibrary(ctx, import->fname, Extern::LL_INSPECT, &fcn->lib);
         if (err != Err::OK) return err;
 
         return Extern::ensureFunctionExists(ctx, fcn->lib, fcn);
@@ -839,6 +806,49 @@ namespace Validator {
         return Err::OK;
     }
 
+    // TODO : move to Ast::Node ?
+    void ensureIndexedIfNeeded(ValidationContext* ctx, Scope* scope) {
+        if (scope->index || scope->definitionCount <= Config::LINEAR_SEARCH_THRESHOLD) {
+            return;
+        }
+
+        // TODO : I dont think we need to lock the data, as
+        //        they have to be already locked, but its better
+        //        to think twice...
+
+        scope->index = (SymbolIndex*) alloc(alc, sizeof(SymbolIndex));
+        Set::init(&scope->index->set, scope->definitionCount * 2);
+
+        for (uint32_t i = 0; i < scope->definitionCount; i++) {
+            SyntaxNode* node = scope->definitions[i];
+            String name = Ast::Node::getName(node);
+            if (name.buff) {
+                Set::insert(&scope->index->set, name, (uint8_t*) node);
+            }
+        }
+    }
+
+    // TODO : move to Ast::Node ?
+    SyntaxNode* findSymbol(ValidationContext* ctx, Scope* startScope, String name) {
+        Scope* current = startScope;
+
+        while (current) {
+            ensureIndexedIfNeeded(ctx, current);
+
+            SyntaxNode* node;
+            if (current->index) {
+                node = (SyntaxNode*) Set::find(&current->index->set, name);
+            } else {
+                node = Ast::Find::inArray(current->definitions, current->definitionCount, &name);
+            }
+            if (node) return node;
+
+            current = current->base.scope;
+        }
+
+        return NULL;
+    }
+
     Err::Err validate(ValidationContext* ctx, SyntaxNode* node) {
         Err::Err err;
 
@@ -848,7 +858,8 @@ namespace Validator {
         if (node->ogNode) node = node->ogNode;
 
         switch (node->type) {
-            case NT_SCOPE: {
+            case NT_SCOPE:
+            case NT_NAMESPACE: {
                 err = validate(ctx, (Scope*) node);
                 break;
             }
@@ -871,11 +882,6 @@ namespace Validator {
             case NT_TYPE_DEFINITION:
             case NT_UNION: {
                 err = validate(ctx, (TypeDefinition*) node);
-                break;
-            }
-
-            case NT_NAMESPACE: {
-                err = validate(ctx, &((Namespace*) node)->scope);
                 break;
             }
 
@@ -967,8 +973,13 @@ namespace Validator {
                     break;
                 }
 
+                case NT_NAMESPACE: {
+                    err = validate(ctx, (Scope*) node);
+                    break;
+                }
+
                 case NT_IMPORT: {
-                    err = validate(ctx, (ImportStatement*)node);
+                    err = validate(ctx, (ImportStatement*) node);
                     break;
                 }
 
@@ -1367,7 +1378,7 @@ namespace Validator {
                 sc = sc->base.scope;
             }
 
-            if (sc->base.scope != ctx->unit->ast->root) {
+            if (sc != ctx->unit->ast->root) {
                 Diag::report(ctx->unit->ast, ns->scope.base.span, Err::NAMESPACE_NOT_GLOBAL);
                 return Err::NAMESPACE_NOT_GLOBAL;
             }
@@ -2727,8 +2738,8 @@ namespace Validator {
                 FunctionScore* fscore = (FunctionScore*) ctx->fCandidates.buffer;
                 fscore[j].score = score;
             } else {
-                FunctionScore* tmp = ((FunctionScore*) ctx->fCandidates.buffer) + (ctx->fCandidates.size - 1);
-                DArray::set(&ctx->fCandidates, j, &tmp);
+                FunctionScore* tmp = (FunctionScore*) DArray::get(&ctx->fCandidates, ctx->fCandidates.size - 1);
+                DArray::set(&ctx->fCandidates, j, tmp);
                 DArray::pop(&ctx->fCandidates);
                 j--;
             }

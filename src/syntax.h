@@ -20,6 +20,7 @@
 #include "array_list.h"
 #include "dynamic_arena.h"
 #include "ordered_dict.h"
+#include "set.h"
 #include "task_status.h"
 
 
@@ -88,6 +89,11 @@ namespace Interpreter {
 namespace Extern {
     struct Library;
     typedef Library* LibraryHandle;
+
+    namespace Abi {
+        struct CallContext;
+        struct TypeInfo;
+    };
 }
 
 
@@ -195,14 +201,15 @@ struct QualifiedName : INamedEx {
     INamed* path;
 };
 
-
+struct SymbolIndex {
+    Set::Container set;
+};
 
 // ======================================
 //  SYNTAX NODES
 // ===
 
 struct SyntaxNode {
-
     static Scope* root;
     static INamed dir;
 
@@ -216,6 +223,9 @@ struct SyntaxNode {
     uint64_t flags;
 
     int definitionIdx;
+
+    // What import we came from...
+    ImportStatement* import;
 
     // Status of Linking, Type Resolution etc...
     uint8_t semStatus;
@@ -233,6 +243,8 @@ struct Scope {
 
     uint32_t childrenCount;
     uint32_t definitionCount;
+
+    SymbolIndex* index;
 };
 
 struct Namespace {
@@ -442,7 +454,7 @@ struct FunctionPrototype {
 struct Function {
     SyntaxNode base;
     FunctionPrototype prototype;
-    QualifiedName name;
+    INamedEx name;
 
     // TODO : not sure we need this
     ReturnStatement** returns;
@@ -456,6 +468,7 @@ struct Function {
     TaskStatus compilationStatus;
     Interpreter::ExeBlock* exe;
 
+    Extern::Abi::CallContext* abiCtx;
     Extern::LibraryHandle lib;
     void* externAddress;
 
@@ -566,7 +579,10 @@ struct TypeDefinition {
 
     TaskStatus state;
 
-    Type::TypeInfoEx* typeInfo;
+    Type::TypeInfoEx*      typeInfo;
+    // For now only one ABI against which we may compile
+    Extern::Abi::TypeInfo* typeInfoAbi;
+
     Variable** vars;
     uint32_t   varCount;
 };

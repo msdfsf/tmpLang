@@ -62,6 +62,8 @@ namespace Parser {
         Scope*      currentScope;    // The scope currently being filled
         Function*   currentFunction; // NULL if at global level
         SyntaxNode* currentLoop;
+        
+        bool foreignContext;
 
         // Import that 'triggered' compilation of the current file
         ImportNode* currentImport;

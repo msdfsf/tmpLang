@@ -484,11 +484,23 @@ int _findGenericIdx(DArray::Container* arr, String* name, void** out) {
 
 }
 
-template<uintptr_t arrayOffset, uintptr_t nameOffset>
-void* _findGenericInScope(Scope* scope, String* name) {
+template<NodeType type>
+SyntaxNode* _findGenericInScope(Scope* scope, String* name) {
+    while (scope) {
+        for (uint32_t i = 0; i < scope->childrenCount; i++) {
+            SyntaxNode* node = scope->children[i];
+            if (node->type != type) continue;
+
+            String nodeName = Ast::Node::getName(node);
+            if (nodeName && cstrcmp(*name, nodeName)) {
+                return node;
+            }
+        }
+
+        scope = scope->base.scope;
+    }
 
     return NULL;
-
 }
 
 String Ast::Node::getName(SyntaxNode* node) {
@@ -645,9 +657,9 @@ int Ast::Find::inArray(Type** arr, uint32_t len, String* name, Type** out) { \
 }
 
 // Not sure its needed
-#define _defineInScope(Type, NameMember, ScopeArrayMember) \
+#define _defineInScope(Type, NodeEnum) \
 Type* Ast::Find::inScope##Type(Scope* scope, String* name) { \
-    return NULL; \
+    return (Type*) _findGenericInScope<NodeEnum>(scope, name); \
 }
 
 _defineInPtr(Variable, name);
@@ -679,15 +691,15 @@ _defineInArrayIdx(CodeBlock, code.tagStr);
 _defineInArrayIdx(ForeignFunction, fcn.name);
 _defineInArrayIdxPtr(VariableDefinition, Variable, var, name);
 
-_defineInScope(Variable, name, defs);
-_defineInScope(Function, name, fcns);
-_defineInScope(Union, base.name, unions);
-_defineInScope(Label, name, labels);
-_defineInScope(ErrorSet, name, customErrors);
-_defineInScope(TypeDefinition, name, customDataTypes);
-_defineInScope(Enumerator, name, enums);
-_defineInScope(Namespace, name, namespaces);
-_defineInScope(GotoStatement, name, gotos);
+_defineInScope(Variable, NT_VARIABLE);
+_defineInScope(Function, NT_FUNCTION);
+_defineInScope(Union, NT_UNION);
+_defineInScope(Label, NT_LABEL);
+_defineInScope(ErrorSet, NT_ERROR);
+_defineInScope(TypeDefinition, NT_TYPE_DEFINITION);
+_defineInScope(Enumerator, NT_ENUMERATOR);
+_defineInScope(Namespace, NT_NAMESPACE);
+_defineInScope(GotoStatement, NT_GOTO_STATEMENT);
 
 
 

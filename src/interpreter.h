@@ -472,6 +472,16 @@ namespace Interpreter {
 
     };
 
+    enum ArgMappingType {
+        AM_VALUE,
+        AM_REFERENCE
+    };
+
+    struct ArgMapping {
+        uint32_t offset; // in vmword slots
+        ArgMappingType type;
+    };
+
     struct ExeBlock {
 
         // raw bytes for initial local variable state
@@ -493,6 +503,10 @@ namespace Interpreter {
         // for now like bool, later if there will be
         // more characteristics transform to flag
         bool isVariadic;
+
+        // For external functions
+        ArgMapping* argMappings;
+        uint64_t argMappingsCount;
 
         // in vmword slots
         uint64_t fixedSize;
@@ -535,6 +549,8 @@ namespace Interpreter {
     void print(Function* fcn, uint64_t depth = 0);
     void print(ExeBlock* block);
     const char* toStr(Opcode opcode);
+
+    uintptr_t getExeFramePointer(uint32_t alignment, uint32_t* stackSize);
 
     vmword encodeVecDescriptor(const VecDescriptor desc);
     VecDescriptor decodeVecDescriptor(const vmword word);

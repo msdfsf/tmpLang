@@ -1694,17 +1694,29 @@ namespace Interpreter {
         return Err::OK;
     }
 
-    Err::Err compile(CompilerState* state, Function* fcn) {
+    ArgMappingType getArgMappingType(VariableDefinition* def) {
+        switch (def->var->value.typeKind) {
+            case Type::DT_ARRAY:  return AM_REFERENCE;
+            case Type::DT_CUSTOM: return AM_REFERENCE;
+            case Type::DT_STRING: return AM_REFERENCE;
+            case Type::DT_SLICE:  return AM_REFERENCE;
+            case Type::DT_UNION:  return AM_REFERENCE;
+            default:              return AM_VALUE;
+        }
+    }
 
+    Err::Err compile(CompilerState* state, Function* fcn) {
         Err::Err err;
 
         if (!fcn->exe) {
             fcn->exe = (ExeBlock*) alloc(alc, sizeof(ExeBlock));
         }
 
+        fcn->exe->argMappingsCount = fcn->prototype.inArgCount;
+        fcn->exe->argMappings = (ArgMapping*) alloc(alc, sizeof(ArgMapping) * fcn->exe->argMappingsCount);
+
         fcn->exe->isVariadic = false;
         for (int i = 0; i < fcn->prototype.inArgCount; i++) {
-
             VariableDefinition* def = fcn->prototype.inArgs[i];
 
             if (!state->populateLocals &&
@@ -1722,6 +1734,10 @@ namespace Interpreter {
             err = compile(state, def);
             if (err != Err::OK) return err;
 
+            fcn->exe->argMappings[i] = {
+                .offset = (uint32_t) def->vmOffset,
+                .type = getArgMappingType(def)
+            };
         }
 
         if (!state->populateLocals) {
@@ -1732,14 +1748,17 @@ namespace Interpreter {
 
         state->defaultArgsSize = state->locals.logicalPos;
 
-        err = compile(state, fcn->bodyScope);
-        if (err != Err::OK) return err;
+        // Assumption that if no scope, we are external function
+        if (fcn->bodyScope) {
+            err = compile(state, fcn->bodyScope);
+            if (err != Err::OK) return err;
 
-        state->fixedSize += state->locals.logicalPos;
+            state->fixedSize += state->locals.logicalPos;
 
-        if (state->lastOpcode != OC_RET) {
-            pushOpcode(state, OC_RET);
-            pushOperand(state, 0);
+            if (state->lastOpcode != OC_RET) {
+                pushOpcode(state, OC_RET);
+                pushOperand(state, 0);
+            }
         }
 
         commitLineInfo(state);
@@ -1768,7 +1787,6 @@ namespace Interpreter {
         fcn->exe->defaultArgsSize = state->defaultArgsSize;
 
         return Err::OK;
-
     }
 
     Err::Err compile(CompilerState* state, SyntaxNode* node) {

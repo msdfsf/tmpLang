@@ -1,21 +1,27 @@
 #pragma once
 
+#include "string.h"
 #include <cstdint>
 namespace Set {
 
     enum HashMethod {
         HM_IDENTITY,    // already hash/random id
-        HM_FIBONACCI,   // good for pointers/aligned memory
-        HM_MURMUR3,     // for general uint64_t data
-        HM_FNV1A,       // for small sets
+        HM_FIBONACCI,
+        HM_MURMUR3,
+        HM_FNV1A,
 
         // Start of the section where data will be treated as
         // null-terminated strings
         HM_STRING_START,
         HM_STRING_FNV1A = HM_STRING_START,
-    
+
         // 'key' is treated as a pointer to 12 byte int
         HM_12_FNV1A,
+
+        // Start of the section where data will be treated as
+        // string struct { char*, u64 }
+        HM_STRING_STRUCT_START,
+        HM_STRING_STRUCT_FNV1A = HM_STRING_STRUCT_START,
     };
 
     enum SlotType {
@@ -48,6 +54,13 @@ namespace Set {
     bool remove(Container* set, uint64_t key);
 
     uint8_t* find(Container* set, uint64_t key);
+
+    // String interface for convenience
+    // NOTE : make sure keyOffset is 0 and hashMethod is
+    //        appropriate (>= HM_STRING_STRUCT_START)
+    bool insert(Container* set, String key, uint8_t* data);
+    bool remove(Container* set, String key);
+    uint8_t* find(Container* set, String key);
 
     void clear(Container* set);
 

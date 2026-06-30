@@ -1,4 +1,5 @@
 #include "set.h"
+#include "string.h"
 #include "utils.h"
 
 #include <climits>
@@ -52,6 +53,16 @@ namespace Set {
                     hash ^= (uint64_t) *str;
                     hash *= 0x100000001b3ULL;
                     str++;
+                }
+                return hash;
+            }
+
+            case HM_STRING_STRUCT_FNV1A: {
+                String* str = (String*) data;
+                uint64_t hash = 0xcbf29ce484222325ULL;
+                for (int i = 0; i < str->len; i++) {
+                    hash ^= (uint64_t) str->buff[i];
+                    hash *= 0x100000001b3ULL;
                 }
                 return hash;
             }
@@ -228,6 +239,35 @@ namespace Set {
         return NULL;
 
     }
+
+
+
+    // String interface
+    //
+
+    struct StringSetSlot {
+        String key;
+        uint8_t* data;
+    };
+
+    bool insert(Container* set, String key, uint8_t* data) {
+        StringSetSlot slot = {
+            .key = key,
+            .data = data
+        };
+
+        return insert(set, (uint8_t*) &slot);
+    }
+
+    bool remove(Container* set, String key) {
+        return remove(set, (uint64_t) &key);
+    }
+
+    uint8_t* find(Container* set, String key) {
+        return find(set, (uint64_t) &key);
+    }
+
+
 
     void clear(Container *set) {
         memset(set->table, 0, set->tableSize);

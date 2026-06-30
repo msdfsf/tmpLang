@@ -24,4 +24,8 @@ namespace Config {
     // starting file count to pre-allocate space for
     extern int fileCount;
 
+    // expected namespace count per file used
+    // ex. to pre-allocate sets
+    extern int expectedNamespaceCount;
+
 }

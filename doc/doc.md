@@ -15,7 +15,7 @@ A simple "Hello, world!" program can be written using a string literal:
 String literals can also act like basic format strings when followed by arguments:
 
 ```mylang
-"Hello, %s!" "world"; // Prints "Hello, world!"
+"Hello, %!" "world"; // Prints "Hello, world!"
 ```
 
 ### Compiling and Running
@@ -67,25 +67,43 @@ alloc, as, catch, const, def, embed, error, fcn, for, free, from, import, local,
 Imperative definitions, such as variable definitions, represent actual logic of the program. Therefore, they obey ordering.
 
 
-## Native Interop (C-ABI)
+## Native Interoperability
 
 The language allows you to use external libraries. You can use these libraries both during the final run of your program and during **compile-time evaluation**.
 
-### 1. Linking Libraries
-To use an external library, you must first register it using the `import` keyword.
+## 1. The ABI attribute
+The `[<tag>]` attribute tells the Application Binary Interface (ABI) used to load an external library or the convention by which a symbol is exported
 
-Libraries have to be specified without file extensions like `.lib`, `.dll`, `.a`, or `.so`. The compiler automatically selects the correct file format based on your OS.
+The Compiler has an embedded C-ABI support available out of the box. Other ABIs will require a separate plugin. (TODO : To be yet developed...).
+
+## 2. Linking Libraries
+To use an external library, you must first register it using the `import` keyword. Note, unlike standard source file imports, desired foreign symbols have to be explicitly declared within the following block to become a part of the program's namespace.
 
 ```lang
-// TODO
+import [C] <library_name> as namespace <NamespaceName> {
+    <function_declarations>
+}
 ```
 
-### 2. Declaring Foreign Functions
-Once a library is linked, you must explicitly declare the functions you want to use. These declarations use the `[C]` attribute to signal that they follow the standard C calling convention.
+```
+import [C] ucrtbase as namespace LibC {
+    fcn pow(f64 x, f64 y) -> f64;
+    fcn floor(f64 x) -> f64;
+    fcn srand(u32 seed);
+}
+```
 
-### Full Example
+**Naming And Search Rules:**
+*   **No Extensions:** Omit `.dll`, `.lib`, `.so`, or `.a`. Correct format is resolved based on the OS.
+*   **Search Paths:** The compiler follows standard OS conventions to locate libraries, searching system directories (such as System32 or /usr/lib) and user-defined library paths.
+
+## 3. Standalone Declarations
+The ABI attribute can also be applied to individual function definitions to specify which ABI they should follow while being compiled.
+
 ```lang
-// TODO
+fcn [C] native_callback(int id) {
+    "Callback triggered for: %" id;
+}
 ```
 
 ## Data Types

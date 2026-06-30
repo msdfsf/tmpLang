@@ -1,11 +1,13 @@
 #pragma once
 
 #include "file_system.h"
-#include "syntax.h"
-
+#include "array_list.h"
 
 
 namespace Extern { struct Library; }
+
+struct AstContext;
+struct AstRegistry;
 
 namespace Reg {
 

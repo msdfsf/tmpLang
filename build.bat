@@ -93,7 +93,7 @@ call :print_info "Mode:     %TARGET_MODE%"
 :: =============================================
 
 set "SOURCES="
-for /r "%SRC_DIR%" %%f in (*.cpp *.s) do (
+for /r "%SRC_DIR%" %%f in (*.cpp *.s *.asm) do (
     set "SOURCES=!SOURCES! "%%f""
 )
 

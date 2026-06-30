@@ -1377,10 +1377,8 @@ namespace Parser {
 
         Function* fcn;
 
-        int foreignLang = 0;
         if (token.kind == Lex::TK_ARRAY_BEGIN) {
 
-            foreignLang = 1;
             fcn = (Function*) Ast::Node::makeForeignFunction();
 
             Span* tagLoc = getSpanStamp(&lspan);
@@ -1401,6 +1399,8 @@ namespace Parser {
             fcn = Ast::Node::makeFunction();
 
         }
+
+        fcn->base.flags |= ctx->foreignContext ? IS_EXTERN : 0;
 
         // fcn->inArgsCnt = 0;
         fcn->base.scope = ctx->currentScope;
@@ -1487,13 +1487,13 @@ namespace Parser {
         if (token.encoded < 0) return token;
 
         // function signature only allowed for 'foreign' functions
-        if (token.kind == Lex::TK_STATEMENT_END && foreignLang) {
+        if (token.kind == Lex::TK_STATEMENT_END && ctx->foreignContext) {
             goto defer;
         }
 
         // scope
         if (token.kind != Lex::TK_SCOPE_BEGIN && token.kind != Lex::TK_STATEMENT_BEGIN) {
-            Diag::report(ctx->unit->ast, &lspan, Err::UNEXPECTED_SYMBOL);
+            Diag::report(ctx->unit->ast, &lspan, Err::UNEXPECTED_SYMBOL, "'{'");
             token = sync(&lspan, SyncType::ST_FCN_SCOPE_BEGIN);
         }
 
@@ -2469,7 +2469,6 @@ namespace Parser {
     }
 
     Lex::Token parseImport(ParseContext* ctx, Span* const span) {
-
         SpanEx lspan = markSpanStart(span);
 
         Lex::Token token;
@@ -2505,18 +2504,46 @@ namespace Parser {
         }
 
         import->keyword = (Keyword) token.detail;
+        Pos rollbackPos = lspan.end;
 
         token = Lex::nextToken(&lspan, &tokenVal);
         if (token.kind != Lex::TK_IDENTIFIER) {
             Diag::report(ctx->unit->ast, span, Err::UNEXPECTED_SYMBOL, "Identifier expected!");
         }
 
-        token = Lex::nextToken(&lspan, &tokenVal);
-        if (token.kind != Lex::TK_STATEMENT_END) {
-            Diag::report(ctx->unit->ast, span, Err::UNEXPECTED_SYMBOL, "End of statement expected!");
+        if (import->tag.len > 0) {
+            ctx->foreignContext = true;
         }
 
-        import->param = *tokenVal.str;
+        // TODO
+        token = Lex::nextToken(&lspan, &tokenVal);
+        if (token.kind != Lex::TK_STATEMENT_END) {
+            switch (import->keyword) {
+                case KW_NAMESPACE: {
+                    lspan.end = rollbackPos;
+                    token = parseNamespace(ctx, &lspan);
+                    break;
+                }
+
+                case KW_SCOPE: {
+                    lspan.end = rollbackPos;
+                    token = parseScope(ctx, &lspan, ScopeType::SC_COMMON, (ScopeEnd) (token.kind == Lex::TK_STATEMENT_BEGIN));
+                    break;
+                }
+
+                default: {
+                    Diag::report(ctx->unit->ast, span, Err::UNEXPECTED_SYMBOL, "End of statement expected!");
+                }
+            }
+
+            SyntaxNode* node = *(SyntaxNode**) DArray::getLast(&ctx->nodeStack);
+            node->import = import;
+
+        } else {
+            import->param = *tokenVal.str;
+        }
+
+        ctx->foreignContext = false;
 
         DArray::push(&ctx->unit->reg->imports, (void*) &import);
 
@@ -2525,7 +2552,6 @@ namespace Parser {
 
         import->base.span = finalizeSpan(&lspan, span);
         return token;
-
     }
 
     Lex::Token parseDirective(ParseContext* ctx, Span* const span, Lex::Directive directive, Flags param) {
@@ -2548,7 +2574,6 @@ namespace Parser {
     }
 
     Lex::Token parseList(ParseContext* ctx, Span* const span, Lex::TokenKind separator, Lex::TokenKind end) {
-
         Lex::Token token;
         int first = 1;
 
@@ -2577,6 +2602,7 @@ namespace Parser {
 
         }
 
+        return token;
     }
 
     Lex::Token parseCatch(ParseContext* ctx, Span* const span, Variable* var) {

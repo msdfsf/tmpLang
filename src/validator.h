@@ -1,4 +1,6 @@
 #pragma once
+
+#include "array_list.h"
 #include "data_types.h"
 #include "dynamic_arena.h"
 #include "registry.h"
@@ -25,11 +27,23 @@ namespace Validator {
         int score;
     };
 
+    // TODO : better name?
+    struct NamespaceIndex {
+        DArray::Container symbols;
+        Set::Container subIndex;
+    };
+
     struct ValidationContext {
         Reg::Unit* unit;
 
         Set::Container    searchSet;
         DArray::Container fCandidates; // f as function
+
+        // Used during validation to handle lookups
+        // of unbound nodes
+        NamespaceIndex* unboundIndex;
+        DArray::Container gatheringStackA;
+        DArray::Container gatheringStackB;
 
         Arena::Container stringArena;
 

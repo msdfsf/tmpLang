@@ -12,6 +12,7 @@
 #include "syntax.h"
 #include "diagnostic.h"
 
+#include "utils.h"
 #include "vec_kernel.h"
 
 namespace Interpreter {
@@ -37,6 +38,15 @@ namespace Interpreter {
     vmword* getFreeStack() {
         // TODO for now no concurrency
         return stack;
+    }
+
+    thread_local uint8_t* gFramePointer;
+    uintptr_t getExeFramePointer(uint32_t alignment, uint32_t* outStackSize) {
+        uintptr_t fp = (uintptr_t) gFramePointer;
+        fp = Utils::alignForward(fp, alignment);
+
+        *outStackSize = stackSize - (fp - (uintptr_t) stack);
+        return fp;
     }
 
     void initExec(CompilerState* state) {
@@ -163,7 +173,7 @@ namespace Interpreter {
             case Type::DT_CUSTOM: {
                 TypeDefinition* def = val->def;
                 Type::StructInfo* sInfo = (Type::StructInfo*) def->typeInfo;
-                
+
                 var = unwrap(var);
                 if (var->def) var = unwrap(var->def->var);
 
@@ -396,6 +406,8 @@ namespace Interpreter {
         GROW(sp, block->localsSize);
         memcpy(fp, block->locals, block->localsSize);
 
+        gFramePointer = fp;
+
         // push actual args
         {
             int64_t offset = 0;
@@ -570,8 +582,8 @@ namespace Interpreter {
                 }
 
                 case OC_GET_BLOB: {
-                    const uint64_t offset = FETCH(ip, uint64_t);
                     const uint64_t size = FETCH(ip, uint64_t);
+                    const uint64_t offset = FETCH(ip, uint64_t);
 
                     vmword* dest = sp;
                     GROW(sp, size);
@@ -1171,6 +1183,8 @@ namespace Interpreter {
 
                     fp = (uint8_t*) (sp - fixedSize - varargSize);
                     ip = exe->bytecode;
+
+                    gFramePointer = fp;
 
                     break;
                 }

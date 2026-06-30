@@ -5,4 +5,6 @@ namespace Config {
     int threadWorkQueueSize = 32;
 
     int fileCount = 128;
+
+    int expectedNamespaceCount = 32;
 }

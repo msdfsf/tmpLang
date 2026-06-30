@@ -1,5 +1,6 @@
 #include "registry.h"
 #include "file_system.h"
+#include "syntax.h"
 
 
 
@@ -9,10 +10,10 @@ namespace Reg {
         FileSystem::FileInfo* finfo = FileSystem::getFileInfo(fhnd);
         if (!finfo->userData) {
             Unit* unit = (Unit*) alloc(alc, sizeof(Unit));
-            
+
             unit->ast = (AstContext*) alloc(alc, sizeof(AstContext));
             unit->reg = (AstRegistry*) alloc(alc, sizeof(AstRegistry));
-            
+
             Ast::init(unit->ast);
             Ast::init(unit->reg);
 

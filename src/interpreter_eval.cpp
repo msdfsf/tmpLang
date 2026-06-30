@@ -3,6 +3,7 @@
 
 #include "data_types.h"
 #include "diagnostic.h"
+#include "foreign_code.h"
 #include "interpreter.h"
 #include "operators.h"
 #include "syntax.h"
@@ -588,6 +589,12 @@ namespace Interpreter {
         Value* value = &var->value;
 
         switch (op) {
+            case OP_NONE: {
+                // Just propagate result
+                *result = var->value;
+                break;
+            }
+
             case Type::DT_I8: {
                 result->i8 = applyUnary(ctx, span, op, value->i8);
                 break;
@@ -756,15 +763,21 @@ namespace Interpreter {
                 Function* const fcn = call->fcn;
 
                 TaskSystem::dispatchCompileTimeBuild(fcn, true);
-                Interpreter::print(fcn->exe);
+                Interpreter::print(fcn);
 
                 for (uint32_t i = 0; i < call->inArgCount; i++) {
                     err = eval(ctx, call->inArgs[i]);
                     if (err != Err::OK) return err;
                 }
 
-                err = Interpreter::exec(ctx->unit->ast, fcn, call->inArgs, call->inArgCount, var);
-                if (err != Err::OK) return err;
+                if (fcn->base.flags & IS_EXTERN) {
+                    Extern::Abi::Driver* abi = Extern::Abi::getTargetDriver();
+                    Extern::compile(ctx, abi, fcn);
+                    Extern::invoke(ctx->unit->ast, abi, fcn, call->inArgs, call->inArgCount, var);
+                } else {
+                    err = Interpreter::exec(ctx->unit->ast, fcn, call->inArgs, call->inArgCount, var);
+                    if (err != Err::OK) return err;
+                }
 
                 var->value.hasValue = true;
                 break;
