@@ -18,7 +18,8 @@
     - [Runtime Dependencies](#runtime-dependencies)
     - [Build Dependencies](#build-dependencies)
 
-## How to Build (NOT COMPILABLE NOW)
+## FOR NOW CODEGEN IS NOT MAINTAINED, VM IS USED INSTEAD
+## How to Build
 
 > The compiled output will be placed in the `./build` directory.
 
